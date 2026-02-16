@@ -1,0 +1,5 @@
+bin/
+dist/
+argus
+*.exe
+.DS_Store
