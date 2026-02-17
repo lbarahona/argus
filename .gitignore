@@ -1,5 +1,5 @@
 bin/
 dist/
-argus
+/argus
 *.exe
 .DS_Store
