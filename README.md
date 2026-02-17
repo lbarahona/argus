@@ -12,8 +12,11 @@ Argus connects to your [Signoz](https://signoz.io) instances and uses Anthropic 
 
 - 🤖 **Natural language queries** — Ask questions about your infrastructure in plain English
 - 📡 **Multi-instance support** — Manage multiple Signoz environments (production, staging, etc.)
+- 📋 **Real log/trace/metric queries** — Direct integration with Signoz query_range API (v3 + v5)
+- 🔧 **Service discovery** — List services with call counts and error rates
+- 📊 **Dashboard view** — Combined overview of health, services, and recent errors
 - ⚡ **Streaming AI responses** — Real-time analysis output as tokens arrive
-- 🎨 **Beautiful terminal UI** — Clean, colorful output designed for SREs
+- 🎨 **Beautiful terminal UI** — Severity-colored logs, formatted traces, metric tables
 - 🔧 **Simple configuration** — YAML config, multiple profiles, easy setup
 
 ## Installation
@@ -46,10 +49,19 @@ argus config init
 # 2. Check instance health
 argus status
 
-# 3. Query logs with AI analysis
+# 3. List services
+argus services
+
+# 4. Query logs with AI analysis
 argus logs auth-service --query "any errors in the last hour?"
 
-# 4. Ask free-form questions
+# 5. View traces
+argus traces frontend --duration 30
+
+# 6. Quick dashboard
+argus dashboard
+
+# 7. Ask free-form questions
 argus ask "why is latency high on the payments service?"
 ```
 
@@ -62,7 +74,11 @@ argus ask "why is latency high on the payments service?"
 | `argus config add-instance` | Add a new Signoz instance |
 | `argus instances` | List configured instances |
 | `argus status` | Health check all instances |
+| `argus services` | List services with call counts and error rates |
 | `argus logs [service]` | Query and analyze logs |
+| `argus traces [service]` | Query distributed traces |
+| `argus metrics [metric]` | Query metrics |
+| `argus dashboard` | Combined overview dashboard |
 | `argus ask [question]` | Free-form AI analysis |
 
 ### Logs
@@ -71,17 +87,63 @@ argus ask "why is latency high on the payments service?"
 # Query logs for a service
 argus logs my-service
 
+# Filter by severity
+argus logs my-service --severity ERROR
+
 # With AI analysis
 argus logs my-service --query "find authentication failures"
 
-# Specify instance and duration
-argus logs my-service -i staging -d 120
+# Specify instance, duration, and limit
+argus logs my-service -i staging -d 120 -l 50
+```
+
+### Services
+
+```bash
+# List all services with error rates
+argus services
+
+# From a specific instance
+argus services -i production
+```
+
+### Traces
+
+```bash
+# Query traces for a service
+argus traces frontend
+
+# With duration and limit
+argus traces api-gateway -d 30 -l 50
+
+# With AI analysis
+argus traces frontend --query "find slow requests over 1s"
+```
+
+### Metrics
+
+```bash
+# Query a specific metric
+argus metrics cpu_usage
+
+# With AI analysis
+argus metrics http_request_duration --query "any anomalies?"
+```
+
+### Dashboard
+
+```bash
+# Quick overview of everything
+argus dashboard
+
+# Look back further for errors
+argus dashboard -d 120
 ```
 
 ### Ask
 
 ```bash
-# Free-form questions about your infrastructure
+# Free-form questions — gathers context from Signoz automatically
 argus ask "what services had the most errors today?"
 argus ask "is there a correlation between high CPU and slow responses?"
 ```
@@ -98,16 +160,23 @@ instances:
     url: https://signoz.example.com
     api_key: your-signoz-api-key
     name: Production
+    api_version: v3  # v3 for self-hosted, v5 for Signoz Cloud
   staging:
     url: https://signoz-staging.example.com
     api_key: your-staging-key
     name: Staging
+    api_version: v5
 ```
+
+### API Version
+
+- **v3** (default) — For self-hosted Signoz instances (`/api/v3/query_range`)
+- **v5** — For Signoz Cloud (`/api/v5/query_range`)
 
 ## Requirements
 
 - A [Signoz](https://signoz.io) instance (self-hosted or cloud)
-- An [Anthropic API key](https://console.anthropic.com/) for AI analysis
+- An [Anthropic API key](https://console.anthropic.com/) for AI analysis features
 
 ## Contributing
 
