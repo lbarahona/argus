@@ -44,3 +44,14 @@ release:
   github:
     owner: lbarahona
     name: argus
+
+brews:
+  - repository:
+      owner: lbarahona
+      name: homebrew-tap
+    directory: Formula
+    homepage: "https://github.com/lbarahona/argus"
+    description: "AI-powered observability CLI for SREs"
+    license: "MIT"
+    test: |
+      assert_match "argus", shell_output("#{bin}/argus version 2>&1", 0)
