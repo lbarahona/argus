@@ -80,6 +80,9 @@ argus ask "why is latency high on the payments service?"
 | `argus metrics [metric]` | Query metrics |
 | `argus dashboard` | Combined overview dashboard |
 | `argus ask [question]` | Free-form AI analysis |
+| `argus report` | Generate health report for shift handoffs |
+| `argus top` | Ranked service view (like htop for services) |
+| `argus diff` | Compare error rates between time windows |
 
 ### Logs
 
@@ -146,6 +149,51 @@ argus dashboard -d 120
 # Free-form questions — gathers context from Signoz automatically
 argus ask "what services had the most errors today?"
 argus ask "is there a correlation between high CPU and slow responses?"
+```
+
+### Report
+
+```bash
+# Generate a health report (terminal format)
+argus report
+
+# Include AI-generated summary
+argus report --ai
+
+# Output as markdown (great for Slack/docs)
+argus report -f markdown
+
+# Cover last 4 hours
+argus report -d 240 --ai
+```
+
+### Top
+
+```bash
+# Show top services ranked by errors (like htop for services)
+argus top
+
+# Sort by error rate instead
+argus top -s rate
+
+# Sort by call volume
+argus top -s calls
+
+# Limit and custom duration
+argus top -l 10 -d 120
+```
+
+### Diff
+
+```bash
+# Compare last hour vs previous hour
+argus diff
+
+# Compare last 30 min vs previous 30 min
+argus diff -d 30
+
+# Shows which services are degrading, improving, or stable
+argus diff -i production
 ```
 
 ## Configuration
