@@ -8,10 +8,16 @@ import (
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/config"
+	"github.com/lbarahona/argus/internal/diff"
 	"github.com/lbarahona/argus/internal/output"
+	"github.com/lbarahona/argus/internal/report"
 	"github.com/lbarahona/argus/internal/signoz"
+	topkg "github.com/lbarahona/argus/internal/top"
+	"github.com/lbarahona/argus/internal/watch"
 	"github.com/lbarahona/argus/pkg/types"
 	"github.com/spf13/cobra"
+	"os/signal"
+	"time"
 )
 
 var (
@@ -38,6 +44,10 @@ func main() {
 		tracesCmd(),
 		metricsCmd(),
 		dashboardCmd(),
+		reportCmd(),
+		topCmd(),
+		diffCmd(),
+		watchCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -503,6 +513,145 @@ func askCmd() *cobra.Command {
 	return cmd
 }
 
+func reportCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var withAI bool
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "report",
+		Short: "Generate a health report for shift handoffs",
+		Long:  "Compile a comprehensive health report including service status, error patterns, and optional AI summary. Perfect for shift handoffs and incident reviews.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			ctx := context.Background()
+			fmt.Printf("%s Generating health report...\n", output.MutedStyle.Render("⏳"))
+
+			r, err := report.Generate(ctx, cfg, report.Options{
+				Instance:     instance,
+				Duration:     duration,
+				WithAI:       withAI,
+				Format:       format,
+				AnthropicKey: cfg.AnthropicKey,
+			})
+			if err != nil {
+				return err
+			}
+
+			if format == "markdown" {
+				r.RenderMarkdown(os.Stdout)
+			} else {
+				r.RenderTerminal(os.Stdout)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to report on")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to cover")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-generated summary (uses Anthropic API)")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
+
+	return cmd
+}
+
+func topCmd() *cobra.Command {
+	var instance string
+	var limit int
+	var sortBy string
+	var duration int
+
+	cmd := &cobra.Command{
+		Use:   "top",
+		Short: "Show top services by errors, like htop for your services",
+		Long:  "Display a ranked view of services sorted by errors, error rate, or call volume. Quick triage tool for on-call SREs.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			var sf topkg.SortField
+			switch strings.ToLower(sortBy) {
+			case "errors":
+				sf = topkg.SortByErrors
+			case "rate":
+				sf = topkg.SortByErrorRate
+			case "calls":
+				sf = topkg.SortByCalls
+			case "name":
+				sf = topkg.SortByName
+			default:
+				sf = topkg.SortByErrors
+			}
+
+			ctx := context.Background()
+			fmt.Printf("%s Fetching service data...\n", output.MutedStyle.Render("⏳"))
+
+			result, err := topkg.Run(ctx, cfg, topkg.Options{
+				Instance: instance,
+				Limit:    limit,
+				SortBy:   sf,
+				Duration: duration,
+			})
+			if err != nil {
+				return err
+			}
+
+			result.RenderTerminal(os.Stdout)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&limit, "limit", "l", 20, "Number of services to show")
+	cmd.Flags().StringVarP(&sortBy, "sort", "s", "errors", "Sort by: errors, rate, calls, name")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes for recent error lookup")
+
+	return cmd
+}
+
+func diffCmd() *cobra.Command {
+	var instance string
+	var duration int
+
+	cmd := &cobra.Command{
+		Use:   "diff",
+		Short: "Compare error rates between two time windows",
+		Long:  "Compare the current time window against the previous window to detect anomalies. Shows which services are degrading, improving, or stable.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			ctx := context.Background()
+			fmt.Printf("%s Comparing time windows...\n", output.MutedStyle.Render("⏳"))
+
+			result, err := diff.Compare(ctx, cfg, diff.Options{
+				Instance: instance,
+				Duration: duration,
+			})
+			if err != nil {
+				return err
+			}
+
+			result.RenderTerminal(os.Stdout)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration per window in minutes (compares last N min vs previous N min)")
+
+	return cmd
+}
+
 func formatLogsForAI(logs []types.LogEntry) string {
 	var sb strings.Builder
 	for _, log := range logs {
@@ -514,4 +663,77 @@ func formatLogsForAI(logs []types.LogEntry) string {
 		))
 	}
 	return sb.String()
+}
+
+func watchCmd() *cobra.Command {
+	var instance string
+	var interval int
+	var errWarn, errCrit, p99Warn, p99Crit, spike float64
+
+	cmd := &cobra.Command{
+		Use:   "watch",
+		Short: "Continuously monitor services and alert on anomalies",
+		Long: `Watch mode polls your Signoz instance at regular intervals and alerts
+on error rate spikes, high latency, and new errors. Like htop for your services,
+but with anomaly detection.
+
+Thresholds can be customized. Alerts include:
+- Error rate exceeding warning/critical thresholds
+- P99 latency exceeding warning/critical thresholds  
+- Error count spikes compared to rolling baseline
+- New errors on previously clean services`,
+		Example: `  argus watch
+  argus watch --interval 60
+  argus watch --error-rate-warn 3 --error-rate-crit 10
+  argus watch -i production --p99-warn 1000`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			instName := instKey
+			if inst.Name != "" {
+				instName = inst.Name
+			}
+			client := signoz.New(*inst)
+			thresholds := watch.DefaultThresholds()
+			if cmd.Flags().Changed("error-rate-warn") {
+				thresholds.ErrorRateWarning = errWarn
+			}
+			if cmd.Flags().Changed("error-rate-crit") {
+				thresholds.ErrorRateCritical = errCrit
+			}
+			if cmd.Flags().Changed("p99-warn") {
+				thresholds.P99Warning = p99Warn
+			}
+			if cmd.Flags().Changed("p99-crit") {
+				thresholds.P99Critical = p99Crit
+			}
+			if cmd.Flags().Changed("spike") {
+				thresholds.ErrorSpike = spike
+			}
+
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+			defer cancel()
+
+			w := watch.New(client, instName, time.Duration(interval)*time.Second, thresholds, os.Stdout)
+			return w.Run(ctx)
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to watch")
+	cmd.Flags().IntVar(&interval, "interval", 30, "Poll interval in seconds")
+	cmd.Flags().Float64Var(&errWarn, "error-rate-warn", 5, "Error rate % warning threshold")
+	cmd.Flags().Float64Var(&errCrit, "error-rate-crit", 15, "Error rate % critical threshold")
+	cmd.Flags().Float64Var(&p99Warn, "p99-warn", 2000, "P99 latency ms warning threshold")
+	cmd.Flags().Float64Var(&p99Crit, "p99-crit", 5000, "P99 latency ms critical threshold")
+	cmd.Flags().Float64Var(&spike, "spike", 3, "Error spike multiplier over baseline")
+
+	return cmd
 }
