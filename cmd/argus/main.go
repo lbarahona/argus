@@ -13,8 +13,11 @@ import (
 	"github.com/lbarahona/argus/internal/report"
 	"github.com/lbarahona/argus/internal/signoz"
 	topkg "github.com/lbarahona/argus/internal/top"
+	"github.com/lbarahona/argus/internal/watch"
 	"github.com/lbarahona/argus/pkg/types"
 	"github.com/spf13/cobra"
+	"os/signal"
+	"time"
 )
 
 var (
@@ -44,6 +47,7 @@ func main() {
 		reportCmd(),
 		topCmd(),
 		diffCmd(),
+		watchCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -659,4 +663,77 @@ func formatLogsForAI(logs []types.LogEntry) string {
 		))
 	}
 	return sb.String()
+}
+
+func watchCmd() *cobra.Command {
+	var instance string
+	var interval int
+	var errWarn, errCrit, p99Warn, p99Crit, spike float64
+
+	cmd := &cobra.Command{
+		Use:   "watch",
+		Short: "Continuously monitor services and alert on anomalies",
+		Long: `Watch mode polls your Signoz instance at regular intervals and alerts
+on error rate spikes, high latency, and new errors. Like htop for your services,
+but with anomaly detection.
+
+Thresholds can be customized. Alerts include:
+- Error rate exceeding warning/critical thresholds
+- P99 latency exceeding warning/critical thresholds  
+- Error count spikes compared to rolling baseline
+- New errors on previously clean services`,
+		Example: `  argus watch
+  argus watch --interval 60
+  argus watch --error-rate-warn 3 --error-rate-crit 10
+  argus watch -i production --p99-warn 1000`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			instName := instKey
+			if inst.Name != "" {
+				instName = inst.Name
+			}
+			client := signoz.New(*inst)
+			thresholds := watch.DefaultThresholds()
+			if cmd.Flags().Changed("error-rate-warn") {
+				thresholds.ErrorRateWarning = errWarn
+			}
+			if cmd.Flags().Changed("error-rate-crit") {
+				thresholds.ErrorRateCritical = errCrit
+			}
+			if cmd.Flags().Changed("p99-warn") {
+				thresholds.P99Warning = p99Warn
+			}
+			if cmd.Flags().Changed("p99-crit") {
+				thresholds.P99Critical = p99Crit
+			}
+			if cmd.Flags().Changed("spike") {
+				thresholds.ErrorSpike = spike
+			}
+
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+			defer cancel()
+
+			w := watch.New(client, instName, time.Duration(interval)*time.Second, thresholds, os.Stdout)
+			return w.Run(ctx)
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to watch")
+	cmd.Flags().IntVar(&interval, "interval", 30, "Poll interval in seconds")
+	cmd.Flags().Float64Var(&errWarn, "error-rate-warn", 5, "Error rate % warning threshold")
+	cmd.Flags().Float64Var(&errCrit, "error-rate-crit", 15, "Error rate % critical threshold")
+	cmd.Flags().Float64Var(&p99Warn, "p99-warn", 2000, "P99 latency ms warning threshold")
+	cmd.Flags().Float64Var(&p99Crit, "p99-crit", 5000, "P99 latency ms critical threshold")
+	cmd.Flags().Float64Var(&spike, "spike", 3, "Error spike multiplier over baseline")
+
+	return cmd
 }
