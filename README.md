@@ -83,6 +83,9 @@ argus ask "why is latency high on the payments service?"
 | `argus report` | Generate health report for shift handoffs |
 | `argus top` | Ranked service view (like htop for services) |
 | `argus diff` | Compare error rates between time windows |
+| `argus watch` | Continuous monitoring with anomaly detection |
+| `argus alert` | Declarative alert rules with cron-friendly output |
+| `argus explain` | AI root cause analysis (correlates logs + traces) |
 
 ### Logs
 
@@ -194,6 +197,59 @@ argus diff -d 30
 
 # Shows which services are degrading, improving, or stable
 argus diff -i production
+```
+
+### Alert
+
+```bash
+# Create sample alert rules
+argus alert init
+
+# List configured rules
+argus alert list
+
+# Check all rules (colored output)
+argus alert check
+
+# JSON output for cron/automation
+argus alert check --format json
+
+# Exit codes: 0=ok, 1=warnings, 2=critical
+argus alert check && echo "All clear" || echo "Alerts fired!"
+```
+
+Alert rules are defined in `~/.argus/alerts.yaml`:
+
+```yaml
+rules:
+  - name: high-error-rate
+    type: error_rate
+    operator: gt
+    warning: 5.0
+    critical: 15.0
+    duration: 5m
+    labels:
+      team: platform
+
+  - name: api-errors
+    service: api-service
+    type: error_rate
+    operator: gt
+    warning: 2.0
+    critical: 10.0
+```
+
+### Explain
+
+```bash
+# AI root cause analysis — correlates logs, traces, and metrics
+argus explain api-service
+
+# Analyze last 30 minutes
+argus explain payment-service --duration 30
+
+# Against a specific instance
+argus explain auth-service -i production
 ```
 
 ## Configuration
