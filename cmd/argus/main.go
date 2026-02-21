@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	"github.com/lbarahona/argus/internal/ai"
+	"github.com/lbarahona/argus/internal/alert"
 	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/diff"
+	"github.com/lbarahona/argus/internal/explain"
 	"github.com/lbarahona/argus/internal/output"
 	"github.com/lbarahona/argus/internal/report"
 	"github.com/lbarahona/argus/internal/signoz"
@@ -48,6 +50,8 @@ func main() {
 		topCmd(),
 		diffCmd(),
 		watchCmd(),
+		alertCmd(),
+		explainCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -734,6 +738,173 @@ Thresholds can be customized. Alerts include:
 	cmd.Flags().Float64Var(&p99Warn, "p99-warn", 2000, "P99 latency ms warning threshold")
 	cmd.Flags().Float64Var(&p99Crit, "p99-crit", 5000, "P99 latency ms critical threshold")
 	cmd.Flags().Float64Var(&spike, "spike", 3, "Error spike multiplier over baseline")
+
+	return cmd
+}
+
+func alertCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "alert",
+		Short: "Manage and evaluate alert rules",
+		Long: `Define alert rules in ~/.argus/alerts.yaml and evaluate them against your
+Signoz instances. Perfect for cron jobs and CI pipelines.
+
+Exit codes: 0 = all OK, 1 = warnings, 2 = critical alerts found.`,
+	}
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "init",
+		Short: "Create sample alert rules",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := alert.InitAlerts(); err != nil {
+				return err
+			}
+			fmt.Println("✅ Sample alert rules created at ~/.argus/alerts.yaml")
+			fmt.Println("   Edit the file to customize rules, then run: argus alert check")
+			return nil
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List configured alert rules",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := alert.LoadAlerts()
+			if err != nil {
+				return err
+			}
+			fmt.Printf("\n🔔 Alert Rules (%d configured)\n\n", len(cfg.Rules))
+			for i, rule := range cfg.Rules {
+				enabled := "✅"
+				if !rule.IsEnabled() {
+					enabled = "⏸️"
+				}
+				svc := rule.Service
+				if svc == "" {
+					svc = "all services"
+				}
+				fmt.Printf("  %s %d. %s\n", enabled, i+1, rule.Name)
+				if rule.Description != "" {
+					fmt.Printf("     %s\n", rule.Description)
+				}
+				fmt.Printf("     Type: %s | Target: %s | Warning: %.1f | Critical: %.1f\n\n",
+					rule.Type, svc, rule.Warning, rule.Critical)
+			}
+			return nil
+		},
+	})
+
+	var instance string
+	var format string
+	checkCmd := &cobra.Command{
+		Use:   "check",
+		Short: "Evaluate all alert rules against Signoz",
+		Long: `Evaluate all enabled alert rules and report results.
+
+Use --format json for machine-readable output (great for cron jobs).
+Exit code reflects highest severity: 0=ok, 1=warning, 2=critical.`,
+		Example: `  argus alert check
+  argus alert check --format json
+  argus alert check -i production
+  argus alert check --format json | jq '.summary'`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			alertCfg, err := alert.LoadAlerts()
+			if err != nil {
+				return err
+			}
+			appCfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			inst, instKey, err := config.GetInstance(appCfg, instance)
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			if format != "json" {
+				fmt.Printf("%s Checking alerts against %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(instKey))
+			}
+			checker := alert.NewChecker(*inst, instKey)
+			rpt, err := checker.CheckAll(ctx, alertCfg)
+			if err != nil {
+				return err
+			}
+			if format == "json" {
+				out, err := alert.FormatJSON(rpt)
+				if err != nil {
+					return err
+				}
+				fmt.Println(out)
+			} else {
+				fmt.Print(alert.FormatText(rpt))
+			}
+			os.Exit(rpt.ExitCode())
+			return nil
+		},
+	}
+	checkCmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to check against")
+	checkCmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: text or json")
+	cmd.AddCommand(checkCmd)
+
+	return cmd
+}
+
+func explainCmd() *cobra.Command {
+	var instance string
+	var duration int
+
+	cmd := &cobra.Command{
+		Use:   "explain [service]",
+		Short: "AI-powered root cause analysis for a service",
+		Long: `Correlate logs, traces, and metrics for a service and use AI to
+perform root cause analysis. Collects all available observability data,
+identifies patterns, and provides actionable recommendations.
+
+Think of it as having a senior SRE look at all your dashboards at once.`,
+		Example: `  argus explain api-service
+  argus explain payment-service --duration 30
+  argus explain auth-service -i production`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			if cfg.AnthropicKey == "" {
+				return fmt.Errorf("Anthropic API key required. Run: argus config init")
+			}
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+			client := signoz.New(*inst)
+			ctx := context.Background()
+
+			fmt.Printf("%s Collecting observability data for %s from %s...\n",
+				output.MutedStyle.Render("🔍"), output.AccentStyle.Render(args[0]), output.AccentStyle.Render(instKey))
+
+			data, err := explain.Collect(ctx, client, instKey, explain.Options{
+				Service:      args[0],
+				Duration:     duration,
+				AnthropicKey: cfg.AnthropicKey,
+			})
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("%s Collected: %d error logs, %d recent logs, %d traces\n",
+				output.MutedStyle.Render("📊"),
+				len(data.ErrorLogs), len(data.RecentLogs), len(data.Traces))
+			fmt.Printf("%s Analyzing with AI...\n\n", output.MutedStyle.Render("🤖"))
+
+			prompt := explain.BuildPrompt(data)
+			analyzer := ai.New(cfg.AnthropicKey)
+			return analyzer.Analyze(prompt, os.Stdout)
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
 
 	return cmd
 }
