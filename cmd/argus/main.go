@@ -14,6 +14,7 @@ import (
 	"github.com/lbarahona/argus/internal/output"
 	"github.com/lbarahona/argus/internal/report"
 	"github.com/lbarahona/argus/internal/signoz"
+	"github.com/lbarahona/argus/internal/slo"
 	topkg "github.com/lbarahona/argus/internal/top"
 	"github.com/lbarahona/argus/internal/watch"
 	"github.com/lbarahona/argus/pkg/types"
@@ -52,6 +53,7 @@ func main() {
 		watchCmd(),
 		alertCmd(),
 		explainCmd(),
+		sloCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -837,6 +839,118 @@ Exit code reflects highest severity: 0=ok, 1=warning, 2=critical.`,
 				fmt.Println(out)
 			} else {
 				fmt.Print(alert.FormatText(rpt))
+			}
+			os.Exit(rpt.ExitCode())
+			return nil
+		},
+	}
+	checkCmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to check against")
+	checkCmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: text or json")
+	cmd.AddCommand(checkCmd)
+
+	return cmd
+}
+
+func sloCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "slo",
+		Short: "Track and evaluate Service Level Objectives",
+		Long: `Define SLOs in ~/.argus/slos.yaml and evaluate them against your
+Signoz instances. Track error budgets, burn rates, and compliance.
+
+Perfect for SLO reviews, on-call handoffs, and dashboards.
+Exit codes: 0 = all OK, 1 = warnings, 2 = critical/exhausted.`,
+	}
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "init",
+		Short: "Create sample SLO definitions",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := slo.InitSLOs(); err != nil {
+				return err
+			}
+			fmt.Println("✅ Sample SLO definitions created at ~/.argus/slos.yaml")
+			fmt.Println("   Edit the file to define your SLOs, then run: argus slo check")
+			return nil
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List configured SLOs",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := slo.LoadSLOs()
+			if err != nil {
+				return err
+			}
+			fmt.Printf("\n📊 Service Level Objectives (%d configured)\n\n", len(cfg.SLOs))
+			for i, s := range cfg.SLOs {
+				enabled := "✅"
+				if !s.IsEnabled() {
+					enabled = "⏸️"
+				}
+				svc := s.Service
+				if svc == "" {
+					svc = "all services"
+				}
+				fmt.Printf("  %s %d. %s\n", enabled, i+1, s.Name)
+				if s.Description != "" {
+					fmt.Printf("     %s\n", s.Description)
+				}
+				extra := ""
+				if s.Type == "latency" {
+					extra = fmt.Sprintf(" (≤%.0fms)", s.Threshold)
+				}
+				fmt.Printf("     Type: %s | Target: %.2f%% | Window: %s | Service: %s%s\n\n",
+					s.Type, s.Target, s.Window, svc, extra)
+			}
+			return nil
+		},
+	})
+
+	var instance string
+	var format string
+	checkCmd := &cobra.Command{
+		Use:   "check",
+		Short: "Evaluate all SLOs against Signoz data",
+		Long: `Evaluate all enabled SLOs and report error budgets, burn rates, and compliance.
+
+Use --format json for machine-readable output (great for cron jobs and dashboards).
+Exit code reflects worst SLO: 0=ok, 1=warning, 2=critical/exhausted.`,
+		Example: `  argus slo check
+  argus slo check --format json
+  argus slo check -i production
+  argus slo check --format json | jq '.results[] | select(.status != "ok")'`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sloCfg, err := slo.LoadSLOs()
+			if err != nil {
+				return err
+			}
+			appCfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			inst, instKey, err := config.GetInstance(appCfg, instance)
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			if format != "json" {
+				fmt.Printf("%s Evaluating SLOs against %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(instKey))
+			}
+			checker := slo.NewChecker(*inst, instKey)
+			rpt, err := checker.CheckAll(ctx, sloCfg)
+			if err != nil {
+				return err
+			}
+			if format == "json" {
+				out, err := slo.FormatJSON(rpt)
+				if err != nil {
+					return err
+				}
+				fmt.Println(out)
+			} else {
+				fmt.Print(slo.FormatText(rpt))
 			}
 			os.Exit(rpt.ExitCode())
 			return nil

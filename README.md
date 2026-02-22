@@ -86,6 +86,7 @@ argus ask "why is latency high on the payments service?"
 | `argus watch` | Continuous monitoring with anomaly detection |
 | `argus alert` | Declarative alert rules with cron-friendly output |
 | `argus explain` | AI root cause analysis (correlates logs + traces) |
+| `argus slo` | SLO tracking with error budgets and burn rates |
 
 ### Logs
 
@@ -238,6 +239,51 @@ rules:
     warning: 2.0
     critical: 10.0
 ```
+
+### SLO
+
+```bash
+# Create sample SLO definitions
+argus slo init
+
+# List configured SLOs
+argus slo list
+
+# Evaluate all SLOs (colored output with budget bars)
+argus slo check
+
+# JSON output for dashboards/automation
+argus slo check --format json
+
+# Exit codes: 0=ok, 1=warning, 2=critical/exhausted
+argus slo check && echo "Within budget" || echo "Budget alert!"
+```
+
+SLO definitions live in `~/.argus/slos.yaml`:
+
+```yaml
+slos:
+  - name: "API Availability"
+    service: ""        # empty = all services
+    type: availability # availability or latency
+    target: 99.9       # 99.9%
+    window: 24h        # 1h, 6h, 24h, 7d, 30d
+    labels:
+      team: platform
+      tier: "1"
+
+  - name: "API Latency P99"
+    type: latency
+    target: 99.0       # 99% of requests under threshold
+    threshold: 500     # milliseconds
+    window: 24h
+```
+
+Output includes error budget bars, burn rates, and compliance status:
+- ✅ OK — within budget
+- ⚠️ Warning — >50% budget consumed
+- 🔴 Critical — >80% budget consumed
+- 💀 Exhausted — budget blown
 
 ### Explain
 
