@@ -47,7 +47,8 @@ func New(apiKey string) *Analyzer {
 	}
 }
 
-type message struct {
+// Message represents a conversation message for the Anthropic API.
+type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
@@ -56,7 +57,7 @@ type request struct {
 	Model     string    `json:"model"`
 	MaxTokens int       `json:"max_tokens"`
 	System    string    `json:"system"`
-	Messages  []message `json:"messages"`
+	Messages  []Message `json:"messages"`
 	Stream    bool      `json:"stream"`
 }
 
@@ -66,10 +67,48 @@ func (a *Analyzer) Analyze(prompt string, w io.Writer) error {
 		Model:     model,
 		MaxTokens: 4096,
 		System:    systemPrompt,
-		Messages: []message{
+		Messages: []Message{
 			{Role: "user", Content: prompt},
 		},
 		Stream: true,
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshaling request: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, anthropicAPI, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", a.apiKey)
+	req.Header.Set("anthropic-version", anthropicVersion)
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("calling Anthropic API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("Anthropic API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return a.streamResponse(resp.Body, w)
+}
+
+// AnalyzeWithHistory sends a multi-turn conversation to Claude and streams the response.
+func (a *Analyzer) AnalyzeWithHistory(systemPrompt string, messages []Message, w io.Writer) error {
+	reqBody := request{
+		Model:     model,
+		MaxTokens: 4096,
+		System:    systemPrompt,
+		Messages:  messages,
+		Stream:    true,
 	}
 
 	body, err := json.Marshal(reqBody)

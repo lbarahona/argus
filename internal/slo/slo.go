@@ -181,14 +181,14 @@ func LoadSLOs() (*SLOConfig, error) {
 
 // Checker evaluates SLOs against Signoz data.
 type Checker struct {
-	client   *signoz.Client
+	client   signoz.SignozQuerier
 	instance string
 }
 
 // NewChecker creates an SLO checker.
-func NewChecker(inst types.Instance, instKey string) *Checker {
+func NewChecker(client signoz.SignozQuerier, instKey string) *Checker {
 	return &Checker{
-		client:   signoz.New(inst),
+		client:   client,
 		instance: instKey,
 	}
 }

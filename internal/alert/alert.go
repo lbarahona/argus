@@ -231,14 +231,14 @@ func InitAlerts() error {
 
 // Checker evaluates alert rules against a Signoz instance.
 type Checker struct {
-	client       *signoz.Client
+	client       signoz.SignozQuerier
 	instanceName string
 }
 
 // NewChecker creates a new alert checker.
-func NewChecker(instance types.Instance, instanceName string) *Checker {
+func NewChecker(client signoz.SignozQuerier, instanceName string) *Checker {
 	return &Checker{
-		client:       signoz.New(instance),
+		client:       client,
 		instanceName: instanceName,
 	}
 }

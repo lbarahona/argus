@@ -30,7 +30,7 @@ type CorrelatedData struct {
 }
 
 // Collect gathers all relevant data for a service from Signoz.
-func Collect(ctx context.Context, client *signoz.Client, instanceName string, opts Options) (*CorrelatedData, error) {
+func Collect(ctx context.Context, client signoz.SignozQuerier, instanceName string, opts Options) (*CorrelatedData, error) {
 	data := &CorrelatedData{
 		Service:     opts.Service,
 		Instance:    instanceName,
@@ -177,7 +177,7 @@ Be specific and actionable. Reference actual log messages and trace data.`)
 }
 
 // Run collects data and streams AI analysis.
-func Run(ctx context.Context, client *signoz.Client, instanceName string, opts Options, writer interface{ Write([]byte) (int, error) }) error {
+func Run(ctx context.Context, client signoz.SignozQuerier, instanceName string, opts Options, writer interface{ Write([]byte) (int, error) }) error {
 	data, err := Collect(ctx, client, instanceName, opts)
 	if err != nil {
 		return err

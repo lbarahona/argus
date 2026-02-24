@@ -87,7 +87,7 @@ func DefaultThresholds() Thresholds {
 
 // Watcher continuously monitors a Signoz instance.
 type Watcher struct {
-	client     *signoz.Client
+	client     signoz.SignozQuerier
 	instance   string
 	interval   time.Duration
 	thresholds Thresholds
@@ -100,7 +100,7 @@ type Watcher struct {
 }
 
 // New creates a new Watcher.
-func New(client *signoz.Client, instance string, interval time.Duration, thresholds Thresholds, out io.Writer) *Watcher {
+func New(client signoz.SignozQuerier, instance string, interval time.Duration, thresholds Thresholds, out io.Writer) *Watcher {
 	return &Watcher{
 		client:     client,
 		instance:   instance,

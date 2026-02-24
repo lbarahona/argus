@@ -39,7 +39,7 @@ func TestAnalyzerBuildsCorrectRequest(t *testing.T) {
 		Model:     model,
 		MaxTokens: 4096,
 		System:    systemPrompt,
-		Messages:  []message{{Role: "user", Content: "test prompt"}},
+		Messages:  []Message{{Role: "user", Content: "test prompt"}},
 		Stream:    true,
 	}
 

@@ -54,19 +54,11 @@ type DiffSummary struct {
 
 // Options configures the diff comparison.
 type Options struct {
-	Instance string
 	Duration int // minutes per window (default 60, so compares last hour vs previous hour)
 }
 
 // Compare fetches service data for two consecutive time windows and computes diffs.
-func Compare(ctx context.Context, cfg *types.Config, opts Options) (*DiffResult, error) {
-	inst, instKey, err := getInstanceFromConfig(cfg, opts.Instance)
-	if err != nil {
-		return nil, err
-	}
-
-	client := signoz.New(*inst)
-
+func Compare(ctx context.Context, client signoz.SignozQuerier, instKey string, opts Options) (*DiffResult, error) {
 	// We can only get current services snapshot from Signoz /services endpoint.
 	// For a real diff, we'd need historical data. Since Signoz services endpoint
 	// returns aggregate data, we'll fetch error logs from two time windows to compare.
@@ -263,20 +255,3 @@ func truncate(s string, n int) string {
 	return s
 }
 
-func getInstanceFromConfig(cfg *types.Config, name string) (*types.Instance, string, error) {
-	if name == "" {
-		name = cfg.DefaultInstance
-	}
-	if name == "" {
-		for k, v := range cfg.Instances {
-			inst := v
-			return &inst, k, nil
-		}
-		return nil, "", fmt.Errorf("no instances configured")
-	}
-	inst, ok := cfg.Instances[name]
-	if !ok {
-		return nil, "", fmt.Errorf("instance %q not found", name)
-	}
-	return &inst, name, nil
-}

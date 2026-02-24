@@ -48,7 +48,6 @@ type ErrorPattern struct {
 
 // Options configures report generation.
 type Options struct {
-	Instance     string
 	Duration     int // minutes
 	WithAI       bool
 	Format       string // "terminal" or "markdown"
@@ -56,13 +55,7 @@ type Options struct {
 }
 
 // Generate creates a health report from Signoz data.
-func Generate(ctx context.Context, cfg *types.Config, opts Options) (*Report, error) {
-	inst, instKey, err := getInstanceFromConfig(cfg, opts.Instance)
-	if err != nil {
-		return nil, err
-	}
-
-	client := signoz.New(*inst)
+func Generate(ctx context.Context, client signoz.SignozQuerier, instKey string, opts Options) (*Report, error) {
 	r := &Report{
 		GeneratedAt: time.Now(),
 		Duration:    opts.Duration,
@@ -72,9 +65,8 @@ func Generate(ctx context.Context, cfg *types.Config, opts Options) (*Report, er
 	// Health check
 	healthy, latency, healthErr := client.Health(ctx)
 	status := types.HealthStatus{
-		InstanceName: inst.Name,
+		InstanceName: instKey,
 		InstanceKey:  instKey,
-		URL:          inst.URL,
 		Healthy:      healthy,
 		Latency:      latency,
 	}
@@ -342,22 +334,3 @@ func truncate(s string, n int) string {
 	return s
 }
 
-// getInstanceFromConfig is a helper to resolve an instance from config.
-func getInstanceFromConfig(cfg *types.Config, name string) (*types.Instance, string, error) {
-	if name == "" {
-		name = cfg.DefaultInstance
-	}
-	if name == "" {
-		// Return first instance
-		for k, v := range cfg.Instances {
-			inst := v
-			return &inst, k, nil
-		}
-		return nil, "", fmt.Errorf("no instances configured")
-	}
-	inst, ok := cfg.Instances[name]
-	if !ok {
-		return nil, "", fmt.Errorf("instance %q not found", name)
-	}
-	return &inst, name, nil
-}

@@ -12,6 +12,18 @@ import (
 	"github.com/lbarahona/argus/pkg/types"
 )
 
+// SignozQuerier defines the interface for querying a Signoz instance.
+type SignozQuerier interface {
+	Health(ctx context.Context) (bool, time.Duration, error)
+	ListServices(ctx context.Context) ([]types.Service, error)
+	QueryLogs(ctx context.Context, service string, durationMinutes, limit int, severityFilter string) (*types.QueryResult, error)
+	QueryTraces(ctx context.Context, service string, durationMinutes, limit int) (*types.QueryResult, error)
+	QueryMetrics(ctx context.Context, metricName string, durationMinutes int) (*types.QueryResult, error)
+}
+
+// Compile-time check that Client implements SignozQuerier.
+var _ SignozQuerier = (*Client)(nil)
+
 // Client communicates with a Signoz instance.
 type Client struct {
 	baseURL    string
@@ -68,15 +80,28 @@ func (c *Client) Health(ctx context.Context) (bool, time.Duration, error) {
 
 // ListServices returns services known to Signoz.
 func (c *Client) ListServices(ctx context.Context) ([]types.Service, error) {
-	resp, err := c.do(ctx, http.MethodGet, "/api/v1/services", nil)
+	now := time.Now()
+	start := now.Add(-6 * time.Hour)
+
+	// Signoz v1/services requires a POST with start/end timestamps (epoch nanoseconds as strings).
+	reqBody := map[string]interface{}{
+		"start": fmt.Sprintf("%d", start.UnixNano()),
+		"end":   fmt.Sprintf("%d", now.UnixNano()),
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("listing services: %w", err)
+	}
+
+	resp, err := c.do(ctx, http.MethodPost, "/api/v1/services", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("listing services: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("listing services: status %d: %s", resp.StatusCode, string(body))
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("listing services: status %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var services []types.Service
@@ -94,54 +119,183 @@ func (c *Client) ListServices(ctx context.Context) ([]types.Service, error) {
 	return services, nil
 }
 
-// compositeQuery builds a query_range request payload.
-func buildQueryRangePayload(signal, requestType string, durationMinutes, limit int, filter, orderField string, aggregations []map[string]interface{}, groupBy []map[string]interface{}) map[string]interface{} {
+// ──────────────────────────────────────────────
+// V3 Query Payload Types
+// ──────────────────────────────────────────────
+
+// FilterKey identifies a filter field.
+type FilterKey struct {
+	Key      string `json:"key"`
+	DataType string `json:"dataType"`
+	Type     string `json:"type"`
+	IsColumn bool   `json:"isColumn"`
+}
+
+// FilterItem is one filter condition.
+type FilterItem struct {
+	Key   FilterKey   `json:"key"`
+	Op    string      `json:"op"`
+	Value interface{} `json:"value"`
+}
+
+// Filters groups filter items with a logical operator.
+type Filters struct {
+	Op    string       `json:"op"`
+	Items []FilterItem `json:"items"`
+}
+
+// OrderByItem specifies a sort column and direction.
+type OrderByItem struct {
+	ColumnName string `json:"columnName"`
+	Order      string `json:"order"`
+}
+
+// AggregateAttribute identifies the attribute to aggregate on.
+type AggregateAttribute struct {
+	Key      string `json:"key"`
+	DataType string `json:"dataType"`
+	Type     string `json:"type"`
+	IsColumn bool   `json:"isColumn"`
+}
+
+// SelectColumn identifies a column to include in list results.
+type SelectColumn struct {
+	Key      string `json:"key"`
+	DataType string `json:"dataType"`
+	Type     string `json:"type"`
+	IsColumn bool   `json:"isColumn"`
+	IsJSON   bool   `json:"isJSON,omitempty"`
+}
+
+// BuilderQuery is a single query within the composite query.
+type BuilderQuery struct {
+	QueryName          string              `json:"queryName"`
+	StepInterval       int                 `json:"stepInterval"`
+	DataSource         string              `json:"dataSource"`
+	AggregateOperator  string              `json:"aggregateOperator"`
+	AggregateAttribute *AggregateAttribute `json:"aggregateAttribute,omitempty"`
+	Filters            Filters             `json:"filters"`
+	Expression         string              `json:"expression"`
+	Disabled           bool                `json:"disabled"`
+	Limit              int                 `json:"limit,omitempty"`
+	Offset             int                 `json:"offset"`
+	OrderBy            []OrderByItem       `json:"orderBy,omitempty"`
+	GroupBy            []interface{}        `json:"groupBy"`
+	SelectColumns      []SelectColumn      `json:"selectColumns,omitempty"`
+}
+
+// CompositeQuery wraps the builder queries with panel and query type.
+type CompositeQuery struct {
+	BuilderQueries map[string]*BuilderQuery `json:"builderQueries"`
+	PanelType      string                   `json:"panelType"`
+	QueryType      string                   `json:"queryType"`
+}
+
+// QueryRangePayload is the top-level request body for query_range.
+type QueryRangePayload struct {
+	Start          int64          `json:"start"`
+	End            int64          `json:"end"`
+	Step           int            `json:"step"`
+	CompositeQuery CompositeQuery `json:"compositeQuery"`
+}
+
+// QueryRangeParams captures the inputs for building a query payload.
+type QueryRangeParams struct {
+	DataSource         string
+	PanelType          string // "list" or "graph"
+	AggregateOperator  string // "noop", "avg", "sum", etc.
+	AggregateAttribute *AggregateAttribute
+	Filters            []FilterItem
+	OrderBy            []OrderByItem
+	SelectColumns      []SelectColumn
+	Limit              int
+	DurationMinutes    int
+}
+
+// BuildQueryRangePayload constructs a v3-compatible query_range request.
+func BuildQueryRangePayload(params QueryRangeParams) QueryRangePayload {
 	now := time.Now()
-	start := now.Add(-time.Duration(durationMinutes) * time.Minute)
+	start := now.Add(-time.Duration(params.DurationMinutes) * time.Minute)
 
-	spec := map[string]interface{}{
-		"name":         "A",
-		"signal":       signal,
-		"stepInterval": 60,
-		"disabled":     false,
-	}
-
-	if limit > 0 {
-		spec["limit"] = limit
-	}
-
-	if filter != "" {
-		spec["filter"] = map[string]interface{}{
-			"expression": filter,
+	step := 60
+	if params.PanelType == "graph" && params.DurationMinutes > 0 {
+		step = params.DurationMinutes * 60 / 60 // ~60 data points
+		if step < 60 {
+			step = 60
 		}
 	}
 
-	if orderField != "" {
-		spec["order"] = []map[string]interface{}{
-			{"key": map[string]string{"name": orderField}, "direction": "desc"},
-		}
-	}
-
-	if aggregations != nil {
-		spec["aggregations"] = aggregations
-	}
-
-	if groupBy != nil {
-		spec["groupBy"] = groupBy
-	}
-
-	return map[string]interface{}{
-		"start":       start.UnixMilli(),
-		"end":         now.UnixMilli(),
-		"requestType": requestType,
-		"compositeQuery": map[string]interface{}{
-			"queries": []map[string]interface{}{
-				{
-					"type": "builder_query",
-					"spec": spec,
-				},
-			},
+	bq := &BuilderQuery{
+		QueryName:         "A",
+		StepInterval:      60,
+		DataSource:        params.DataSource,
+		AggregateOperator: params.AggregateOperator,
+		Filters: Filters{
+			Op:    "AND",
+			Items: params.Filters,
 		},
+		Expression: "A",
+		Disabled:   false,
+		GroupBy:    []interface{}{},
+	}
+
+	if params.AggregateAttribute != nil {
+		bq.AggregateAttribute = params.AggregateAttribute
+	}
+	if params.Limit > 0 {
+		bq.Limit = params.Limit
+	}
+	if len(params.OrderBy) > 0 {
+		bq.OrderBy = params.OrderBy
+	}
+	// Ensure filters items is never nil in JSON
+	if bq.Filters.Items == nil {
+		bq.Filters.Items = []FilterItem{}
+	}
+
+	// Set selectColumns for list queries (required by Signoz v3)
+	if params.PanelType == "list" {
+		if len(params.SelectColumns) > 0 {
+			bq.SelectColumns = params.SelectColumns
+		} else {
+			bq.SelectColumns = defaultSelectColumns(params.DataSource)
+		}
+	}
+
+	return QueryRangePayload{
+		Start:     start.UnixMilli(),
+		End:       now.UnixMilli(),
+		Step:      step,
+		CompositeQuery: CompositeQuery{
+			BuilderQueries: map[string]*BuilderQuery{"A": bq},
+			PanelType:      params.PanelType,
+			QueryType:      "builder",
+		},
+	}
+}
+
+// defaultSelectColumns returns the standard columns for list queries per data source.
+func defaultSelectColumns(dataSource string) []SelectColumn {
+	switch dataSource {
+	case "logs":
+		return []SelectColumn{
+			{Key: "body", DataType: "string", Type: "", IsColumn: true},
+			{Key: "severity_text", DataType: "string", Type: "", IsColumn: true},
+			{Key: "service_name", DataType: "string", Type: "resource", IsColumn: false},
+		}
+	case "traces":
+		return []SelectColumn{
+			{Key: "serviceName", DataType: "string", Type: "tag", IsColumn: true},
+			{Key: "name", DataType: "string", Type: "tag", IsColumn: true},
+			{Key: "durationNano", DataType: "float64", Type: "tag", IsColumn: true},
+			{Key: "httpMethod", DataType: "string", Type: "tag", IsColumn: true},
+			{Key: "responseStatusCode", DataType: "string", Type: "tag", IsColumn: true},
+			{Key: "traceID", DataType: "string", Type: "tag", IsColumn: true},
+			{Key: "spanID", DataType: "string", Type: "tag", IsColumn: true},
+			{Key: "statusCode", DataType: "int64", Type: "tag", IsColumn: true},
+		}
+	default:
+		return nil
 	}
 }
 
@@ -158,7 +312,7 @@ type queryRangeResultItem struct {
 	List      []map[string]interface{} `json:"list,omitempty"`
 }
 
-func (c *Client) postQueryRange(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
+func (c *Client) postQueryRange(ctx context.Context, payload QueryRangePayload) ([]byte, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling query: %w", err)
@@ -188,19 +342,31 @@ func (c *Client) QueryLogs(ctx context.Context, service string, durationMinutes,
 		limit = 100
 	}
 
-	filter := ""
-	parts := []string{}
+	var filters []FilterItem
 	if service != "" {
-		parts = append(parts, fmt.Sprintf("service_name = '%s'", service))
+		filters = append(filters, FilterItem{
+			Key:   FilterKey{Key: "service_name", DataType: "string", Type: "resource", IsColumn: false},
+			Op:    "=",
+			Value: service,
+		})
 	}
 	if severityFilter != "" {
-		parts = append(parts, fmt.Sprintf("severity_text = '%s'", severityFilter))
-	}
-	if len(parts) > 0 {
-		filter = joinFilters(parts)
+		filters = append(filters, FilterItem{
+			Key:   FilterKey{Key: "severity_text", DataType: "string", Type: "tag", IsColumn: false},
+			Op:    "=",
+			Value: severityFilter,
+		})
 	}
 
-	payload := buildQueryRangePayload("logs", "raw", durationMinutes, limit, filter, "timestamp", nil, nil)
+	payload := BuildQueryRangePayload(QueryRangeParams{
+		DataSource:        "logs",
+		PanelType:         "list",
+		AggregateOperator: "noop",
+		Filters:           filters,
+		OrderBy:           []OrderByItem{{ColumnName: "timestamp", Order: "desc"}},
+		Limit:             limit,
+		DurationMinutes:   durationMinutes,
+	})
 
 	respBody, err := c.postQueryRange(ctx, payload)
 	if err != nil {
@@ -220,16 +386,23 @@ func (c *Client) QueryLogs(ctx context.Context, service string, durationMinutes,
 
 // QueryMetrics queries metrics from Signoz.
 func (c *Client) QueryMetrics(ctx context.Context, metricName string, durationMinutes int) (*types.QueryResult, error) {
-	aggregations := []map[string]interface{}{
-		{"expression": "avg()"},
-	}
-
-	filter := ""
+	var aggAttr *AggregateAttribute
 	if metricName != "" {
-		filter = fmt.Sprintf("metric_name = '%s'", metricName)
+		aggAttr = &AggregateAttribute{
+			Key:      metricName,
+			DataType: "float64",
+			Type:     "Gauge",
+			IsColumn: true,
+		}
 	}
 
-	payload := buildQueryRangePayload("metrics", "time_series", durationMinutes, 0, filter, "", aggregations, nil)
+	payload := BuildQueryRangePayload(QueryRangeParams{
+		DataSource:         "metrics",
+		PanelType:          "graph",
+		AggregateOperator:  "avg",
+		AggregateAttribute: aggAttr,
+		DurationMinutes:    durationMinutes,
+	})
 
 	respBody, err := c.postQueryRange(ctx, payload)
 	if err != nil {
@@ -253,12 +426,24 @@ func (c *Client) QueryTraces(ctx context.Context, service string, durationMinute
 		limit = 100
 	}
 
-	filter := ""
+	var filters []FilterItem
 	if service != "" {
-		filter = fmt.Sprintf("service_name = '%s'", service)
+		filters = append(filters, FilterItem{
+			Key:   FilterKey{Key: "serviceName", DataType: "string", Type: "tag", IsColumn: true},
+			Op:    "=",
+			Value: service,
+		})
 	}
 
-	payload := buildQueryRangePayload("traces", "raw", durationMinutes, limit, filter, "timestamp", nil, nil)
+	payload := BuildQueryRangePayload(QueryRangeParams{
+		DataSource:        "traces",
+		PanelType:         "list",
+		AggregateOperator: "noop",
+		Filters:           filters,
+		OrderBy:           []OrderByItem{{ColumnName: "timestamp", Order: "desc"}},
+		Limit:             limit,
+		DurationMinutes:   durationMinutes,
+	})
 
 	respBody, err := c.postQueryRange(ctx, payload)
 	if err != nil {
@@ -276,35 +461,46 @@ func (c *Client) QueryTraces(ctx context.Context, service string, durationMinute
 	}, nil
 }
 
-func joinFilters(parts []string) string {
-	if len(parts) == 1 {
-		return parts[0]
-	}
-	result := parts[0]
-	for _, p := range parts[1:] {
-		result += " AND " + p
-	}
-	return result
-}
-
-// parseLogsResponse extracts log entries from the query_range response.
-func parseLogsResponse(data []byte) ([]types.LogEntry, error) {
+// extractResultArray unwraps the Signoz response envelope to get the result array.
+// Signoz v3 returns: {"status":"success","data":{"result":[...]}}
+// This function handles both {data: {result: [...]}} and {data: [...]} shapes.
+func extractResultArray(data []byte) ([]byte, error) {
 	var resp map[string]interface{}
 	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, fmt.Errorf("parsing logs response: %w", err)
+		return nil, fmt.Errorf("parsing response: %w", err)
 	}
 
 	result := resp["data"]
 	if result == nil {
-		// Try top-level "result"
 		result = resp["result"]
 	}
 	if result == nil {
 		return nil, nil
 	}
 
-	// The response can have different shapes. Try to extract from list or records.
-	resultBytes, _ := json.Marshal(result)
+	// If data is an object with a "result" key, unwrap it
+	if m, ok := result.(map[string]interface{}); ok {
+		if inner, ok := m["result"]; ok {
+			result = inner
+		}
+	}
+
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	return resultBytes, nil
+}
+
+// parseLogsResponse extracts log entries from the query_range response.
+func parseLogsResponse(data []byte) ([]types.LogEntry, error) {
+	resultBytes, err := extractResultArray(data)
+	if err != nil {
+		return nil, fmt.Errorf("parsing logs response: %w", err)
+	}
+	if resultBytes == nil {
+		return nil, nil
+	}
 	return extractLogs(resultBytes)
 }
 
@@ -341,8 +537,14 @@ func mapToLogEntry(m map[string]interface{}) types.LogEntry {
 		Attributes: make(map[string]string),
 	}
 
-	// Handle nested "data" field (Signoz wraps some responses)
+	// Handle nested "data" field (Signoz wraps list items as {timestamp, data: {...}})
+	// Preserve outer-level timestamp before unwrapping.
 	if data, ok := m["data"].(map[string]interface{}); ok {
+		if ts, hasTS := m["timestamp"]; hasTS {
+			if _, innerHasTS := data["timestamp"]; !innerHasTS {
+				data["timestamp"] = ts
+			}
+		}
 		m = data
 	}
 
@@ -385,20 +587,13 @@ func mapToLogEntry(m map[string]interface{}) types.LogEntry {
 }
 
 func parseTracesResponse(data []byte) ([]types.TraceEntry, error) {
-	var resp map[string]interface{}
-	if err := json.Unmarshal(data, &resp); err != nil {
+	resultBytes, err := extractResultArray(data)
+	if err != nil {
 		return nil, fmt.Errorf("parsing traces response: %w", err)
 	}
-
-	result := resp["data"]
-	if result == nil {
-		result = resp["result"]
-	}
-	if result == nil {
+	if resultBytes == nil {
 		return nil, nil
 	}
-
-	resultBytes, _ := json.Marshal(result)
 
 	// Try as array of result items with "list"
 	var items []queryRangeResultItem
@@ -432,6 +627,11 @@ func mapToTraceEntry(m map[string]interface{}) types.TraceEntry {
 	}
 
 	if data, ok := m["data"].(map[string]interface{}); ok {
+		if ts, hasTS := m["timestamp"]; hasTS {
+			if _, innerHasTS := data["timestamp"]; !innerHasTS {
+				data["timestamp"] = ts
+			}
+		}
 		m = data
 	}
 
@@ -483,20 +683,13 @@ func mapToTraceEntry(m map[string]interface{}) types.TraceEntry {
 }
 
 func parseMetricsResponse(data []byte) ([]types.MetricEntry, error) {
-	var resp map[string]interface{}
-	if err := json.Unmarshal(data, &resp); err != nil {
+	resultBytes, err := extractResultArray(data)
+	if err != nil {
 		return nil, fmt.Errorf("parsing metrics response: %w", err)
 	}
-
-	result := resp["data"]
-	if result == nil {
-		result = resp["result"]
-	}
-	if result == nil {
+	if resultBytes == nil {
 		return nil, nil
 	}
-
-	resultBytes, _ := json.Marshal(result)
 
 	var items []queryRangeResultItem
 	if err := json.Unmarshal(resultBytes, &items); err == nil && len(items) > 0 {
@@ -515,9 +708,9 @@ func parseMetricsResponse(data []byte) ([]types.MetricEntry, error) {
 						ts, _ := v[0].(float64)
 						val, _ := v[1].(float64)
 						metrics = append(metrics, types.MetricEntry{
-							Timestamp:  time.UnixMilli(int64(ts)),
-							Value:      val,
-							Labels:     s.Labels,
+							Timestamp: time.UnixMilli(int64(ts)),
+							Value:     val,
+							Labels:    s.Labels,
 						})
 					}
 				}
@@ -527,9 +720,4 @@ func parseMetricsResponse(data []byte) ([]types.MetricEntry, error) {
 	}
 
 	return nil, nil
-}
-
-// BuildQueryPayload exposes payload building for testing.
-func BuildQueryPayload(signal, requestType string, durationMinutes, limit int, filter, orderField string, aggregations []map[string]interface{}, groupBy []map[string]interface{}) map[string]interface{} {
-	return buildQueryRangePayload(signal, requestType, durationMinutes, limit, filter, orderField, aggregations, groupBy)
 }

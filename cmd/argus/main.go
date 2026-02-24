@@ -16,6 +16,7 @@ import (
 	"github.com/lbarahona/argus/internal/signoz"
 	"github.com/lbarahona/argus/internal/slo"
 	topkg "github.com/lbarahona/argus/internal/top"
+	"github.com/lbarahona/argus/internal/tui"
 	"github.com/lbarahona/argus/internal/watch"
 	"github.com/lbarahona/argus/pkg/types"
 	"github.com/spf13/cobra"
@@ -54,6 +55,7 @@ func main() {
 		alertCmd(),
 		explainCmd(),
 		sloCmd(),
+		tuiCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -535,11 +537,16 @@ func reportCmd() *cobra.Command {
 				return err
 			}
 
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
 			ctx := context.Background()
 			fmt.Printf("%s Generating health report...\n", output.MutedStyle.Render("⏳"))
 
-			r, err := report.Generate(ctx, cfg, report.Options{
-				Instance:     instance,
+			r, err := report.Generate(ctx, client, instKey, report.Options{
 				Duration:     duration,
 				WithAI:       withAI,
 				Format:       format,
@@ -596,11 +603,16 @@ func topCmd() *cobra.Command {
 				sf = topkg.SortByErrors
 			}
 
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
 			ctx := context.Background()
 			fmt.Printf("%s Fetching service data...\n", output.MutedStyle.Render("⏳"))
 
-			result, err := topkg.Run(ctx, cfg, topkg.Options{
-				Instance: instance,
+			result, err := topkg.Run(ctx, client, instKey, topkg.Options{
 				Limit:    limit,
 				SortBy:   sf,
 				Duration: duration,
@@ -636,11 +648,16 @@ func diffCmd() *cobra.Command {
 				return err
 			}
 
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
 			ctx := context.Background()
 			fmt.Printf("%s Comparing time windows...\n", output.MutedStyle.Render("⏳"))
 
-			result, err := diff.Compare(ctx, cfg, diff.Options{
-				Instance: instance,
+			result, err := diff.Compare(ctx, client, instKey, diff.Options{
 				Duration: duration,
 			})
 			if err != nil {
@@ -823,10 +840,11 @@ Exit code reflects highest severity: 0=ok, 1=warning, 2=critical.`,
 				return err
 			}
 			ctx := context.Background()
+			client := signoz.New(*inst)
 			if format != "json" {
 				fmt.Printf("%s Checking alerts against %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(instKey))
 			}
-			checker := alert.NewChecker(*inst, instKey)
+			checker := alert.NewChecker(client, instKey)
 			rpt, err := checker.CheckAll(ctx, alertCfg)
 			if err != nil {
 				return err
@@ -935,10 +953,11 @@ Exit code reflects worst SLO: 0=ok, 1=warning, 2=critical/exhausted.`,
 				return err
 			}
 			ctx := context.Background()
+			client := signoz.New(*inst)
 			if format != "json" {
 				fmt.Printf("%s Evaluating SLOs against %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(instKey))
 			}
-			checker := slo.NewChecker(*inst, instKey)
+			checker := slo.NewChecker(client, instKey)
 			rpt, err := checker.CheckAll(ctx, sloCfg)
 			if err != nil {
 				return err
@@ -1019,6 +1038,65 @@ Think of it as having a senior SRE look at all your dashboards at once.`,
 
 	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
 	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+
+	return cmd
+}
+
+func tuiCmd() *cobra.Command {
+	var instance string
+	var maxHistory int
+
+	cmd := &cobra.Command{
+		Use:   "tui",
+		Short: "Interactive AI-powered troubleshooting session",
+		Long: `Start an interactive session connected to a Signoz instance.
+Ask questions in natural language and get AI-powered analysis with full
+conversation context. The AI automatically gathers live data from Signoz
+with each question.
+
+Perfect for extended troubleshooting sessions where you need to drill
+down into issues with follow-up questions.`,
+		Example: `  argus tui
+  argus tui -i production
+  argus tui --max-history 40`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			if cfg.AnthropicKey == "" {
+				return fmt.Errorf("Anthropic API key required. Run: argus config init")
+			}
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			instName := instKey
+			if inst.Name != "" {
+				instName = inst.Name
+			}
+
+			client := signoz.New(*inst)
+
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+			defer cancel()
+
+			session := tui.New(client, tui.Options{
+				InstanceKey:  instKey,
+				InstanceName: instName,
+				AnthropicKey: cfg.AnthropicKey,
+				MaxHistory:   maxHistory,
+			})
+
+			return session.Run(ctx)
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to connect to")
+	cmd.Flags().IntVar(&maxHistory, "max-history", 20, "Maximum conversation messages to retain")
 
 	return cmd
 }

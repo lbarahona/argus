@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lbarahona/argus/internal/signoz"
-	"github.com/lbarahona/argus/pkg/types"
 )
 
 // SortField determines how services are sorted.
@@ -24,7 +23,6 @@ const (
 
 // Options configures the top view.
 type Options struct {
-	Instance string
 	Limit    int
 	SortBy   SortField
 	Duration int // minutes for log lookup
@@ -49,14 +47,7 @@ type Result struct {
 }
 
 // Run fetches and ranks services.
-func Run(ctx context.Context, cfg *types.Config, opts Options) (*Result, error) {
-	inst, instKey, err := getInstanceFromConfig(cfg, opts.Instance)
-	if err != nil {
-		return nil, err
-	}
-
-	client := signoz.New(*inst)
-
+func Run(ctx context.Context, client signoz.SignozQuerier, instKey string, opts Options) (*Result, error) {
 	services, err := client.ListServices(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing services: %w", err)
@@ -180,20 +171,3 @@ func truncate(s string, n int) string {
 	return s
 }
 
-func getInstanceFromConfig(cfg *types.Config, name string) (*types.Instance, string, error) {
-	if name == "" {
-		name = cfg.DefaultInstance
-	}
-	if name == "" {
-		for k, v := range cfg.Instances {
-			inst := v
-			return &inst, k, nil
-		}
-		return nil, "", fmt.Errorf("no instances configured")
-	}
-	inst, ok := cfg.Instances[name]
-	if !ok {
-		return nil, "", fmt.Errorf("instance %q not found", name)
-	}
-	return &inst, name, nil
-}
