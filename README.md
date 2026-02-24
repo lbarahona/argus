@@ -86,6 +86,13 @@ argus ask "why is latency high on the payments service?"
 | `argus watch` | Continuous monitoring with anomaly detection |
 | `argus alert` | Declarative alert rules with cron-friendly output |
 | `argus explain` | AI root cause analysis (correlates logs + traces) |
+| `argus runbook init` | Create sample runbooks to get started |
+| `argus runbook list` | List all runbooks (filter by category) |
+| `argus runbook show <id>` | Show runbook details and steps |
+| `argus runbook search <q>` | Search runbooks by name, tags, category |
+| `argus runbook run <id>` | Execute a runbook step-by-step |
+| `argus runbook validate <id>` | Validate runbook structure |
+| `argus runbook delete <id>` | Delete a runbook |
 
 ### Logs
 
