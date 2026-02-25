@@ -16,6 +16,7 @@ import (
 	"github.com/lbarahona/argus/internal/signoz"
 	"github.com/lbarahona/argus/internal/slo"
 	topkg "github.com/lbarahona/argus/internal/top"
+	"github.com/lbarahona/argus/internal/timeline"
 	"github.com/lbarahona/argus/internal/tui"
 	"github.com/lbarahona/argus/internal/watch"
 	"github.com/lbarahona/argus/pkg/types"
@@ -55,6 +56,7 @@ func main() {
 		alertCmd(),
 		explainCmd(),
 		sloCmd(),
+		timelineCmd(),
 		tuiCmd(),
 	)
 
@@ -1038,6 +1040,81 @@ Think of it as having a senior SRE look at all your dashboards at once.`,
 
 	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
 	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+
+	return cmd
+}
+
+func timelineCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var service string
+	var withAI bool
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "timeline",
+		Short: "Reconstruct an incident timeline from observability data",
+		Long: `Automatically correlate errors, latency spikes, and service health
+into a chronological incident timeline. Perfect for incident review,
+postmortems, and shift handoffs.
+
+Analyzes logs, traces, and service health to detect:
+  - Error spikes (sudden increases in error rate)
+  - New error patterns (unique errors appearing)
+  - Latency spikes (P99 outliers)
+  - Service degradation (high error rates)
+
+Use --ai to generate an AI-powered incident narrative.`,
+		Example: `  argus timeline
+  argus timeline --duration 120
+  argus timeline --service api-service --ai
+  argus timeline --format markdown > incident-report.md
+  argus timeline -i production --duration 30 --ai`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+			client := signoz.New(*inst)
+			ctx := context.Background()
+
+			opts := timeline.Options{
+				Duration:     duration,
+				Service:      service,
+				WithAI:       withAI,
+				Format:       format,
+				AnthropicKey: cfg.AnthropicKey,
+			}
+
+			if withAI && cfg.AnthropicKey == "" {
+				return fmt.Errorf("Anthropic API key required for --ai. Run: argus config init")
+			}
+
+			tl, err := timeline.Generate(ctx, client, instKey, opts)
+			if err != nil {
+				return err
+			}
+
+			switch format {
+			case "markdown":
+				tl.RenderMarkdown(os.Stdout)
+			default:
+				tl.RenderTerminal(os.Stdout)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to use")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Time window in minutes")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to a specific service")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Generate AI incident narrative")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format (terminal, markdown)")
 
 	return cmd
 }
