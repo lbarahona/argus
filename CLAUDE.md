@@ -52,6 +52,7 @@ Each feature command has its own package with a consistent structure: `Options` 
 - **`alert`** — Declarative alert rules from `~/.argus/alerts.yaml`. Rule types: `error_rate`, `log_errors`, `service_down`. Exit codes: 0=ok, 1=warning, 2=critical.
 - **`slo`** — SLO tracking from `~/.argus/slos.yaml`. Computes error budgets, burn rates, and compliance. SLO types: `availability` (from service error rates), `latency` (from trace durations). Exit codes: 0=ok, 1=warning, 2=critical/exhausted.
 - **`explain`** — Collects error logs, recent logs, and traces for a service, then builds a structured prompt for AI root cause analysis.
+- **`timeline`** — Incident timeline reconstruction. Correlates error spikes (time-bucketed), new error patterns, latency spikes (P99 outliers), and service health into a chronological timeline. Supports terminal and markdown rendering, optional AI narrative via `generateNarrative()`. Detection functions: `detectErrorSpikes`, `detectNewErrors`, `detectLatencySpikes`, `detectServiceHealth`.
 - **`tui`** — Interactive REPL for multi-turn AI troubleshooting sessions. Uses `bufio.Scanner` + lipgloss (no bubbletea). `Session` struct holds conversation `history` (as `[]ai.Message`) and a `SignozQuerier` client. Each question automatically gathers live Signoz context (services + recent error logs) and appends it to the user message. Supports `/clear`, `/help`, `/history` commands. History is trimmed in pairs when exceeding `maxHistory` (default 20 messages). I/O is injectable (`stdin`/`stdout` fields) for testing.
 
 ### Patterns to Follow
