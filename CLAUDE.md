@@ -53,6 +53,7 @@ Each feature command has its own package with a consistent structure: `Options` 
 - **`slo`** — SLO tracking from `~/.argus/slos.yaml`. Computes error budgets, burn rates, and compliance. SLO types: `availability` (from service error rates), `latency` (from trace durations). Exit codes: 0=ok, 1=warning, 2=critical/exhausted.
 - **`explain`** — Collects error logs, recent logs, and traces for a service, then builds a structured prompt for AI root cause analysis.
 - **`tui`** — Interactive REPL for multi-turn AI troubleshooting sessions. Uses `bufio.Scanner` + lipgloss (no bubbletea). `Session` struct holds conversation `history` (as `[]ai.Message`) and a `SignozQuerier` client. Each question automatically gathers live Signoz context (services + recent error logs) and appends it to the user message. Supports `/clear`, `/help`, `/history` commands. History is trimmed in pairs when exceeding `maxHistory` (default 20 messages). I/O is injectable (`stdin`/`stdout` fields) for testing.
+- **`scorecard`** — Service reliability scorecard. Grades each service (A-F) based on error rate, P50/P99 latency, traffic volume, and trends. Computes weighted overall score (by call volume). Outputs terminal table or markdown. Optional AI summary via `generateAISummary()`. Scoring: error rate penalty (up to 50pts), latency penalty (up to 30pts), trend bonus/penalty (±5-10pts), no-traffic neutral (50pts).
 
 ### Patterns to Follow
 
