@@ -16,6 +16,7 @@ import (
 	"github.com/lbarahona/argus/internal/signoz"
 	"github.com/lbarahona/argus/internal/slo"
 	topkg "github.com/lbarahona/argus/internal/top"
+	"github.com/lbarahona/argus/internal/scorecard"
 	"github.com/lbarahona/argus/internal/tui"
 	"github.com/lbarahona/argus/internal/watch"
 	"github.com/lbarahona/argus/pkg/types"
@@ -56,6 +57,7 @@ func main() {
 		explainCmd(),
 		sloCmd(),
 		tuiCmd(),
+		scorecardCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -1097,6 +1099,61 @@ down into issues with follow-up questions.`,
 
 	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to connect to")
 	cmd.Flags().IntVar(&maxHistory, "max-history", 20, "Maximum conversation messages to retain")
+
+	return cmd
+}
+
+func scorecardCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var service string
+	var withAI bool
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "scorecard",
+		Short: "Generate a service reliability scorecard",
+		Long:  "Grade each service on reliability (error rate, latency, trends) and produce an overall score. Use for weekly reviews, shift handoffs, or SLA reporting.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
+			ctx := context.Background()
+			fmt.Printf("%s Generating reliability scorecard...\n", output.MutedStyle.Render("⏳"))
+
+			sc, err := scorecard.Generate(ctx, client, instKey, scorecard.Options{
+				Duration:     duration,
+				Service:      service,
+				WithAI:       withAI,
+				Format:       format,
+				AnthropicKey: cfg.AnthropicKey,
+			})
+			if err != nil {
+				return err
+			}
+
+			if format == "markdown" {
+				scorecard.RenderMarkdown(os.Stdout, sc)
+			} else {
+				scorecard.RenderTerminal(os.Stdout, sc)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to a single service")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-generated summary (uses Anthropic API)")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
 
 	return cmd
 }
