@@ -9,6 +9,7 @@ import (
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/alert"
 	"github.com/lbarahona/argus/internal/config"
+	"github.com/lbarahona/argus/internal/correlate"
 	"github.com/lbarahona/argus/internal/diff"
 	"github.com/lbarahona/argus/internal/explain"
 	"github.com/lbarahona/argus/internal/output"
@@ -56,6 +57,7 @@ func main() {
 		explainCmd(),
 		sloCmd(),
 		tuiCmd(),
+		correlateCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -1097,6 +1099,87 @@ down into issues with follow-up questions.`,
 
 	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to connect to")
 	cmd.Flags().IntVar(&maxHistory, "max-history", 20, "Maximum conversation messages to retain")
+
+	return cmd
+}
+
+func correlateCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var service string
+	var bucketSize int
+	var minEvents int
+	var useAI bool
+	var markdown bool
+
+	cmd := &cobra.Command{
+		Use:   "correlate",
+		Short: "Cross-signal correlation across services",
+		Long: `Analyze logs, traces, and metrics across all services to find temporal
+correlations, error propagation patterns, and causal chains.
+
+Unlike 'explain' (which focuses on one service), 'correlate' looks at the
+entire system to find how issues spread between services and identifies
+the root cause in a cascade.`,
+		Example: `  argus correlate
+  argus correlate --service api-gateway
+  argus correlate --duration 30 --ai
+  argus correlate --bucket 30 --min-events 5
+  argus correlate --markdown`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+			client := signoz.New(*inst)
+			ctx := context.Background()
+
+			opts := correlate.Options{
+				Duration:     duration,
+				Service:      service,
+				BucketSize:   bucketSize,
+				MinEvents:    minEvents,
+				AnthropicKey: cfg.AnthropicKey,
+			}
+
+			if useAI {
+				if cfg.AnthropicKey == "" {
+					return fmt.Errorf("Anthropic API key required for AI analysis. Run: argus config init")
+				}
+				fmt.Printf("%s Collecting signals from %s...\n",
+					output.MutedStyle.Render("🔍"), output.AccentStyle.Render(instKey))
+				return correlate.RunWithAI(ctx, client, instKey, opts, os.Stdout)
+			}
+
+			fmt.Printf("%s Collecting signals from %s...\n",
+				output.MutedStyle.Render("🔍"), output.AccentStyle.Render(instKey))
+
+			result, err := correlate.Run(ctx, client, instKey, opts)
+			if err != nil {
+				return err
+			}
+
+			if markdown {
+				fmt.Print(correlate.RenderMarkdown(result))
+			} else {
+				correlate.Render(result)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Focus on a specific service (default: all)")
+	cmd.Flags().IntVar(&bucketSize, "bucket", 60, "Time bucket size in seconds for clustering")
+	cmd.Flags().IntVar(&minEvents, "min-events", 3, "Minimum events to form a cluster")
+	cmd.Flags().BoolVar(&useAI, "ai", false, "Include AI-powered correlation analysis")
+	cmd.Flags().BoolVar(&markdown, "markdown", false, "Output as markdown")
 
 	return cmd
 }
