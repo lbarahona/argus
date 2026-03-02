@@ -11,6 +11,7 @@ import (
 	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/diff"
 	"github.com/lbarahona/argus/internal/explain"
+	"github.com/lbarahona/argus/internal/mcpserver"
 	"github.com/lbarahona/argus/internal/output"
 	"github.com/lbarahona/argus/internal/report"
 	"github.com/lbarahona/argus/internal/signoz"
@@ -56,6 +57,7 @@ func main() {
 		explainCmd(),
 		sloCmd(),
 		tuiCmd(),
+		mcpCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -1099,4 +1101,33 @@ down into issues with follow-up questions.`,
 	cmd.Flags().IntVar(&maxHistory, "max-history", 20, "Maximum conversation messages to retain")
 
 	return cmd
+}
+
+func mcpCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "mcp",
+		Short: "Start MCP (Model Context Protocol) server",
+		Long: `Start an MCP server over stdio, exposing Argus observability tools
+to AI agents and LLM applications.
+
+Supported tools: status, services, logs, traces, metrics, ask, explain,
+dashboard, report, top, diff, alert_check, slo_check.
+
+Configure in Claude Desktop, Cursor, or any MCP client:
+  {
+    "mcpServers": {
+      "argus": {
+        "command": "argus",
+        "args": ["mcp"]
+      }
+    }
+  }`,
+		Example: `  argus mcp
+  echo '{"jsonrpc":"2.0","method":"initialize",...}' | argus mcp`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+			defer cancel()
+			return mcpserver.Run(ctx, version)
+		},
+	}
 }
