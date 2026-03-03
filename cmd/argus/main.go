@@ -8,6 +8,7 @@ import (
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/alert"
+	"github.com/lbarahona/argus/internal/anomaly"
 	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/diff"
 	"github.com/lbarahona/argus/internal/explain"
@@ -55,6 +56,7 @@ func main() {
 		alertCmd(),
 		explainCmd(),
 		sloCmd(),
+		anomalyCmd(),
 		tuiCmd(),
 	)
 
@@ -1038,6 +1040,98 @@ Think of it as having a senior SRE look at all your dashboards at once.`,
 
 	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
 	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+
+	return cmd
+}
+
+func anomalyCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var sensitivity float64
+	var service string
+	var withAI bool
+	var quiet bool
+
+	cmd := &cobra.Command{
+		Use:   "anomaly",
+		Short: "Detect anomalies across services",
+		Long:  "Automatically detect anomalies in error rates, log patterns, and latency using statistical analysis (z-score, percentiles) with optional AI root cause analysis.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
+			ctx := context.Background()
+
+			opts := anomaly.Options{
+				Duration:     duration,
+				Sensitivity:  sensitivity,
+				Service:      service,
+				WithAI:       withAI,
+				AnthropicKey: cfg.AnthropicKey,
+				Quiet:        quiet,
+			}
+
+			fmt.Printf("🔍 Scanning for anomalies (last %d min, sensitivity=%.1f)...\n\n", duration, sensitivity)
+
+			result, err := anomaly.Detect(ctx, client, instKey, opts)
+			if err != nil {
+				return err
+			}
+
+			// Convert to output types
+			outResult := output.AnomalyResult{
+				ScanTime:     result.ScanTime,
+				Duration:     result.Duration,
+				Instance:     result.Instance,
+				AISummary:    result.AISummary,
+				TotalScanned: result.TotalScanned,
+			}
+
+			for _, a := range result.Anomalies {
+				outResult.Anomalies = append(outResult.Anomalies, output.AnomalyItem{
+					Type:        a.Type,
+					Severity:    a.Severity,
+					Service:     a.Service,
+					Metric:      a.Metric,
+					Description: a.Description,
+					Value:       a.Value,
+					Expected:    a.Expected,
+					Deviation:   a.Deviation,
+					DetectedAt:  a.DetectedAt,
+					Window:      a.Window,
+				})
+			}
+
+			for _, s := range result.Services {
+				outResult.Services = append(outResult.Services, output.AnomalyServiceScan{
+					Name:            s.Name,
+					Calls:           s.Calls,
+					Errors:          s.Errors,
+					ErrorRate:       s.ErrorRate,
+					AnomalyCount:    s.AnomalyCount,
+					HighestSeverity: s.HighestSeverity,
+				})
+			}
+
+			output.PrintAnomalyResult(outResult, quiet)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to use")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Time window in minutes to analyze")
+	cmd.Flags().Float64VarP(&sensitivity, "sensitivity", "s", 2.0, "Z-score threshold for anomaly detection (lower = more sensitive)")
+	cmd.Flags().StringVar(&service, "service", "", "Scan a specific service only")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI root cause analysis")
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Only show anomalies (hide healthy services)")
 
 	return cmd
 }

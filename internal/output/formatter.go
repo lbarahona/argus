@@ -353,3 +353,146 @@ func formatDuration(d time.Duration) string {
 	}
 	return fmt.Sprintf("%dms", d.Milliseconds())
 }
+
+// AnomalyResult mirrors anomaly.Result to avoid circular imports.
+type AnomalyResult struct {
+	Anomalies    []AnomalyItem
+	Services     []AnomalyServiceScan
+	ScanTime     time.Time
+	Duration     int
+	Instance     string
+	AISummary    string
+	TotalScanned int
+}
+
+// AnomalyItem mirrors anomaly.Anomaly.
+type AnomalyItem struct {
+	Type        string
+	Severity    string
+	Service     string
+	Metric      string
+	Description string
+	Value       float64
+	Expected    float64
+	Deviation   float64
+	DetectedAt  time.Time
+	Window      string
+}
+
+// AnomalyServiceScan mirrors anomaly.ServiceScan.
+type AnomalyServiceScan struct {
+	Name            string
+	Calls           int
+	Errors          int
+	ErrorRate       float64
+	AnomalyCount    int
+	HighestSeverity string
+}
+
+// PrintAnomalyResult displays the anomaly detection results.
+func PrintAnomalyResult(result AnomalyResult, quiet bool) {
+	fmt.Println(TitleStyle.Render("🔍 Anomaly Detection Report"))
+	fmt.Println()
+
+	// Summary line
+	fmt.Printf("  %s %s\n", LabelStyle.Render("Instance:"), result.Instance)
+	fmt.Printf("  %s %d minutes\n", LabelStyle.Render("Window:"), result.Duration)
+	fmt.Printf("  %s %d\n", LabelStyle.Render("Services:"), result.TotalScanned)
+	fmt.Printf("  %s %s\n", LabelStyle.Render("Scanned at:"), result.ScanTime.Format("15:04:05"))
+	fmt.Println()
+
+	// Count by severity
+	critCount, warnCount, infoCount := 0, 0, 0
+	for _, a := range result.Anomalies {
+		switch a.Severity {
+		case "critical":
+			critCount++
+		case "warning":
+			warnCount++
+		case "info":
+			infoCount++
+		}
+	}
+
+	if len(result.Anomalies) == 0 {
+		fmt.Println(SuccessStyle.Render("  ✅ No anomalies detected — all services healthy"))
+		fmt.Println()
+	} else {
+		summary := fmt.Sprintf("  ⚠️  %d anomalies found: ", len(result.Anomalies))
+		parts := []string{}
+		if critCount > 0 {
+			parts = append(parts, severityError.Render(fmt.Sprintf("%d critical", critCount)))
+		}
+		if warnCount > 0 {
+			parts = append(parts, severityWarn.Render(fmt.Sprintf("%d warning", warnCount)))
+		}
+		if infoCount > 0 {
+			parts = append(parts, severityInfo.Render(fmt.Sprintf("%d info", infoCount)))
+		}
+		fmt.Println(summary + strings.Join(parts, ", "))
+		fmt.Println()
+	}
+
+	// Service summary table
+	if !quiet {
+		fmt.Println(AccentStyle.Render("  Services"))
+		fmt.Println()
+		for _, svc := range result.Services {
+			icon := "✅"
+			nameStyle := SuccessStyle
+			if svc.HighestSeverity == "critical" {
+				icon = "🔴"
+				nameStyle = severityError
+			} else if svc.HighestSeverity == "warning" {
+				icon = "🟡"
+				nameStyle = severityWarn
+			} else if svc.HighestSeverity == "info" {
+				icon = "🔵"
+				nameStyle = severityInfo
+			}
+
+			detail := fmt.Sprintf(" (%d calls, %.1f%% errors)", svc.Calls, svc.ErrorRate)
+			if svc.AnomalyCount > 0 {
+				detail += fmt.Sprintf(" — %d anomalies", svc.AnomalyCount)
+			}
+			fmt.Printf("  %s %s%s\n", icon, nameStyle.Render(svc.Name), MutedStyle.Render(detail))
+		}
+		fmt.Println()
+	}
+
+	// Anomaly details
+	if len(result.Anomalies) > 0 {
+		fmt.Println(AccentStyle.Render("  Anomalies"))
+		fmt.Println()
+		for i, a := range result.Anomalies {
+			sevStyle := severityInfo
+			sevIcon := "ℹ️ "
+			switch a.Severity {
+			case "critical":
+				sevStyle = severityError
+				sevIcon = "🚨"
+			case "warning":
+				sevStyle = severityWarn
+				sevIcon = "⚠️ "
+			}
+
+			fmt.Printf("  %s %s %s\n", sevIcon, sevStyle.Render(fmt.Sprintf("[%s]", strings.ToUpper(a.Severity))), a.Description)
+			fmt.Printf("     %s %s | %s: %s | deviation: %.1f\n",
+				MutedStyle.Render("service:"), a.Service,
+				MutedStyle.Render("type"), a.Type, a.Deviation)
+			if a.Window != "" {
+				fmt.Printf("     %s %s\n", MutedStyle.Render("window:"), a.Window)
+			}
+			if i < len(result.Anomalies)-1 {
+				fmt.Println()
+			}
+		}
+		fmt.Println()
+	}
+
+	// AI Summary
+	if result.AISummary != "" {
+		fmt.Println(BoxStyle.Render(fmt.Sprintf("🤖 AI Analysis\n\n%s", result.AISummary)))
+		fmt.Println()
+	}
+}
