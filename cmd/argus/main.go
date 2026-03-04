@@ -11,6 +11,7 @@ import (
 	"github.com/lbarahona/argus/internal/anomaly"
 	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/correlate"
+	"github.com/lbarahona/argus/internal/deps"
 	"github.com/lbarahona/argus/internal/diff"
 	"github.com/lbarahona/argus/internal/incident"
 	"github.com/lbarahona/argus/internal/explain"
@@ -70,6 +71,7 @@ func main() {
 		runbookCmd(),
 		scorecardCmd(),
 		forecastCmd(),
+		depsCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -1962,6 +1964,64 @@ Risk levels:
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
 	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-powered analysis (uses Anthropic API)")
+
+	return cmd
+}
+
+func depsCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var service string
+	var format string
+	var withAI bool
+
+	cmd := &cobra.Command{
+		Use:   "deps",
+		Short: "Map service dependencies from trace data",
+		Long:  "Discover upstream and downstream service dependencies by analyzing trace spans. Shows call volumes, error rates, and latency between services. Outputs an ASCII dependency graph and optional Mermaid diagram.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
+			ctx := context.Background()
+			fmt.Printf("%s Mapping service dependencies...\n", output.MutedStyle.Render("⏳"))
+
+			dm, err := deps.Generate(ctx, deps.Options{
+				Querier:  client,
+				Instance: instKey,
+				Duration: duration,
+				Service:  service,
+				Format:   format,
+				AI:       withAI,
+				AIKey:    cfg.AnthropicKey,
+				Writer:   os.Stdout,
+			})
+			if err != nil {
+				return err
+			}
+
+			if format == "markdown" {
+				deps.RenderMarkdown(os.Stdout, dm)
+			} else {
+				deps.RenderTable(os.Stdout, dm)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to show only deps for this service")
+	cmd.Flags().StringVarP(&format, "format", "f", "table", "Output format: table or markdown")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI architecture analysis")
 
 	return cmd
 }
