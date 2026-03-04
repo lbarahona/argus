@@ -78,6 +78,11 @@ argus ask "why is latency high on the payments service?"
 | `argus logs [service]` | Query and analyze logs |
 | `argus traces [service]` | Query distributed traces |
 | `argus metrics [metric]` | Query metrics |
+| `argus incident create` | Create a new incident |
+| `argus incident list` | List active incidents |
+| `argus incident update` | Update incident status |
+| `argus incident resolve` | Resolve an incident |
+| `argus incident timeline` | Show incident timeline |
 | `argus dashboard` | Combined overview dashboard |
 | `argus ask [question]` | Free-form AI analysis |
 | `argus report` | Generate health report for shift handoffs |
