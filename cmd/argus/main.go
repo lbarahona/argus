@@ -14,6 +14,7 @@ import (
 	"github.com/lbarahona/argus/internal/deps"
 	"github.com/lbarahona/argus/internal/diff"
 	"github.com/lbarahona/argus/internal/incident"
+	"github.com/lbarahona/argus/internal/mcpserver"
 	"github.com/lbarahona/argus/internal/explain"
 	"github.com/lbarahona/argus/internal/forecast"
 	"github.com/lbarahona/argus/internal/runbook"
@@ -72,6 +73,7 @@ func main() {
 		scorecardCmd(),
 		forecastCmd(),
 		depsCmd(),
+		mcpCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -2024,4 +2026,33 @@ func depsCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI architecture analysis")
 
 	return cmd
+}
+
+func mcpCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "mcp",
+		Short: "Start MCP (Model Context Protocol) server",
+		Long: `Start an MCP server over stdio, exposing Argus observability tools
+to AI agents and LLM applications.
+
+Supported tools: status, services, logs, traces, metrics, ask, explain,
+dashboard, report, top, diff, alert_check, slo_check.
+
+Configure in Claude Desktop, Cursor, or any MCP client:
+  {
+    "mcpServers": {
+      "argus": {
+        "command": "argus",
+        "args": ["mcp"]
+      }
+    }
+  }`,
+		Example: `  argus mcp
+  echo '{"jsonrpc":"2.0","method":"initialize",...}' | argus mcp`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+			defer cancel()
+			return mcpserver.Run(ctx, version)
+		},
+	}
 }
