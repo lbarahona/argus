@@ -14,6 +14,7 @@ import (
 	"github.com/lbarahona/argus/internal/diff"
 	"github.com/lbarahona/argus/internal/incident"
 	"github.com/lbarahona/argus/internal/explain"
+	"github.com/lbarahona/argus/internal/forecast"
 	"github.com/lbarahona/argus/internal/runbook"
 	"github.com/lbarahona/argus/internal/output"
 	"github.com/lbarahona/argus/internal/report"
@@ -68,6 +69,7 @@ func main() {
 		incidentCmd(),
 		runbookCmd(),
 		scorecardCmd(),
+		forecastCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -1889,6 +1891,77 @@ func scorecardCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to a single service")
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-generated summary (uses Anthropic API)")
 	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
+
+	return cmd
+}
+
+func forecastCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var horizon int
+	var service string
+	var format string
+	var withAI bool
+
+	cmd := &cobra.Command{
+		Use:   "forecast",
+		Short: "Predict service health trends using linear regression",
+		Long: `Analyze historical error rates and traffic patterns to forecast service health.
+Uses linear regression on time-bucketed metrics to predict future error rates,
+detect degrading services, and warn about potential incidents before they happen.
+
+Risk levels:
+  stable    (score <30)  — No significant issues expected
+  degrading (score 30-59) — Trending in wrong direction, monitor closely
+  critical  (score 60+)  — Likely to cause issues, take action now`,
+		Example: `  argus forecast
+  argus forecast --duration 240 --horizon 120
+  argus forecast -s api-service --ai
+  argus forecast -f markdown > forecast.md`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
+			ctx := context.Background()
+
+			fmt.Printf("%s Analyzing trends from %s (last %dm, forecasting %dm)...\n",
+				output.MutedStyle.Render("🔮"), output.AccentStyle.Render(instKey), duration, horizon)
+
+			r, err := forecast.Generate(ctx, client, instKey, forecast.Options{
+				Duration:     duration,
+				Horizon:      horizon,
+				Service:      service,
+				Format:       format,
+				WithAI:       withAI,
+				AnthropicKey: cfg.AnthropicKey,
+			})
+			if err != nil {
+				return err
+			}
+
+			if format == "markdown" {
+				r.RenderMarkdown(os.Stdout)
+			} else {
+				r.RenderTerminal(os.Stdout)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 120, "Historical duration in minutes to analyze")
+	cmd.Flags().IntVar(&horizon, "horizon", 60, "Forecast horizon in minutes")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-powered analysis (uses Anthropic API)")
 
 	return cmd
 }
