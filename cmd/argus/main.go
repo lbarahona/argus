@@ -2141,3 +2141,5 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
 
 	return cmd
 }
+
+// ──────────────────────────────────────────────
