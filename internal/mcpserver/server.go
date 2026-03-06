@@ -8,9 +8,11 @@ import (
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/alert"
+	"github.com/lbarahona/argus/internal/budget"
 	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/diff"
 	"github.com/lbarahona/argus/internal/explain"
+	"github.com/lbarahona/argus/internal/guard"
 	"github.com/lbarahona/argus/internal/report"
 	"github.com/lbarahona/argus/internal/signoz"
 	"github.com/lbarahona/argus/internal/slo"
@@ -110,6 +112,18 @@ type AlertCheckInput struct {
 
 type SLOCheckInput struct {
 	Instance string `json:"instance,omitempty" jsonschema:"Signoz instance name"`
+}
+
+type BudgetInput struct {
+	Instance string `json:"instance,omitempty" jsonschema:"Signoz instance name"`
+	Service  string `json:"service,omitempty" jsonschema:"filter to specific service"`
+	Window   string `json:"window,omitempty" jsonschema:"analysis window: 1h, 6h, 24h, 7d, 30d (default 6h)"`
+}
+
+type GuardInput struct {
+	Instance string `json:"instance,omitempty" jsonschema:"Signoz instance name"`
+	Service  string `json:"service,omitempty" jsonschema:"check specific service only"`
+	Strict   bool   `json:"strict,omitempty" jsonschema:"strict mode with lower thresholds"`
 }
 
 // Helper to load config and get client
@@ -573,6 +587,62 @@ func registerTools(server *mcp.Server) {
 			return r, struct{}{}, nil
 		}
 		r, _ := textResult(out)
+		return r, struct{}{}, nil
+	})
+
+	// budget check
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_budget",
+		Description: "Analyze error budget burndown for configured SLOs. Shows budget consumption, burn rates, exhaustion prediction, and deployment policy recommendations.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input BudgetInput) (*mcp.CallToolResult, struct{}, error) {
+		sloCfg, err := slo.LoadSLOs()
+		if err != nil {
+			r, _ := errorResult(fmt.Errorf("loading SLOs: %w (run 'argus slo init' first)", err))
+			return r, struct{}{}, nil
+		}
+		client, instKey, _, err := getClient(input.Instance)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		window := input.Window
+		if window == "" {
+			window = "6h"
+		}
+		analyzer := budget.NewAnalyzer(client, instKey)
+		rpt, err := analyzer.Analyze(ctx, sloCfg, budget.Options{
+			Window:  window,
+			Service: input.Service,
+		})
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		budget.SortByUrgency(rpt.Reports)
+		r, _ := textResult(jsonText(rpt))
+		return r, struct{}{}, nil
+	})
+
+	// guard (deployment gate)
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_guard",
+		Description: "Pre-deployment safety gate. Checks system health, error rates, latency, error spikes, and saturation. Returns SHIP/CAUTION/HOLD verdict with confidence score. Use before deploying.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input GuardInput) (*mcp.CallToolResult, struct{}, error) {
+		client, instKey, _, err := getClient(input.Instance)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		analyzer := guard.NewAnalyzer(client, instKey)
+		rpt, err := analyzer.Check(ctx, guard.Options{
+			Service: input.Service,
+			Strict:  input.Strict,
+		})
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(rpt))
 		return r, struct{}{}, nil
 	})
 }
