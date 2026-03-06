@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	jsonPkg "encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -9,16 +10,18 @@ import (
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/alert"
 	"github.com/lbarahona/argus/internal/anomaly"
+	"github.com/lbarahona/argus/internal/budget"
 	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/correlate"
 	"github.com/lbarahona/argus/internal/deps"
 	"github.com/lbarahona/argus/internal/diff"
+	"github.com/lbarahona/argus/internal/guard"
 	"github.com/lbarahona/argus/internal/incident"
-	"github.com/lbarahona/argus/internal/mcpserver"
 	"github.com/lbarahona/argus/internal/deploy"
-	pmlib "github.com/lbarahona/argus/internal/postmortem"
 	"github.com/lbarahona/argus/internal/explain"
 	"github.com/lbarahona/argus/internal/forecast"
+	"github.com/lbarahona/argus/internal/mcpserver"
+	pmlib "github.com/lbarahona/argus/internal/postmortem"
 	"github.com/lbarahona/argus/internal/runbook"
 	"github.com/lbarahona/argus/internal/output"
 	"github.com/lbarahona/argus/internal/report"
@@ -78,6 +81,8 @@ func main() {
 		mcpCmd(),
 		postmortemCmd(),
 		deployCmd(),
+		budgetCmd(),
+		guardCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -2410,3 +2415,213 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
 }
 
 // ──────────────────────────────────────────────
+
+func budgetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "budget",
+		Short: "Error budget burndown analysis",
+		Long: `Analyze error budget consumption against your SLOs.
+
+Track how fast you're burning through your error budget with multi-window
+burn rate analysis, exhaustion prediction, and deployment policy recommendations.
+
+Implements Google SRE multi-window burn rate alerting:
+  - Fast burn: 1h >14x AND 6h >6x → PAGE immediately
+  - Slow burn: 6h >6x → create TICKET
+  - Elevated: 1h >6x → WATCH closely
+
+Requires SLOs to be configured (run 'argus slo init' first).
+Exit codes: 0 = healthy, 1 = critical, 2 = exhausted/page.`,
+	}
+
+	var instance, service, format, window string
+	var useAI bool
+
+	checkCmd := &cobra.Command{
+		Use:   "check",
+		Short: "Analyze error budget burndown for all SLOs",
+		Example: `  argus budget check
+  argus budget check --service api-gateway
+  argus budget check --format json
+  argus budget check --format markdown
+  argus budget check --ai
+  argus budget check --window 24h`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sloCfg, err := slo.LoadSLOs()
+			if err != nil {
+				return fmt.Errorf("loading SLOs: %w (run 'argus slo init' first)", err)
+			}
+			appCfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			inst, instKey, err := config.GetInstance(appCfg, instance)
+			if err != nil {
+				return err
+			}
+
+			ctx := context.Background()
+			client := signoz.New(*inst)
+
+			if format != "json" {
+				fmt.Printf("%s Analyzing error budgets against %s...\n\n",
+					output.MutedStyle.Render("⏳"), output.AccentStyle.Render(instKey))
+			}
+
+			opts := budget.Options{
+				Window:  window,
+				Service: service,
+				Format:  format,
+				WithAI:  useAI,
+			}
+			if useAI {
+				opts.AnthropicKey = appCfg.AnthropicKey
+			}
+
+			analyzer := budget.NewAnalyzer(client, instKey)
+			rpt, err := analyzer.Analyze(ctx, sloCfg, opts)
+			if err != nil {
+				return err
+			}
+
+			budget.SortByUrgency(rpt.Reports)
+
+			switch format {
+			case "json":
+				data, err := jsonMarshal(rpt)
+				if err != nil {
+					return err
+				}
+				fmt.Println(string(data))
+			case "markdown":
+				fmt.Print(budget.FormatMarkdown(rpt))
+			default:
+				fmt.Print(budget.FormatTerminal(rpt))
+			}
+
+			os.Exit(rpt.ExitCode())
+			return nil
+		},
+	}
+	checkCmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance")
+	checkCmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
+	checkCmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, markdown, json")
+	checkCmd.Flags().StringVarP(&window, "window", "w", "6h", "Analysis window: 1h, 6h, 24h, 7d, 30d")
+	checkCmd.Flags().BoolVar(&useAI, "ai", false, "Include AI-powered recommendations")
+	cmd.AddCommand(checkCmd)
+
+	return cmd
+}
+
+func guardCmd() *cobra.Command {
+	var instance, service, format string
+	var strict, useAI bool
+	var maxErrorRate, maxP99Latency float64
+	var minCallVolume int
+
+	cmd := &cobra.Command{
+		Use:   "guard",
+		Short: "CI/CD deployment gate — should we ship?",
+		Long: `Pre-deployment safety check that answers the #1 question: "Is it safe to deploy?"
+
+Runs 5 automated checks against your Signoz data:
+  1. System Health — are services responding?
+  2. Error Rates — any services above threshold?
+  3. Latency (P99) — response times acceptable?
+  4. Error Spikes — active error storms?
+  5. Saturation — traffic distribution normal?
+
+Returns a verdict: SHIP (exit 0), CAUTION (exit 1), or HOLD (exit 2).
+
+Perfect for CI/CD pipelines:
+  argus guard --format json || echo "Deploy blocked!"
+
+Use --strict for critical services (lower thresholds, blocks on warnings).`,
+		Example: `  argus guard
+  argus guard --strict
+  argus guard --service api-gateway
+  argus guard --format json
+  argus guard --max-error-rate 2.0 --max-p99 3000
+  argus guard --ai
+
+  # In CI/CD pipeline:
+  argus guard --format json --strict || exit 1
+
+  # GitHub Actions:
+  - name: Pre-deploy check
+    run: argus guard --strict --format json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			appCfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			inst, instKey, err := config.GetInstance(appCfg, instance)
+			if err != nil {
+				return err
+			}
+
+			ctx := context.Background()
+			client := signoz.New(*inst)
+
+			if format != "json" {
+				mode := "normal"
+				if strict {
+					mode = "STRICT"
+				}
+				fmt.Printf("%s Running deployment guard checks against %s [%s mode]...\n\n",
+					output.MutedStyle.Render("🛡️"), output.AccentStyle.Render(instKey), mode)
+			}
+
+			opts := guard.Options{
+				Service:       service,
+				Strict:        strict,
+				Format:        format,
+				WithAI:        useAI,
+				MaxErrorRate:  maxErrorRate,
+				MaxP99Latency: maxP99Latency,
+				MinCallVolume: minCallVolume,
+			}
+			if useAI {
+				opts.AnthropicKey = appCfg.AnthropicKey
+			}
+
+			analyzer := guard.NewAnalyzer(client, instKey)
+			rpt, err := analyzer.Check(ctx, opts)
+			if err != nil {
+				return err
+			}
+
+			switch format {
+			case "json":
+				out, err := guard.FormatJSON(rpt)
+				if err != nil {
+					return err
+				}
+				fmt.Println(out)
+			case "markdown":
+				fmt.Print(guard.FormatMarkdown(rpt))
+			default:
+				fmt.Print(guard.FormatTerminal(rpt))
+			}
+
+			os.Exit(rpt.ExitCode())
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Check specific service only")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, markdown, json")
+	cmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: lower thresholds, block on warnings")
+	cmd.Flags().BoolVar(&useAI, "ai", false, "Include AI deployment advisory")
+	cmd.Flags().Float64Var(&maxErrorRate, "max-error-rate", 0, "Max acceptable error rate %% (0 = default)")
+	cmd.Flags().Float64Var(&maxP99Latency, "max-p99", 0, "Max acceptable P99 latency ms (0 = default)")
+	cmd.Flags().IntVar(&minCallVolume, "min-calls", 0, "Min call volume to consider service (0 = default)")
+
+	return cmd
+}
+
+// jsonMarshal is a helper for JSON output.
+func jsonMarshal(v interface{}) ([]byte, error) {
+	return jsonPkg.MarshalIndent(v, "", "  ")
+}

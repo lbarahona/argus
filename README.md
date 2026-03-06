@@ -93,6 +93,8 @@ argus ask "why is latency high on the payments service?"
 | `argus explain` | AI root cause analysis (correlates logs + traces) |
 | `argus deploy` | Detect deployments from behavioral changes and analyze impact |
 | `argus slo` | SLO tracking with error budgets and burn rates |
+| `argus budget check` | Error budget burndown with burn rate analysis |
+| `argus guard` | CI/CD deployment gate — SHIP/CAUTION/HOLD verdict |
 
 ### Logs
 
@@ -302,6 +304,51 @@ argus explain payment-service --duration 30
 
 # Against a specific instance
 argus explain auth-service -i production
+```
+
+### Budget
+
+```bash
+# Error budget burndown analysis
+argus budget check
+
+# Check specific service
+argus budget check --service api-gateway
+
+# JSON output for automation
+argus budget check --format json
+
+# With AI recommendations
+argus budget check --ai
+
+# Different analysis windows
+argus budget check --window 24h
+```
+
+### Guard (CI/CD Deployment Gate)
+
+```bash
+# Should we deploy? Get a SHIP/CAUTION/HOLD verdict
+argus guard
+
+# Strict mode for critical services (lower thresholds)
+argus guard --strict
+
+# Check specific service before deploying it
+argus guard --service api-gateway
+
+# JSON output for CI/CD pipelines
+argus guard --format json
+
+# Custom thresholds
+argus guard --max-error-rate 2.0 --max-p99 3000
+
+# In CI/CD pipelines (exit code 0=ship, 1=caution, 2=hold)
+argus guard --strict --format json || exit 1
+
+# GitHub Actions example:
+# - name: Pre-deploy safety check
+#   run: argus guard --strict
 ```
 
 ## Configuration
