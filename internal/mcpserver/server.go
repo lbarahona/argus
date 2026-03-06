@@ -9,6 +9,7 @@ import (
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/alert"
 	"github.com/lbarahona/argus/internal/config"
+	"github.com/lbarahona/argus/internal/deploy"
 	"github.com/lbarahona/argus/internal/diff"
 	"github.com/lbarahona/argus/internal/explain"
 	"github.com/lbarahona/argus/internal/report"
@@ -110,6 +111,13 @@ type AlertCheckInput struct {
 
 type SLOCheckInput struct {
 	Instance string `json:"instance,omitempty" jsonschema:"Signoz instance name"`
+}
+
+type DeployInput struct {
+	Instance    string `json:"instance,omitempty" jsonschema:"Signoz instance name"`
+	Service     string `json:"service,omitempty" jsonschema:"filter to specific service"`
+	Duration    int    `json:"duration,omitempty" jsonschema:"time window in minutes (default 360 = 6h)"`
+	Sensitivity string `json:"sensitivity,omitempty" jsonschema:"detection sensitivity: low, medium, or high (default medium)"`
 }
 
 // Helper to load config and get client
@@ -573,6 +581,38 @@ func registerTools(server *mcp.Server) {
 			return r, struct{}{}, nil
 		}
 		r, _ := textResult(out)
+		return r, struct{}{}, nil
+	})
+
+	// deploy
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_deploy",
+		Description: "Detect deployment-like behavioral changes in services and analyze impact. Uses change point detection on error rates and latency to find when services changed behavior.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input DeployInput) (*mcp.CallToolResult, struct{}, error) {
+		client, instKey, _, err := getClient(input.Instance)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		duration := input.Duration
+		if duration <= 0 {
+			duration = 360
+		}
+		sensitivity := input.Sensitivity
+		if sensitivity == "" {
+			sensitivity = "medium"
+		}
+		result, err := deploy.Detect(ctx, client, instKey, deploy.Options{
+			Duration:    duration,
+			Buckets:     12,
+			Service:     input.Service,
+			Sensitivity: sensitivity,
+		})
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(result))
 		return r, struct{}{}, nil
 	})
 }

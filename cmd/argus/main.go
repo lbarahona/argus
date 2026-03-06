@@ -15,6 +15,7 @@ import (
 	"github.com/lbarahona/argus/internal/diff"
 	"github.com/lbarahona/argus/internal/incident"
 	"github.com/lbarahona/argus/internal/mcpserver"
+	"github.com/lbarahona/argus/internal/deploy"
 	pmlib "github.com/lbarahona/argus/internal/postmortem"
 	"github.com/lbarahona/argus/internal/explain"
 	"github.com/lbarahona/argus/internal/forecast"
@@ -76,6 +77,7 @@ func main() {
 		depsCmd(),
 		mcpCmd(),
 		postmortemCmd(),
+		deployCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -2323,3 +2325,88 @@ func postmortemDeleteCmd() *cobra.Command {
 		},
 	}
 }
+
+func deployCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var buckets int
+	var service string
+	var sensitivity string
+	var format string
+	var withAI bool
+
+	cmd := &cobra.Command{
+		Use:   "deploy",
+		Short: "Detect deployments from behavioral changes and analyze impact",
+		Long: `Analyze service behavior to detect deployment-like changes and assess their impact.
+
+Uses change point detection (binary segmentation) on time-bucketed metrics to find
+moments where service behavior shifted significantly — typically caused by deployments,
+config changes, or infrastructure events.
+
+Detection methods:
+  • Error rate change points (CUSUM-inspired binary segmentation)
+  • P99 latency shifts
+  • New error pattern emergence
+
+Sensitivity levels:
+  high   — Flag small changes (15%+ error rate shift)
+  medium — Balanced detection (30%+ error rate shift)
+  low    — Only major changes (50%+ error rate shift)
+
+Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
+		Example: `  argus deploy
+  argus deploy --duration 720 --sensitivity high
+  argus deploy -s payment-api --ai
+  argus deploy -f markdown > deploy-report.md`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
+			ctx := context.Background()
+
+			fmt.Printf("%s Scanning %s for deployment changes (last %dm, %s sensitivity)...\n",
+				output.MutedStyle.Render("🚀"), output.AccentStyle.Render(instKey), duration, sensitivity)
+
+			r, err := deploy.Detect(ctx, client, instKey, deploy.Options{
+				Duration:     duration,
+				Buckets:      buckets,
+				Service:      service,
+				Sensitivity:  sensitivity,
+				Format:       format,
+				WithAI:       withAI,
+				AnthropicKey: cfg.AnthropicKey,
+			})
+			if err != nil {
+				return err
+			}
+
+			if format == "markdown" {
+				r.RenderMarkdown(os.Stdout)
+			} else {
+				r.RenderTerminal(os.Stdout)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 360, "Time window in minutes to analyze (default: 6h)")
+	cmd.Flags().IntVarP(&buckets, "buckets", "b", 12, "Number of time buckets for analysis")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
+	cmd.Flags().StringVar(&sensitivity, "sensitivity", "medium", "Detection sensitivity: low, medium, high")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-powered deployment analysis (uses Anthropic API)")
+
+	return cmd
+}
+
+// ──────────────────────────────────────────────

@@ -91,6 +91,7 @@ argus ask "why is latency high on the payments service?"
 | `argus watch` | Continuous monitoring with anomaly detection |
 | `argus alert` | Declarative alert rules with cron-friendly output |
 | `argus explain` | AI root cause analysis (correlates logs + traces) |
+| `argus deploy` | Detect deployments from behavioral changes and analyze impact |
 | `argus slo` | SLO tracking with error budgets and burn rates |
 
 ### Logs
