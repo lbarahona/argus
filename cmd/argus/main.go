@@ -18,6 +18,7 @@ import (
 	"github.com/lbarahona/argus/internal/guard"
 	"github.com/lbarahona/argus/internal/incident"
 	"github.com/lbarahona/argus/internal/deploy"
+	"github.com/lbarahona/argus/internal/doctor"
 	"github.com/lbarahona/argus/internal/explain"
 	"github.com/lbarahona/argus/internal/forecast"
 	"github.com/lbarahona/argus/internal/mcpserver"
@@ -83,6 +84,7 @@ func main() {
 		deployCmd(),
 		budgetCmd(),
 		guardCmd(),
+		doctorCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -2617,6 +2619,46 @@ Use --strict for critical services (lower thresholds, blocks on warnings).`,
 	cmd.Flags().Float64Var(&maxErrorRate, "max-error-rate", 0, "Max acceptable error rate %% (0 = default)")
 	cmd.Flags().Float64Var(&maxP99Latency, "max-p99", 0, "Max acceptable P99 latency ms (0 = default)")
 	cmd.Flags().IntVar(&minCallVolume, "min-calls", 0, "Min call volume to consider service (0 = default)")
+
+	return cmd
+}
+
+func doctorCmd() *cobra.Command {
+	var (
+		verbose bool
+		format  string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "doctor",
+		Short: "Diagnose configuration and connectivity issues",
+		Long:  "Run diagnostic checks on config, Signoz instances, AI keys, and network connectivity.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			report := doctor.Run(ctx, version, verbose)
+
+			switch format {
+			case "json":
+				data, err := doctor.FormatJSON(report)
+				if err != nil {
+					return err
+				}
+				fmt.Println(string(data))
+			case "markdown", "md":
+				fmt.Print(doctor.FormatMarkdown(report))
+			default:
+				fmt.Print(doctor.FormatTerminal(report, verbose))
+			}
+
+			if report.FailCount() > 0 {
+				os.Exit(1)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed information for each check")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, markdown, json")
 
 	return cmd
 }
