@@ -11,6 +11,7 @@ import (
 	"github.com/lbarahona/argus/internal/budget"
 	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/deploy"
+	"github.com/lbarahona/argus/internal/doctor"
 	"github.com/lbarahona/argus/internal/diff"
 	"github.com/lbarahona/argus/internal/explain"
 	"github.com/lbarahona/argus/internal/guard"
@@ -132,6 +133,10 @@ type GuardInput struct {
 	Instance string `json:"instance,omitempty" jsonschema:"Signoz instance name"`
 	Service  string `json:"service,omitempty" jsonschema:"check specific service only"`
 	Strict   bool   `json:"strict,omitempty" jsonschema:"strict mode with lower thresholds"`
+}
+
+type DoctorInput struct {
+	Verbose bool `json:"verbose,omitempty" jsonschema:"show detailed information"`
 }
 
 // Helper to load config and get client
@@ -683,6 +688,21 @@ func registerTools(server *mcp.Server) {
 			return r, struct{}{}, nil
 		}
 		r, _ := textResult(jsonText(rpt))
+		return r, struct{}{}, nil
+	})
+
+	// Doctor tool
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_doctor",
+		Description: "Diagnose configuration and connectivity issues. Checks config file, Signoz instances health, AI API key, DNS, and internet connectivity. Use when troubleshooting Argus setup problems.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input DoctorInput) (*mcp.CallToolResult, struct{}, error) {
+		rpt := doctor.Run(ctx, "mcp", input.Verbose)
+		data, err := doctor.FormatJSON(rpt)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(string(data))
 		return r, struct{}{}, nil
 	})
 }
