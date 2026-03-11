@@ -21,6 +21,12 @@ Argus connects to your [Signoz](https://signoz.io) instances and uses Anthropic 
 
 ## Installation
 
+### Homebrew (macOS & Linux)
+
+```bash
+brew install lbarahona/tap/argus
+```
+
 ### From source
 
 ```bash
