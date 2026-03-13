@@ -82,10 +82,56 @@ func RunInit() (*types.Config, error) {
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println()
 
-	// Anthropic key
-	fmt.Print("Anthropic API key: ")
-	apiKey, _ := reader.ReadString('\n')
-	apiKey = strings.TrimSpace(apiKey)
+	// AI Provider selection
+	fmt.Println("🤖 AI Provider Configuration")
+	fmt.Println()
+	fmt.Println("  1) Anthropic (Claude) — recommended")
+	fmt.Println("  2) OpenAI (GPT-4o)")
+	fmt.Println("  3) Amazon Bedrock (bearer token auth)")
+	fmt.Println()
+	fmt.Print("Choose AI provider [1]: ")
+	providerChoice, _ := reader.ReadString('\n')
+	providerChoice = strings.TrimSpace(providerChoice)
+
+	var aiConfig types.AIConfig
+	// Legacy anthropic key for backward compat
+	var legacyKey string
+
+	switch providerChoice {
+	case "2":
+		aiConfig.Provider = "openai"
+		fmt.Print("OpenAI API key: ")
+		key, _ := reader.ReadString('\n')
+		aiConfig.OpenAIKey = strings.TrimSpace(key)
+		fmt.Print("Model (default: gpt-4o): ")
+		model, _ := reader.ReadString('\n')
+		model = strings.TrimSpace(model)
+		if model != "" {
+			aiConfig.Model = model
+		}
+	case "3":
+		aiConfig.Provider = "bedrock"
+		fmt.Print("Bedrock endpoint URL: ")
+		endpoint, _ := reader.ReadString('\n')
+		aiConfig.Bedrock.Endpoint = strings.TrimSpace(endpoint)
+		fmt.Print("Bearer token (or set AWS_BEARER_TOKEN_BEDROCK env var): ")
+		token, _ := reader.ReadString('\n')
+		aiConfig.Bedrock.Token = strings.TrimSpace(token)
+		fmt.Print("Model (default: anthropic.claude-3-5-sonnet-20241022-v2:0): ")
+		model, _ := reader.ReadString('\n')
+		model = strings.TrimSpace(model)
+		if model != "" {
+			aiConfig.Bedrock.Model = model
+		}
+	default:
+		// Anthropic (default)
+		aiConfig.Provider = "anthropic"
+		fmt.Print("Anthropic API key: ")
+		key, _ := reader.ReadString('\n')
+		key = strings.TrimSpace(key)
+		aiConfig.AnthropicKey = key
+		legacyKey = key // also set legacy field for backward compat
+	}
 
 	// First instance
 	fmt.Println()
@@ -109,7 +155,8 @@ func RunInit() (*types.Config, error) {
 	signozKey = strings.TrimSpace(signozKey)
 
 	cfg := &types.Config{
-		AnthropicKey:    apiKey,
+		AnthropicKey:    legacyKey,
+		AI:              aiConfig,
 		DefaultInstance: instName,
 		Instances: map[string]types.Instance{
 			instName: {

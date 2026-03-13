@@ -2,7 +2,7 @@
 
 **AI-powered observability CLI for SREs.**
 
-Argus connects to your [Signoz](https://signoz.io) instances and uses Anthropic Claude to analyze logs, metrics, and traces with natural language queries.
+Argus connects to your [Signoz](https://signoz.io) instances and uses AI to analyze logs, metrics, and traces with natural language queries. Supports **Anthropic Claude**, **OpenAI GPT-4o**, and **Amazon Bedrock** as AI providers.
 
 > *"Why is latency high on the payments service?"* — Just ask Argus.
 
@@ -359,33 +359,94 @@ argus guard --strict --format json || exit 1
 
 ## Configuration
 
-Config is stored at `~/.argus/config.yaml`:
+Config is stored at `~/.argus/config.yaml`. Run `argus config init` for interactive setup.
+
+### Anthropic (default)
 
 ```yaml
-anthropic_key: sk-ant-...
+anthropic_key: sk-ant-...  # legacy root-level key still works
+ai:
+  provider: anthropic
+  anthropic_key: sk-ant-...
+  model: auto  # defaults to claude-sonnet-4-20250514
 default_instance: production
 instances:
   production:
     url: https://signoz.example.com
     api_key: your-signoz-api-key
     name: Production
-    api_version: v3  # v3 for self-hosted, v5 for Signoz Cloud
-  staging:
-    url: https://signoz-staging.example.com
-    api_key: your-staging-key
-    name: Staging
-    api_version: v5
+    api_version: v3
 ```
+
+### OpenAI
+
+```yaml
+ai:
+  provider: openai
+  openai_key: sk-...
+  model: gpt-4o  # or gpt-4o-mini, etc.
+default_instance: production
+instances:
+  production:
+    url: https://signoz.example.com
+    api_key: your-signoz-api-key
+    name: Production
+```
+
+### Amazon Bedrock
+
+Bedrock uses bearer token auth (no AWS SDK, no SigV4). Get a bearer token via AWS SSO, Identity Center, or any mechanism that issues bearer tokens for Bedrock.
+
+```yaml
+ai:
+  provider: bedrock
+  bedrock:
+    endpoint: https://bedrock-runtime.us-east-1.amazonaws.com
+    token: your-bearer-token
+    model: anthropic.claude-3-5-sonnet-20241022-v2:0
+default_instance: production
+instances:
+  production:
+    url: https://signoz.example.com
+    api_key: your-signoz-api-key
+    name: Production
+```
+
+### Environment Variables
+
+All AI keys can be set via environment variables (they override config values):
+
+| Variable | Provider | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Anthropic | API key for Claude |
+| `OPENAI_API_KEY` | OpenAI | API key for GPT models |
+| `AWS_BEARER_TOKEN_BEDROCK` | Bedrock | Bearer token for Bedrock |
+
+### Model Selection
+
+Set `model: auto` (or omit it) to use the best default model for each provider:
+
+| Provider | Default Model |
+|----------|--------------|
+| Anthropic | `claude-sonnet-4-20250514` |
+| OpenAI | `gpt-4o` |
+| Bedrock | `anthropic.claude-3-5-sonnet-20241022-v2:0` |
+
+Or specify any model explicitly: `model: claude-3-haiku-20240307`
 
 ### API Version
 
 - **v3** (default) — For self-hosted Signoz instances (`/api/v3/query_range`)
 - **v5** — For Signoz Cloud (`/api/v5/query_range`)
 
+### Backward Compatibility
+
+The legacy `anthropic_key` at the root level of config.yaml still works. If set, it's used as fallback when `ai.anthropic_key` is empty.
+
 ## Requirements
 
 - A [Signoz](https://signoz.io) instance (self-hosted or cloud)
-- An [Anthropic API key](https://console.anthropic.com/) for AI analysis features
+- An AI API key from one of: [Anthropic](https://console.anthropic.com/), [OpenAI](https://platform.openai.com/api-keys), or [Amazon Bedrock](https://aws.amazon.com/bedrock/)
 
 ## Contributing
 

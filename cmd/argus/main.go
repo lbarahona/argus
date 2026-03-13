@@ -49,7 +49,7 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:   "argus",
 		Short: "AI-powered observability CLI for SREs",
-		Long:  "Argus connects to Signoz instances and uses Anthropic AI to analyze logs, metrics, and traces with natural language queries.",
+		Long:  "Argus connects to Signoz instances and uses AI (Anthropic, OpenAI, or Amazon Bedrock) to analyze logs, metrics, and traces with natural language queries.",
 	}
 
 	rootCmd.AddCommand(
@@ -599,7 +599,7 @@ func askCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ask [question]",
 		Short: "Ask a free-form question about your infrastructure",
-		Long:  "Use AI to analyze your observability data and answer questions about your infrastructure.",
+		Long:  "Use AI (Anthropic, OpenAI, or Bedrock) to analyze your observability data and answer questions about your infrastructure.",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
