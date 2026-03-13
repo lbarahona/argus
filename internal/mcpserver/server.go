@@ -243,13 +243,14 @@ func registerTools(server *mcp.Server) {
 			r, _ := errorResult(err)
 			return r, struct{}{}, nil
 		}
-		if input.Query != "" && cfg.AnthropicKey != "" {
+		provider, provErr := getProvider(cfg)
+		if input.Query != "" && provErr == nil {
 			dataCtx := result.Raw
 			if len(result.Logs) > 0 {
 				dataCtx = formatLogsForAI(result.Logs)
 			}
 			prompt := fmt.Sprintf("User query: %s\n\nObservability data from Signoz instance %q:\n%s", input.Query, instKey, dataCtx)
-			analyzer := ai.New(cfg.AnthropicKey)
+			analyzer := ai.NewFromProvider(provider)
 			analysis, err := analyzer.AnalyzeSync(prompt)
 			if err != nil {
 				r, _ := errorResult(err)
@@ -277,9 +278,10 @@ func registerTools(server *mcp.Server) {
 			r, _ := errorResult(err)
 			return r, struct{}{}, nil
 		}
-		if input.Query != "" && cfg.AnthropicKey != "" {
+		provider, provErr := getProvider(cfg)
+		if input.Query != "" && provErr == nil {
 			prompt := fmt.Sprintf("User query: %s\n\nTrace data from Signoz instance %q:\n%s", input.Query, instKey, result.Raw)
-			analyzer := ai.New(cfg.AnthropicKey)
+			analyzer := ai.NewFromProvider(provider)
 			analysis, err := analyzer.AnalyzeSync(prompt)
 			if err != nil {
 				r, _ := errorResult(err)
@@ -307,9 +309,10 @@ func registerTools(server *mcp.Server) {
 			r, _ := errorResult(err)
 			return r, struct{}{}, nil
 		}
-		if input.Query != "" && cfg.AnthropicKey != "" {
+		provider, provErr := getProvider(cfg)
+		if input.Query != "" && provErr == nil {
 			prompt := fmt.Sprintf("User query: %s\n\nMetric data from Signoz instance %q:\n%s", input.Query, instKey, result.Raw)
-			analyzer := ai.New(cfg.AnthropicKey)
+			analyzer := ai.NewFromProvider(provider)
 			analysis, err := analyzer.AnalyzeSync(prompt)
 			if err != nil {
 				r, _ := errorResult(err)
@@ -332,7 +335,8 @@ func registerTools(server *mcp.Server) {
 			r, _ := errorResult(err)
 			return r, struct{}{}, nil
 		}
-		if cfg.AnthropicKey == "" {
+		provider, provErr := getProvider(cfg)
+		if provErr != nil {
 			r, _ := errorResult(fmt.Errorf("Anthropic API key not configured"))
 			return r, struct{}{}, nil
 		}
@@ -359,7 +363,7 @@ func registerTools(server *mcp.Server) {
 			}
 		}
 		prompt := input.Question + contextInfo
-		analyzer := ai.New(cfg.AnthropicKey)
+		analyzer := ai.NewFromProvider(provider)
 		analysis, err := analyzer.AnalyzeSync(prompt)
 		if err != nil {
 			r, _ := errorResult(err)
@@ -379,7 +383,8 @@ func registerTools(server *mcp.Server) {
 			r, _ := errorResult(err)
 			return r, struct{}{}, nil
 		}
-		if cfg.AnthropicKey == "" {
+		provider, provErr := getProvider(cfg)
+		if provErr != nil {
 			r, _ := errorResult(fmt.Errorf("Anthropic API key not configured"))
 			return r, struct{}{}, nil
 		}
@@ -389,16 +394,16 @@ func registerTools(server *mcp.Server) {
 			return r, struct{}{}, nil
 		}
 		data, err := explain.Collect(ctx, client, instKey, explain.Options{
-			Service:      input.Service,
-			Duration:     defaults(input.Duration, 60),
-			AnthropicKey: cfg.AnthropicKey,
+			Service:    input.Service,
+			Duration:   defaults(input.Duration, 60),
+			AIProvider: provider,
 		})
 		if err != nil {
 			r, _ := errorResult(err)
 			return r, struct{}{}, nil
 		}
 		prompt := explain.BuildPrompt(data)
-		analyzer := ai.New(cfg.AnthropicKey)
+		analyzer := ai.NewFromProvider(provider)
 		analysis, err := analyzer.AnalyzeSync(prompt)
 		if err != nil {
 			r, _ := errorResult(err)
@@ -468,11 +473,15 @@ func registerTools(server *mcp.Server) {
 			r, _ := errorResult(err)
 			return r, struct{}{}, nil
 		}
+		var reportProvider ai.Provider
+		if input.WithAI {
+			reportProvider, _ = getProvider(cfg)
+		}
 		rpt, err := report.Generate(ctx, client, instKey, report.Options{
-			Duration:     defaults(input.Duration, 60),
-			WithAI:       input.WithAI,
-			Format:       "markdown",
-			AnthropicKey: cfg.AnthropicKey,
+			Duration:   defaults(input.Duration, 60),
+			WithAI:     input.WithAI,
+			Format:     "markdown",
+			AIProvider: reportProvider,
 		})
 		if err != nil {
 			r, _ := errorResult(err)
@@ -704,6 +713,22 @@ func registerTools(server *mcp.Server) {
 		}
 		r, _ := textResult(string(data))
 		return r, struct{}{}, nil
+	})
+}
+
+// getProvider creates an AI provider from the loaded config.
+func getProvider(cfg *types.Config) (ai.Provider, error) {
+	aiCfg := cfg.GetAIConfig()
+	return ai.NewProvider(ai.AIConfig{
+		Provider:     aiCfg.Provider,
+		Model:        aiCfg.Model,
+		AnthropicKey: aiCfg.AnthropicKey,
+		OpenAIKey:    aiCfg.OpenAIKey,
+		Bedrock: ai.BedrockConfig{
+			Endpoint: aiCfg.Bedrock.Endpoint,
+			Token:    aiCfg.Bedrock.Token,
+			Model:    aiCfg.Bedrock.Model,
+		},
 	})
 }
 

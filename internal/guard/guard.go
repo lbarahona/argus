@@ -31,7 +31,7 @@ type Options struct {
 	Strict       bool   // strict mode: lower thresholds, block on warnings
 	Format       string // "terminal", "markdown", or "json"
 	WithAI       bool   // include AI deployment advisory
-	AnthropicKey string
+	AIProvider   ai.Provider
 	// Thresholds (overridable, zero = defaults)
 	MaxErrorRate   float64 // max acceptable error rate %
 	MaxP99Latency  float64 // max acceptable P99 ms
@@ -194,8 +194,8 @@ func (a *Analyzer) Check(ctx context.Context, opts Options) (*GuardReport, error
 	report.Summary = buildSummary(report)
 
 	// AI advisory if requested
-	if opts.WithAI && opts.AnthropicKey != "" {
-		advisory, err := generateAdvisory(ctx, report, opts.AnthropicKey)
+	if opts.WithAI && opts.AIProvider != nil {
+		advisory, err := generateAdvisory(ctx, report, opts.AIProvider)
 		if err == nil {
 			report.AIAdvisory = advisory
 		}
@@ -892,7 +892,7 @@ func resolveThresholds(opts Options) (maxErr, warnErr, maxP99, warnP99 float64, 
 // AI Advisory
 // ──────────────────────────────────────────────
 
-func generateAdvisory(_ context.Context, report *GuardReport, apiKey string) (string, error) {
+func generateAdvisory(_ context.Context, report *GuardReport, provider ai.Provider) (string, error) {
 	var summary strings.Builder
 
 	summary.WriteString(fmt.Sprintf("Deployment Guard Report (verdict: %s, score: %d/100, strict: %v):\n\n",
@@ -923,7 +923,7 @@ Be direct, opinionated, and concise. No fluff. Think like an SRE who's been page
 Data:
 %s`, summary.String())
 
-	analyzer := ai.New(apiKey)
+	analyzer := ai.NewFromProvider(provider)
 	var buf bytes.Buffer
 	if err := analyzer.Analyze(prompt, &buf); err != nil {
 		return "", err

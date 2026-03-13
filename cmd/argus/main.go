@@ -93,6 +93,37 @@ func main() {
 	}
 }
 
+// getAIProvider creates an AI provider from the loaded config.
+// Returns nil, nil if no AI is configured (not an error, just no AI available).
+func getAIProvider(cfg *types.Config) (ai.Provider, error) {
+	aiCfg := cfg.GetAIConfig()
+	return ai.NewProvider(ai.AIConfig{
+		Provider:     aiCfg.Provider,
+		Model:        aiCfg.Model,
+		AnthropicKey: aiCfg.AnthropicKey,
+		OpenAIKey:    aiCfg.OpenAIKey,
+		Bedrock: ai.BedrockConfig{
+			Endpoint: aiCfg.Bedrock.Endpoint,
+			Token:    aiCfg.Bedrock.Token,
+			Model:    aiCfg.Bedrock.Model,
+		},
+	})
+}
+
+// hasAIConfig returns true if the config has any AI provider configured.
+func hasAIConfig(cfg *types.Config) bool {
+	aiCfg := cfg.GetAIConfig()
+	switch aiCfg.Provider {
+	case "anthropic", "":
+		return aiCfg.AnthropicKey != "" || os.Getenv("ANTHROPIC_API_KEY") != ""
+	case "openai":
+		return aiCfg.OpenAIKey != "" || os.Getenv("OPENAI_API_KEY") != ""
+	case "bedrock":
+		return aiCfg.Bedrock.Endpoint != "" && (aiCfg.Bedrock.Token != "" || os.Getenv("AWS_BEARER_TOKEN_BEDROCK") != "")
+	}
+	return false
+}
+
 func versionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
@@ -302,7 +333,7 @@ func logsCmd() *cobra.Command {
 			}
 
 			// If we have a query, send to AI for analysis
-			if query != "" && cfg.AnthropicKey != "" {
+			if query != "" && hasAIConfig(cfg) {
 				output.PrintAnalyzing(query)
 
 				dataContext := result.Raw
@@ -313,7 +344,11 @@ func logsCmd() *cobra.Command {
 				prompt := fmt.Sprintf("User query: %s\n\nObservability data from Signoz instance %q:\n%s",
 					query, instKey, dataContext)
 
-				analyzer := ai.New(cfg.AnthropicKey)
+				provider, err := getAIProvider(cfg)
+			if err != nil {
+				return fmt.Errorf("creating AI provider: %w", err)
+			}
+			analyzer := ai.NewFromProvider(provider)
 				return analyzer.Analyze(prompt, os.Stdout)
 			}
 
@@ -407,13 +442,17 @@ func tracesCmd() *cobra.Command {
 			}
 
 			// If we have a query, send to AI
-			if query != "" && cfg.AnthropicKey != "" {
+			if query != "" && hasAIConfig(cfg) {
 				output.PrintAnalyzing(query)
 
 				prompt := fmt.Sprintf("User query: %s\n\nTrace data from Signoz instance %q:\n%s",
 					query, instKey, result.Raw)
 
-				analyzer := ai.New(cfg.AnthropicKey)
+				provider, err := getAIProvider(cfg)
+			if err != nil {
+				return fmt.Errorf("creating AI provider: %w", err)
+			}
+			analyzer := ai.NewFromProvider(provider)
 				return analyzer.Analyze(prompt, os.Stdout)
 			}
 
@@ -466,13 +505,17 @@ func metricsCmd() *cobra.Command {
 				return fmt.Errorf("querying metrics: %w", err)
 			}
 
-			if query != "" && cfg.AnthropicKey != "" {
+			if query != "" && hasAIConfig(cfg) {
 				output.PrintAnalyzing(query)
 
 				prompt := fmt.Sprintf("User query: %s\n\nMetric data from Signoz instance %q:\n%s",
 					query, instKey, result.Raw)
 
-				analyzer := ai.New(cfg.AnthropicKey)
+				provider, err := getAIProvider(cfg)
+			if err != nil {
+				return fmt.Errorf("creating AI provider: %w", err)
+			}
+			analyzer := ai.NewFromProvider(provider)
 				return analyzer.Analyze(prompt, os.Stdout)
 			}
 
@@ -564,8 +607,8 @@ func askCmd() *cobra.Command {
 				return err
 			}
 
-			if cfg.AnthropicKey == "" {
-				return fmt.Errorf("Anthropic API key not configured. Run: argus config init")
+			if !hasAIConfig(cfg) {
+				return fmt.Errorf("AI provider not configured. Run: argus config init")
 			}
 
 			question := strings.Join(args, " ")
@@ -607,7 +650,11 @@ func askCmd() *cobra.Command {
 
 			prompt := question + contextInfo
 
-			analyzer := ai.New(cfg.AnthropicKey)
+			provider, err := getAIProvider(cfg)
+			if err != nil {
+				return fmt.Errorf("creating AI provider: %w", err)
+			}
+			analyzer := ai.NewFromProvider(provider)
 			return analyzer.Analyze(prompt, os.Stdout)
 		},
 	}
@@ -632,6 +679,7 @@ func reportCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			provider, _ := getAIProvider(cfg)
 
 			inst, instKey, err := config.GetInstance(cfg, instance)
 			if err != nil {
@@ -646,7 +694,7 @@ func reportCmd() *cobra.Command {
 				Duration:     duration,
 				WithAI:       withAI,
 				Format:       format,
-				AnthropicKey: cfg.AnthropicKey,
+				AIProvider:   provider,
 			})
 			if err != nil {
 				return err
@@ -1099,8 +1147,9 @@ Think of it as having a senior SRE look at all your dashboards at once.`,
 			if err != nil {
 				return err
 			}
-			if cfg.AnthropicKey == "" {
-				return fmt.Errorf("Anthropic API key required. Run: argus config init")
+			provider, _ := getAIProvider(cfg)
+			if !hasAIConfig(cfg) {
+				return fmt.Errorf("AI provider not configured. Run: argus config init")
 			}
 			inst, instKey, err := config.GetInstance(cfg, instance)
 			if err != nil {
@@ -1115,7 +1164,7 @@ Think of it as having a senior SRE look at all your dashboards at once.`,
 			data, err := explain.Collect(ctx, client, instKey, explain.Options{
 				Service:      args[0],
 				Duration:     duration,
-				AnthropicKey: cfg.AnthropicKey,
+				AIProvider:   provider,
 			})
 			if err != nil {
 				return err
@@ -1127,7 +1176,7 @@ Think of it as having a senior SRE look at all your dashboards at once.`,
 			fmt.Printf("%s Analyzing with AI...\n\n", output.MutedStyle.Render("🤖"))
 
 			prompt := explain.BuildPrompt(data)
-			analyzer := ai.New(cfg.AnthropicKey)
+			analyzer := ai.NewFromProvider(provider)
 			return analyzer.Analyze(prompt, os.Stdout)
 		},
 	}
@@ -1155,6 +1204,7 @@ func anomalyCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			provider, _ := getAIProvider(cfg)
 
 			inst, instKey, err := config.GetInstance(cfg, instance)
 			if err != nil {
@@ -1169,7 +1219,7 @@ func anomalyCmd() *cobra.Command {
 				Sensitivity:  sensitivity,
 				Service:      service,
 				WithAI:       withAI,
-				AnthropicKey: cfg.AnthropicKey,
+				AIProvider:   provider,
 				Quiet:        quiet,
 			}
 
@@ -1261,6 +1311,7 @@ Use --ai to generate an AI-powered incident narrative.`,
 			if err != nil {
 				return err
 			}
+			provider, _ := getAIProvider(cfg)
 			inst, instKey, err := config.GetInstance(cfg, instance)
 			if err != nil {
 				return err
@@ -1273,11 +1324,11 @@ Use --ai to generate an AI-powered incident narrative.`,
 				Service:      service,
 				WithAI:       withAI,
 				Format:       format,
-				AnthropicKey: cfg.AnthropicKey,
+				AIProvider:   provider,
 			}
 
-			if withAI && cfg.AnthropicKey == "" {
-				return fmt.Errorf("Anthropic API key required for --ai. Run: argus config init")
+			if withAI && !hasAIConfig(cfg) {
+				return fmt.Errorf("AI provider not configured. Run: argus config init")
 			}
 
 			tl, err := timeline.Generate(ctx, client, instKey, opts)
@@ -1327,9 +1378,10 @@ down into issues with follow-up questions.`,
 			if err != nil {
 				return err
 			}
+			provider, _ := getAIProvider(cfg)
 
-			if cfg.AnthropicKey == "" {
-				return fmt.Errorf("Anthropic API key required. Run: argus config init")
+			if !hasAIConfig(cfg) {
+				return fmt.Errorf("AI provider not configured. Run: argus config init")
 			}
 
 			inst, instKey, err := config.GetInstance(cfg, instance)
@@ -1350,7 +1402,7 @@ down into issues with follow-up questions.`,
 			session := tui.New(client, tui.Options{
 				InstanceKey:  instKey,
 				InstanceName: instName,
-				AnthropicKey: cfg.AnthropicKey,
+				AIProvider:   provider,
 				MaxHistory:   maxHistory,
 			})
 
@@ -1392,6 +1444,7 @@ the root cause in a cascade.`,
 			if err != nil {
 				return err
 			}
+			provider, _ := getAIProvider(cfg)
 
 			inst, instKey, err := config.GetInstance(cfg, instance)
 			if err != nil {
@@ -1405,12 +1458,12 @@ the root cause in a cascade.`,
 				Service:      service,
 				BucketSize:   bucketSize,
 				MinEvents:    minEvents,
-				AnthropicKey: cfg.AnthropicKey,
+				AIProvider:   provider,
 			}
 
 			if useAI {
-				if cfg.AnthropicKey == "" {
-					return fmt.Errorf("Anthropic API key required for AI analysis. Run: argus config init")
+				if !hasAIConfig(cfg) {
+					return fmt.Errorf("AI provider not configured. Run: argus config init")
 				}
 				fmt.Printf("%s Collecting signals from %s...\n",
 					output.MutedStyle.Render("🔍"), output.AccentStyle.Render(instKey))
@@ -1938,6 +1991,7 @@ func scorecardCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			provider, _ := getAIProvider(cfg)
 
 			inst, instKey, err := config.GetInstance(cfg, instance)
 			if err != nil {
@@ -1953,7 +2007,7 @@ func scorecardCmd() *cobra.Command {
 				Service:      service,
 				WithAI:       withAI,
 				Format:       format,
-				AnthropicKey: cfg.AnthropicKey,
+				AIProvider:   provider,
 			})
 			if err != nil {
 				return err
@@ -2005,6 +2059,7 @@ Risk levels:
 			if err != nil {
 				return err
 			}
+			provider, _ := getAIProvider(cfg)
 
 			inst, instKey, err := config.GetInstance(cfg, instance)
 			if err != nil {
@@ -2023,7 +2078,7 @@ Risk levels:
 				Service:      service,
 				Format:       format,
 				WithAI:       withAI,
-				AnthropicKey: cfg.AnthropicKey,
+				AIProvider:   provider,
 			})
 			if err != nil {
 				return err
@@ -2064,6 +2119,7 @@ func depsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			provider, _ := getAIProvider(cfg)
 
 			inst, instKey, err := config.GetInstance(cfg, instance)
 			if err != nil {
@@ -2081,7 +2137,7 @@ func depsCmd() *cobra.Command {
 				Service:  service,
 				Format:   format,
 				AI:       withAI,
-				AIKey:    cfg.AnthropicKey,
+				AIProvider: provider,
 				Writer:   os.Stdout,
 			})
 			if err != nil {
@@ -2187,17 +2243,14 @@ func postmortemGenerateCmd() *cobra.Command {
 				}
 			}
 
-			// Get AI key
-			var aiKey string
+			// Get AI provider
+			var provider ai.Provider
 			if useAI {
 				if cfg != nil {
-					aiKey = cfg.AnthropicKey
+					provider, _ = getAIProvider(cfg)
 				}
-				if aiKey == "" {
-					aiKey = os.Getenv("ANTHROPIC_API_KEY")
-				}
-				if aiKey == "" {
-					fmt.Println(output.WarningStyle.Render("⚠️  No Anthropic API key found. Skipping AI analysis."))
+				if provider == nil {
+					fmt.Println(output.WarningStyle.Render("⚠️  No AI provider configured. Skipping AI analysis."))
 					useAI = false
 				}
 			}
@@ -2215,7 +2268,7 @@ func postmortemGenerateCmd() *cobra.Command {
 			pm, err := pmlib.Generate(ctx, pmlib.Options{
 				IncidentID: incidentID,
 				UseAI:      useAI,
-				AIKey:      aiKey,
+				AIProvider: provider,
 				Format:     format,
 				Querier:    querier,
 			})
@@ -2438,6 +2491,7 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
 			if err != nil {
 				return err
 			}
+			provider, _ := getAIProvider(cfg)
 
 			inst, instKey, err := config.GetInstance(cfg, instance)
 			if err != nil {
@@ -2457,7 +2511,7 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
 				Sensitivity:  sensitivity,
 				Format:       format,
 				WithAI:       withAI,
-				AnthropicKey: cfg.AnthropicKey,
+				AIProvider:   provider,
 			})
 			if err != nil {
 				return err
@@ -2537,14 +2591,16 @@ Exit codes: 0 = healthy, 1 = critical, 2 = exhausted/page.`,
 					output.MutedStyle.Render("⏳"), output.AccentStyle.Render(instKey))
 			}
 
-			opts := budget.Options{
-				Window:  window,
-				Service: service,
-				Format:  format,
-				WithAI:  useAI,
-			}
+			var budgetProvider ai.Provider
 			if useAI {
-				opts.AnthropicKey = appCfg.AnthropicKey
+				budgetProvider, _ = getAIProvider(appCfg)
+			}
+			opts := budget.Options{
+				Window:     window,
+				Service:    service,
+				Format:     format,
+				WithAI:     useAI,
+				AIProvider: budgetProvider,
 			}
 
 			analyzer := budget.NewAnalyzer(client, instKey)
@@ -2641,17 +2697,19 @@ Use --strict for critical services (lower thresholds, blocks on warnings).`,
 					output.MutedStyle.Render("🛡️"), output.AccentStyle.Render(instKey), mode)
 			}
 
+			var guardProvider ai.Provider
+			if useAI {
+				guardProvider, _ = getAIProvider(appCfg)
+			}
 			opts := guard.Options{
 				Service:       service,
 				Strict:        strict,
 				Format:        format,
 				WithAI:        useAI,
+				AIProvider:    guardProvider,
 				MaxErrorRate:  maxErrorRate,
 				MaxP99Latency: maxP99Latency,
 				MinCallVolume: minCallVolume,
-			}
-			if useAI {
-				opts.AnthropicKey = appCfg.AnthropicKey
 			}
 
 			analyzer := guard.NewAnalyzer(client, instKey)

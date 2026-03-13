@@ -22,7 +22,7 @@ type Options struct {
 	Service      string // optional: focus on a specific service
 	BucketSize   int    // seconds per time bucket (default 60)
 	MinEvents    int    // minimum events in a bucket to count as a cluster
-	AnthropicKey string // for AI analysis
+	AIProvider   ai.Provider // for AI analysis
 }
 
 // Signal represents a timestamped event from any telemetry source.
@@ -503,6 +503,6 @@ func RunWithAI(ctx context.Context, client signoz.SignozQuerier, instanceName st
 	fmt.Println()
 
 	prompt := BuildAIPrompt(result)
-	analyzer := ai.New(opts.AnthropicKey)
+	analyzer := ai.NewFromProvider(opts.AIProvider)
 	return analyzer.Analyze(prompt, writer)
 }

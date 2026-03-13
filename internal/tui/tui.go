@@ -54,7 +54,7 @@ var (
 type Options struct {
 	InstanceKey  string
 	InstanceName string
-	AnthropicKey string
+	AIProvider   ai.Provider
 	MaxHistory   int
 }
 
@@ -63,7 +63,7 @@ type Session struct {
 	client       signoz.SignozQuerier
 	instanceKey  string
 	instanceName string
-	anthropicKey string
+	aiProvider   ai.Provider
 	history      []ai.Message
 	maxHistory   int
 	stdin        io.Reader
@@ -84,7 +84,7 @@ func New(client signoz.SignozQuerier, opts Options) *Session {
 		client:       client,
 		instanceKey:  opts.InstanceKey,
 		instanceName: name,
-		anthropicKey: opts.AnthropicKey,
+		aiProvider:   opts.AIProvider,
 		maxHistory:   maxHistory,
 		stdin:        os.Stdin,
 		stdout:       os.Stdout,
@@ -134,7 +134,7 @@ func (s *Session) Run(ctx context.Context) error {
 		var responseBuf bytes.Buffer
 		multiWriter := io.MultiWriter(s.stdout, &responseBuf)
 
-		analyzer := ai.New(s.anthropicKey)
+		analyzer := ai.NewFromProvider(s.aiProvider)
 		if err := analyzer.AnalyzeWithHistory(tuiSystemPrompt, s.history, multiWriter); err != nil {
 			fmt.Fprintf(s.stdout, "\n%s %s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true).Render("Error:"), err)
 			// Remove the failed user message so the conversation stays clean

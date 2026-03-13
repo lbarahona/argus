@@ -71,7 +71,7 @@ type Options struct {
 	Sensitivity    float64 // z-score threshold (default 2.0)
 	Service        string  // specific service to scan (empty = all)
 	WithAI         bool    // include AI analysis
-	AnthropicKey   string
+	AIProvider     ai.Provider
 	Quiet          bool    // only show anomalies (no OK services)
 }
 
@@ -153,8 +153,8 @@ func Detect(ctx context.Context, client signoz.SignozQuerier, instKey string, op
 	})
 
 	// AI summary
-	if opts.WithAI && opts.AnthropicKey != "" && len(result.Anomalies) > 0 {
-		result.AISummary = generateAISummary(ctx, result, opts.AnthropicKey)
+	if opts.WithAI && opts.AIProvider != nil && len(result.Anomalies) > 0 {
+		result.AISummary = generateAISummary(ctx, result, opts.AIProvider)
 	}
 
 	return result, nil
@@ -544,7 +544,7 @@ func severityRank(s string) int {
 }
 
 // generateAISummary asks Claude to analyze the anomalies.
-func generateAISummary(_ context.Context, result *Result, apiKey string) string {
+func generateAISummary(_ context.Context, result *Result, provider ai.Provider) string {
 	var sb strings.Builder
 	sb.WriteString("Analyze these anomalies detected in our services and provide:\n")
 	sb.WriteString("1. Root cause hypotheses\n")
@@ -558,7 +558,7 @@ func generateAISummary(_ context.Context, result *Result, apiKey string) string 
 
 	sb.WriteString(fmt.Sprintf("\nServices scanned: %d, Total anomalies: %d\n", result.TotalScanned, len(result.Anomalies)))
 
-	analyzer := ai.New(apiKey)
+	analyzer := ai.NewFromProvider(provider)
 	response, err := analyzer.AnalyzeSync(sb.String())
 	if err != nil {
 		return fmt.Sprintf("AI analysis failed: %v", err)
