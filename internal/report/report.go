@@ -51,7 +51,7 @@ type Options struct {
 	Duration     int // minutes
 	WithAI       bool
 	Format       string // "terminal" or "markdown"
-	AnthropicKey string
+	AIProvider   ai.Provider
 }
 
 // Generate creates a health report from Signoz data.
@@ -99,8 +99,8 @@ func Generate(ctx context.Context, client signoz.SignozQuerier, instKey string, 
 	r.ErrorPatterns = detectPatterns(r.ErrorLogs)
 
 	// AI summary
-	if opts.WithAI && opts.AnthropicKey != "" {
-		summary, err := generateAISummary(r, opts.AnthropicKey)
+	if opts.WithAI && opts.AIProvider != nil {
+		summary, err := generateAISummary(r, opts.AIProvider)
 		if err == nil {
 			r.AISummary = summary
 		}
@@ -166,9 +166,9 @@ func detectPatterns(logs []types.LogEntry) []ErrorPattern {
 	return patterns
 }
 
-func generateAISummary(r *Report, apiKey string) (string, error) {
+func generateAISummary(r *Report, provider ai.Provider) (string, error) {
 	prompt := buildSummaryPrompt(r)
-	analyzer := ai.New(apiKey)
+	analyzer := ai.NewFromProvider(provider)
 	return analyzer.AnalyzeSync(prompt)
 }
 

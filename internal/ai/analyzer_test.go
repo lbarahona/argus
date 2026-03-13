@@ -33,9 +33,14 @@ func newTestAnalyzer(t *testing.T, handler http.HandlerFunc) *Analyzer {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	return &Analyzer{
+	p := &AnthropicProvider{
 		apiKey: "test-key",
+		model:  defaultAnthropicModel,
 		client: &http.Client{Transport: &testTransport{server: server}},
+	}
+	return &Analyzer{
+		provider: p,
+		apiKey:   "test-key",
 	}
 }
 
@@ -70,7 +75,7 @@ func errorHandler(status int, body string) http.HandlerFunc {
 // ---- Existing tests (preserved) ----
 
 func TestAnalyzerBuildsCorrectRequest(t *testing.T) {
-	var capturedReq request
+	var capturedReq anthropicRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -96,16 +101,16 @@ func TestAnalyzerBuildsCorrectRequest(t *testing.T) {
 	// We can't easily override the const API URL, so verify request structure
 	_ = server // server used to validate handler logic above
 
-	reqBody := request{
-		Model:     model,
+	reqBody := anthropicRequest{
+		Model:     defaultAnthropicModel,
 		MaxTokens: 4096,
 		System:    systemPrompt,
 		Messages:  []Message{{Role: "user", Content: "test prompt"}},
 		Stream:    true,
 	}
 
-	if reqBody.Model != model {
-		t.Errorf("expected model=%s", model)
+	if reqBody.Model != defaultAnthropicModel {
+		t.Errorf("expected model=%s", defaultAnthropicModel)
 	}
 	if reqBody.System != systemPrompt {
 		t.Error("expected system prompt to be set")
@@ -250,7 +255,7 @@ func TestAnalyze_VerifyRequestHeaders(t *testing.T) {
 }
 
 func TestAnalyze_VerifyRequestBody(t *testing.T) {
-	var capturedReq request
+	var capturedReq anthropicRequest
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -266,8 +271,8 @@ func TestAnalyze_VerifyRequestBody(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if capturedReq.Model != model {
-		t.Errorf("model: got %q, want %q", capturedReq.Model, model)
+	if capturedReq.Model != defaultAnthropicModel {
+		t.Errorf("model: got %q, want %q", capturedReq.Model, defaultAnthropicModel)
 	}
 	if capturedReq.MaxTokens != 4096 {
 		t.Errorf("max_tokens: got %d, want 4096", capturedReq.MaxTokens)
@@ -334,7 +339,7 @@ func TestAnalyzeWithHistory_Success(t *testing.T) {
 }
 
 func TestAnalyzeWithHistory_VerifyRequest(t *testing.T) {
-	var capturedReq request
+	var capturedReq anthropicRequest
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -361,8 +366,8 @@ func TestAnalyzeWithHistory_VerifyRequest(t *testing.T) {
 	if capturedReq.System != customSystem {
 		t.Errorf("system: got %q, want %q", capturedReq.System, customSystem)
 	}
-	if capturedReq.Model != model {
-		t.Errorf("model: got %q, want %q", capturedReq.Model, model)
+	if capturedReq.Model != defaultAnthropicModel {
+		t.Errorf("model: got %q, want %q", capturedReq.Model, defaultAnthropicModel)
 	}
 	if capturedReq.MaxTokens != 4096 {
 		t.Errorf("max_tokens: got %d, want 4096", capturedReq.MaxTokens)
@@ -524,7 +529,7 @@ func TestAnalyzeWithHistory_VerifyHeaders(t *testing.T) {
 }
 
 func TestAnalyzeWithHistory_EmptyMessages(t *testing.T) {
-	var capturedReq request
+	var capturedReq anthropicRequest
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)

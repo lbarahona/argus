@@ -417,11 +417,12 @@ func TestExistsAfterSaveAndDelete(t *testing.T) {
 func TestRunInit(t *testing.T) {
 	withTempHome(t)
 	replaceStdin(t, []string{
-		"sk-anthropic-key",
-		"myprod",
-		"My Production",
-		"https://signoz.myprod.com",
-		"signoz-api-key-prod",
+		"",                          // provider choice (default = Anthropic)
+		"sk-anthropic-key",          // Anthropic API key
+		"myprod",                    // instance name
+		"My Production",             // display name
+		"https://signoz.myprod.com", // Signoz URL
+		"signoz-api-key-prod",       // Signoz API key
 	})
 
 	cfg, err := RunInit()
@@ -430,6 +431,9 @@ func TestRunInit(t *testing.T) {
 	}
 	if cfg.AnthropicKey != "sk-anthropic-key" {
 		t.Errorf("AnthropicKey: got %q, want %q", cfg.AnthropicKey, "sk-anthropic-key")
+	}
+	if cfg.AI.Provider != "anthropic" {
+		t.Errorf("AI.Provider: got %q, want %q", cfg.AI.Provider, "anthropic")
 	}
 	if cfg.DefaultInstance != "myprod" {
 		t.Errorf("DefaultInstance: got %q, want %q", cfg.DefaultInstance, "myprod")
@@ -459,6 +463,7 @@ func TestRunInit(t *testing.T) {
 func TestRunInitPersistsFile(t *testing.T) {
 	withTempHome(t)
 	replaceStdin(t, []string{
+		"",                              // provider choice (default)
 		"sk-persist-check",
 		"persistinst",
 		"Persist Instance",

@@ -55,7 +55,7 @@ func newTestSession(mock *mockSignozClient) *Session {
 		client:       mock,
 		instanceKey:  "test",
 		instanceName: "Test Instance",
-		anthropicKey: "test-key",
+		aiProvider:   ai.NewAnthropicProvider("test-key", ""),
 		maxHistory:   20,
 		stdout:       &bytes.Buffer{},
 	}

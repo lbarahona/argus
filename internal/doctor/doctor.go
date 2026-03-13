@@ -416,55 +416,159 @@ func checkInstanceServices(ctx context.Context, key string, inst types.Instance)
 }
 
 func checkAnthropicKey(cfg *types.Config) CheckResult {
-	name := "Anthropic API key configured"
+	name := "AI provider configured"
 
-	// Check config first, then env
-	key := ""
-	source := ""
-	if cfg != nil && cfg.AnthropicKey != "" {
-		key = cfg.AnthropicKey
-		source = "config file"
-	}
-	if envKey := os.Getenv("ANTHROPIC_API_KEY"); envKey != "" {
-		key = envKey
-		source = "ANTHROPIC_API_KEY env var"
-	}
-
-	if key == "" {
+	if cfg == nil {
 		return CheckResult{
 			Name:    name,
 			Status:  StatusWarn,
-			Message: "Not configured — AI features disabled",
-			Detail:  "Set ANTHROPIC_API_KEY env var or add 'anthropic_key' to config",
+			Message: "No config loaded — AI features disabled",
+			Detail:  "Run 'argus config init' to set up an AI provider",
 		}
 	}
 
-	if !strings.HasPrefix(key, "sk-ant-") {
+	aiCfg := cfg.GetAIConfig()
+	provider := aiCfg.Provider
+
+	switch provider {
+	case "anthropic", "":
+		key := aiCfg.AnthropicKey
+		if key == "" {
+			key = os.Getenv("ANTHROPIC_API_KEY")
+		}
+		if key == "" {
+			return CheckResult{
+				Name:    name,
+				Status:  StatusWarn,
+				Message: "Not configured — AI features disabled",
+				Detail:  "Set ANTHROPIC_API_KEY env var or configure ai.anthropic_key in config",
+			}
+		}
+		if !strings.HasPrefix(key, "sk-ant-") {
+			return CheckResult{
+				Name:    name,
+				Status:  StatusWarn,
+				Message: "Anthropic key found but format looks unusual",
+			}
+		}
 		return CheckResult{
 			Name:    name,
-			Status:  StatusWarn,
-			Message: fmt.Sprintf("Key found (%s) but format looks unusual", source),
+			Status:  StatusPass,
+			Message: fmt.Sprintf("Anthropic (sk-ant-...%s)", key[len(key)-4:]),
 		}
-	}
 
-	return CheckResult{
-		Name:    name,
-		Status:  StatusPass,
-		Message: fmt.Sprintf("Found via %s (sk-ant-...%s)", source, key[len(key)-4:]),
+	case "openai":
+		key := aiCfg.OpenAIKey
+		if key == "" {
+			key = os.Getenv("OPENAI_API_KEY")
+		}
+		if key == "" {
+			return CheckResult{
+				Name:    name,
+				Status:  StatusWarn,
+				Message: "OpenAI selected but no key configured",
+				Detail:  "Set OPENAI_API_KEY env var or configure ai.openai_key in config",
+			}
+		}
+		return CheckResult{
+			Name:    name,
+			Status:  StatusPass,
+			Message: fmt.Sprintf("OpenAI (key: ...%s)", key[len(key)-4:]),
+		}
+
+	case "bedrock":
+		endpoint := aiCfg.Bedrock.Endpoint
+		token := aiCfg.Bedrock.Token
+		if token == "" {
+			token = os.Getenv("AWS_BEARER_TOKEN_BEDROCK")
+		}
+		if endpoint == "" || token == "" {
+			return CheckResult{
+				Name:    name,
+				Status:  StatusWarn,
+				Message: "Bedrock selected but endpoint or token missing",
+				Detail:  "Configure ai.bedrock.endpoint and ai.bedrock.token (or AWS_BEARER_TOKEN_BEDROCK env var)",
+			}
+		}
+		return CheckResult{
+			Name:    name,
+			Status:  StatusPass,
+			Message: fmt.Sprintf("Bedrock (%s)", endpoint),
+		}
+
+	default:
+		return CheckResult{
+			Name:    name,
+			Status:  StatusFail,
+			Message: fmt.Sprintf("Unknown provider: %s", provider),
+			Detail:  "Supported providers: anthropic, openai, bedrock",
+		}
 	}
 }
 
 func checkAnthropicConnectivity(ctx context.Context, cfg *types.Config) CheckResult {
-	name := "Anthropic API reachable"
+	name := "AI API reachable"
 
-	key := ""
-	if cfg != nil {
-		key = cfg.AnthropicKey
-	}
-	if envKey := os.Getenv("ANTHROPIC_API_KEY"); envKey != "" {
-		key = envKey
+	if cfg == nil {
+		return CheckResult{
+			Name:   name,
+			Status: StatusSkip,
+			Message: "No config — skipping connectivity test",
+		}
 	}
 
+	aiCfg := cfg.GetAIConfig()
+	provider := aiCfg.Provider
+
+	// For non-Anthropic providers, do a basic connectivity check to their endpoint
+	switch provider {
+	case "openai":
+		key := aiCfg.OpenAIKey
+		if key == "" {
+			key = os.Getenv("OPENAI_API_KEY")
+		}
+		if key == "" {
+			return CheckResult{Name: name, Status: StatusSkip, Message: "No OpenAI key — skipping"}
+		}
+		start := time.Now()
+		reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		req, _ := http.NewRequestWithContext(reqCtx, http.MethodGet, "https://api.openai.com/v1/models", nil)
+		req.Header.Set("Authorization", "Bearer "+key)
+		resp, err := http.DefaultClient.Do(req)
+		latency := time.Since(start)
+		if err != nil {
+			return CheckResult{Name: name, Status: StatusFail, Message: fmt.Sprintf("OpenAI unreachable: %v", err)}
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusUnauthorized {
+			return CheckResult{Name: name, Status: StatusPass, Message: fmt.Sprintf("OpenAI reachable (%dms)", latency.Milliseconds())}
+		}
+		return CheckResult{Name: name, Status: StatusWarn, Message: fmt.Sprintf("OpenAI responded with %d", resp.StatusCode)}
+
+	case "bedrock":
+		endpoint := aiCfg.Bedrock.Endpoint
+		if endpoint == "" {
+			return CheckResult{Name: name, Status: StatusSkip, Message: "No Bedrock endpoint — skipping"}
+		}
+		start := time.Now()
+		reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		req, _ := http.NewRequestWithContext(reqCtx, http.MethodGet, endpoint, nil)
+		resp, err := http.DefaultClient.Do(req)
+		latency := time.Since(start)
+		if err != nil {
+			return CheckResult{Name: name, Status: StatusFail, Message: fmt.Sprintf("Bedrock endpoint unreachable: %v", err)}
+		}
+		defer resp.Body.Close()
+		return CheckResult{Name: name, Status: StatusPass, Message: fmt.Sprintf("Bedrock endpoint reachable (%dms)", latency.Milliseconds())}
+	}
+
+	// Default: Anthropic
+	key := aiCfg.AnthropicKey
+	if key == "" {
+		key = os.Getenv("ANTHROPIC_API_KEY")
+	}
 	if key == "" {
 		return CheckResult{
 			Name:   name,

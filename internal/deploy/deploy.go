@@ -48,7 +48,7 @@ type Options struct {
 	Sensitivity  string // low, medium, high (default: medium)
 	Format       string // terminal or markdown
 	WithAI       bool   // include AI analysis
-	AnthropicKey string
+	AIProvider   ai.Provider
 }
 
 // ChangePoint represents a detected behavioral change in a service.
@@ -230,8 +230,8 @@ func Detect(ctx context.Context, client signoz.SignozQuerier, instKey string, op
 	result.Summary = buildSummary(result.Services)
 
 	// AI analysis
-	if opts.WithAI && opts.AnthropicKey != "" {
-		summary, err := generateAISummary(ctx, result, opts.AnthropicKey)
+	if opts.WithAI && opts.AIProvider != nil {
+		summary, err := generateAISummary(ctx, result, opts.AIProvider)
 		if err == nil {
 			result.AISummary = summary
 		}
@@ -657,8 +657,8 @@ func buildSummary(services []ServiceImpact) Summary {
 }
 
 // generateAISummary produces an AI-powered deployment impact analysis.
-func generateAISummary(ctx context.Context, result *Result, anthropicKey string) (string, error) {
-	analyzer := ai.New(anthropicKey)
+func generateAISummary(ctx context.Context, result *Result, provider ai.Provider) (string, error) {
+	analyzer := ai.NewFromProvider(provider)
 
 	var sb strings.Builder
 	sb.WriteString("Analyze this deployment change detection report for an SRE team.\n\n")

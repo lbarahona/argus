@@ -1,19 +1,9 @@
 package ai
 
 import (
-	"bufio"
 	"bytes"
-	"encoding/json"
-	"fmt"
+	"context"
 	"io"
-	"net/http"
-	"strings"
-)
-
-const (
-	anthropicAPI     = "https://api.anthropic.com/v1/messages"
-	anthropicVersion = "2023-06-01"
-	model            = "claude-sonnet-4-20250514"
 )
 
 const systemPrompt = `You are an expert Site Reliability Engineer (SRE) analyzing observability data from Signoz.
@@ -33,152 +23,59 @@ When analyzing data:
 
 Format your response with clear sections using markdown.`
 
-// Analyzer handles AI-powered analysis via Anthropic Claude.
-type Analyzer struct {
-	apiKey string
-	client *http.Client
-}
-
-// New creates a new Analyzer.
-func New(apiKey string) *Analyzer {
-	return &Analyzer{
-		apiKey: apiKey,
-		client: &http.Client{},
-	}
-}
-
-// Message represents a conversation message for the Anthropic API.
+// Message represents a conversation message.
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-type request struct {
-	Model     string    `json:"model"`
-	MaxTokens int       `json:"max_tokens"`
-	System    string    `json:"system"`
-	Messages  []Message `json:"messages"`
-	Stream    bool      `json:"stream"`
+// Analyzer handles AI-powered analysis. It wraps a Provider for backward compatibility.
+type Analyzer struct {
+	provider Provider
+	// Keep apiKey and client for tests that inspect internals.
+	apiKey string
+	client interface{}
 }
 
-// Analyze sends data to Claude and streams the response to the writer.
+// New creates a new Analyzer using Anthropic as the default provider.
+// This is the backward-compatible constructor — existing code that calls ai.New(key) still works.
+func New(apiKey string) *Analyzer {
+	p := NewAnthropicProvider(apiKey, defaultAnthropicModel)
+	return &Analyzer{
+		provider: p,
+		apiKey:   apiKey,
+		client:   p.client,
+	}
+}
+
+// NewFromProvider creates an Analyzer wrapping any Provider.
+func NewFromProvider(p Provider) *Analyzer {
+	return &Analyzer{
+		provider: p,
+	}
+}
+
+// Analyze sends data to the AI provider and streams the response to the writer.
 func (a *Analyzer) Analyze(prompt string, w io.Writer) error {
-	reqBody := request{
-		Model:     model,
-		MaxTokens: 4096,
-		System:    systemPrompt,
-		Messages: []Message{
-			{Role: "user", Content: prompt},
-		},
-		Stream: true,
-	}
-
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return fmt.Errorf("marshaling request: %w", err)
-	}
-
-	req, err := http.NewRequest(http.MethodPost, anthropicAPI, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", a.apiKey)
-	req.Header.Set("anthropic-version", anthropicVersion)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("calling Anthropic API: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Anthropic API error (status %d): %s", resp.StatusCode, string(respBody))
-	}
-
-	return a.streamResponse(resp.Body, w)
+	return a.provider.Analyze(context.Background(), prompt, w)
 }
 
-// AnalyzeWithHistory sends a multi-turn conversation to Claude and streams the response.
+// AnalyzeWithHistory sends a multi-turn conversation and streams the response.
 func (a *Analyzer) AnalyzeWithHistory(systemPrompt string, messages []Message, w io.Writer) error {
-	reqBody := request{
-		Model:     model,
-		MaxTokens: 4096,
-		System:    systemPrompt,
-		Messages:  messages,
-		Stream:    true,
-	}
-
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return fmt.Errorf("marshaling request: %w", err)
-	}
-
-	req, err := http.NewRequest(http.MethodPost, anthropicAPI, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", a.apiKey)
-	req.Header.Set("anthropic-version", anthropicVersion)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("calling Anthropic API: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Anthropic API error (status %d): %s", resp.StatusCode, string(respBody))
-	}
-
-	return a.streamResponse(resp.Body, w)
+	return a.provider.AnalyzeWithSystem(context.Background(), systemPrompt, messages, w)
 }
 
-func (a *Analyzer) streamResponse(body io.Reader, w io.Writer) error {
-	scanner := bufio.NewScanner(body)
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "[DONE]" {
-			break
-		}
-
-		var event struct {
-			Type  string `json:"type"`
-			Delta struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"delta"`
-		}
-
-		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			continue
-		}
-
-		if event.Type == "content_block_delta" && event.Delta.Type == "text_delta" {
-			fmt.Fprint(w, event.Delta.Text)
-		}
-	}
-
-	fmt.Fprintln(w)
-	return scanner.Err()
-}
-
-// AnalyzeSync sends data to Claude and returns the full response (non-streaming).
+// AnalyzeSync sends data and returns the full response (non-streaming).
 func (a *Analyzer) AnalyzeSync(prompt string) (string, error) {
 	var buf bytes.Buffer
 	if err := a.Analyze(prompt, &buf); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// streamResponse is kept for backward compatibility with tests.
+// It delegates to the Anthropic stream parser.
+func (a *Analyzer) streamResponse(body io.Reader, w io.Writer) error {
+	return streamAnthropicResponse(body, w)
 }

@@ -30,7 +30,7 @@ type Options struct {
 	Service      string // optional: filter to specific service
 	Format       string // "terminal" or "markdown" or "json"
 	WithAI       bool   // include AI-powered recommendations
-	AnthropicKey string
+	AIProvider   ai.Provider
 }
 
 // BurnWindow represents error budget consumption in a specific time window.
@@ -128,8 +128,8 @@ func (a *Analyzer) Analyze(ctx context.Context, cfg *slo.SLOConfig, opts Options
 	}
 
 	// AI insight if requested
-	if opts.WithAI && opts.AnthropicKey != "" && len(report.Reports) > 0 {
-		insight, err := generateAIInsight(ctx, report, opts.AnthropicKey)
+	if opts.WithAI && opts.AIProvider != nil && len(report.Reports) > 0 {
+		insight, err := generateAIInsight(ctx, report, opts.AIProvider)
 		if err == nil {
 			report.AIInsight = insight
 		}
@@ -653,7 +653,7 @@ func parseWindow(w string) int {
 // AI Integration
 // ──────────────────────────────────────────────
 
-func generateAIInsight(_ context.Context, report *FullReport, apiKey string) (string, error) {
+func generateAIInsight(_ context.Context, report *FullReport, provider ai.Provider) (string, error) {
 	var summary strings.Builder
 
 	summary.WriteString("Error Budget Burndown Analysis:\n\n")
@@ -686,7 +686,7 @@ Be concise, opinionated, and actionable. No fluff.
 Data:
 %s`, summary.String())
 
-	analyzer := ai.New(apiKey)
+	analyzer := ai.NewFromProvider(provider)
 	var buf bytes.Buffer
 	if err := analyzer.Analyze(prompt, &buf); err != nil {
 		return "", err

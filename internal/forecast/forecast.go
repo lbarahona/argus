@@ -22,7 +22,7 @@ type Options struct {
 	Service      string // optional: filter to specific service
 	Format       string // "terminal" or "markdown"
 	WithAI       bool   // include AI narrative
-	AnthropicKey string
+	AIProvider   ai.Provider
 }
 
 // ServiceForecast holds prediction data for a single service.
@@ -158,8 +158,8 @@ func Generate(ctx context.Context, client signoz.SignozQuerier, instance string,
 		}
 	}
 
-	if opts.WithAI && opts.AnthropicKey != "" {
-		summary, err := generateAISummary(report, opts.AnthropicKey)
+	if opts.WithAI && opts.AIProvider != nil {
+		summary, err := generateAISummary(report, opts.AIProvider)
 		if err == nil {
 			report.AISummary = summary
 		}
@@ -375,7 +375,7 @@ func assessRisk(sf ServiceForecast) (float64, string, []string) {
 	return score, level, warnings
 }
 
-func generateAISummary(r *Report, apiKey string) (string, error) {
+func generateAISummary(r *Report, provider ai.Provider) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("You are an SRE analyst. Analyze this service forecast report and provide:\n")
 	sb.WriteString("1. A brief executive summary (2-3 sentences)\n")
@@ -399,7 +399,7 @@ func generateAISummary(r *Report, apiKey string) (string, error) {
 		sb.WriteString("\n")
 	}
 
-	analyzer := ai.New(apiKey)
+	analyzer := ai.NewFromProvider(provider)
 	return analyzer.AnalyzeSync(sb.String())
 }
 

@@ -163,7 +163,7 @@ func TestCheckAnthropicKey_NotSet(t *testing.T) {
 	// Unset env for this test
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	result := checkAnthropicKey(nil)
-	assert.Equal(t, "Anthropic API key configured", result.Name)
+	assert.Equal(t, "AI provider configured", result.Name)
 	// Result depends on env state
 	assert.Contains(t, []Status{StatusPass, StatusWarn}, result.Status)
 }

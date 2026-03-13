@@ -54,7 +54,7 @@ type Options struct {
 	Service   string // filter to show only deps for this service
 	Format    string // "table" or "markdown"
 	AI        bool
-	AIKey     string
+	AIProvider ai.Provider
 	Writer    io.Writer
 }
 
@@ -184,9 +184,9 @@ func Generate(ctx context.Context, opts Options) (*DependencyMap, error) {
 	}
 
 	// AI analysis
-	if opts.AI && opts.AIKey != "" {
+	if opts.AI && opts.AIProvider != nil {
 		prompt := buildAIPrompt(dm)
-		analyzer := ai.New(opts.AIKey)
+		analyzer := ai.NewFromProvider(opts.AIProvider)
 		var sb strings.Builder
 		if err := analyzer.Analyze(prompt, &sb); err == nil {
 			dm.AISummary = sb.String()

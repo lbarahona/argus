@@ -52,7 +52,7 @@ type Options struct {
 	Service      string // optional: filter to a specific service
 	WithAI       bool   // generate AI narrative
 	Format       string // "terminal" or "markdown"
-	AnthropicKey string
+	AIProvider   ai.Provider
 }
 
 // Generate builds an incident timeline from Signoz data.
@@ -126,8 +126,8 @@ func Generate(ctx context.Context, client signoz.SignozQuerier, instKey string, 
 	sort.Strings(tl.Services)
 
 	// 8. Optional AI narrative
-	if opts.WithAI && opts.AnthropicKey != "" && len(tl.Events) > 0 {
-		narrative, err := generateNarrative(ctx, tl, opts.AnthropicKey)
+	if opts.WithAI && opts.AIProvider != nil && len(tl.Events) > 0 {
+		narrative, err := generateNarrative(ctx, tl, opts.AIProvider)
 		if err == nil {
 			tl.AINarrative = narrative
 		}
@@ -397,8 +397,8 @@ func detectServiceHealth(services []types.Service) []Event {
 }
 
 // generateNarrative uses AI to create a human-readable incident narrative.
-func generateNarrative(_ context.Context, tl *Timeline, apiKey string) (string, error) {
-	analyzer := ai.New(apiKey)
+func generateNarrative(_ context.Context, tl *Timeline, provider ai.Provider) (string, error) {
+	analyzer := ai.NewFromProvider(provider)
 
 	var sb strings.Builder
 	sb.WriteString("You are an expert SRE analyzing an incident timeline. ")

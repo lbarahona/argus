@@ -74,7 +74,7 @@ type Options struct {
 	Service      string // filter to single service
 	WithAI       bool
 	Format       string // "terminal" or "markdown"
-	AnthropicKey string
+	AIProvider   ai.Provider
 }
 
 // Generate creates a reliability scorecard from Signoz data.
@@ -146,8 +146,8 @@ func Generate(ctx context.Context, client signoz.SignozQuerier, instKey string, 
 	sc.OverallScore, sc.OverallGrade = computeOverall(sc.Services)
 
 	// AI summary
-	if opts.WithAI && opts.AnthropicKey != "" {
-		summary, err := generateAISummary(ctx, sc, opts.AnthropicKey)
+	if opts.WithAI && opts.AIProvider != nil {
+		summary, err := generateAISummary(ctx, sc, opts.AIProvider)
 		if err == nil {
 			sc.AISummary = summary
 		}
@@ -304,7 +304,7 @@ func groupErrors(logs []types.LogEntry, limit int) []ErrorGroup {
 	return groups
 }
 
-func generateAISummary(ctx context.Context, sc *Scorecard, key string) (string, error) {
+func generateAISummary(ctx context.Context, sc *Scorecard, provider ai.Provider) (string, error) {
 	prompt := fmt.Sprintf(`Analyze this service reliability scorecard and provide a brief (3-5 sentence) executive summary with actionable recommendations.
 
 Instance: %s
@@ -322,7 +322,7 @@ Services:
 		}
 	}
 
-	analyzer := ai.New(key)
+	analyzer := ai.NewFromProvider(provider)
 	return analyzer.AnalyzeSync(prompt)
 }
 

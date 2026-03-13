@@ -122,7 +122,7 @@ type PostmortemStore struct {
 type Options struct {
 	IncidentID string
 	UseAI      bool
-	AIKey      string
+	AIProvider ai.Provider
 	Format     string // terminal, markdown, json
 	Querier    signoz.SignozQuerier
 }
@@ -253,8 +253,8 @@ func Generate(ctx context.Context, opts Options) (*Postmortem, error) {
 	}
 
 	// AI analysis for root cause, action items, and lessons
-	if opts.UseAI && opts.AIKey != "" {
-		enrichWithAI(pm, opts.AIKey)
+	if opts.UseAI && opts.AIProvider != nil {
+		enrichWithAI(pm, opts.AIProvider)
 	} else {
 		pm.RootCause = "Root cause analysis pending. Run with --ai flag for AI-powered analysis."
 		pm.ActionItems = generateBasicActionItems(pm)
@@ -461,8 +461,8 @@ func enrichWithMetrics(ctx context.Context, pm *Postmortem, q signoz.SignozQueri
 // AI enrichment
 // ──────────────────────────────────────────────
 
-func enrichWithAI(pm *Postmortem, apiKey string) {
-	analyzer := ai.New(apiKey)
+func enrichWithAI(pm *Postmortem, provider ai.Provider) {
+	analyzer := ai.NewFromProvider(provider)
 
 	prompt := buildAIPrompt(pm)
 	result, err := analyzer.AnalyzeSync(prompt)

@@ -18,11 +18,42 @@ func (i Instance) GetAPIVersion() string {
 	return i.APIVersion
 }
 
+// AIConfig holds configuration for AI providers.
+type AIConfig struct {
+	Provider     string        `yaml:"provider"`      // anthropic, openai, bedrock
+	Model        string        `yaml:"model"`         // auto or specific model name
+	AnthropicKey string        `yaml:"anthropic_key"`
+	OpenAIKey    string        `yaml:"openai_key"`
+	Bedrock      BedrockConfig `yaml:"bedrock"`
+}
+
+// BedrockConfig holds Bedrock-specific configuration.
+type BedrockConfig struct {
+	Endpoint string `yaml:"endpoint"`
+	Token    string `yaml:"token"`
+	Model    string `yaml:"model"`
+}
+
 // Config represents the application configuration.
 type Config struct {
-	AnthropicKey    string              `yaml:"anthropic_key"`
+	AnthropicKey    string              `yaml:"anthropic_key"`     // Legacy (still works)
+	AI              AIConfig            `yaml:"ai"`                // New structured AI config
 	DefaultInstance string              `yaml:"default_instance"`
 	Instances       map[string]Instance `yaml:"instances"`
+}
+
+// GetAIConfig returns the effective AI config, merging legacy fields.
+func (c Config) GetAIConfig() AIConfig {
+	cfg := c.AI
+	// Legacy fallback: if ai.anthropic_key is empty but root-level anthropic_key exists
+	if cfg.AnthropicKey == "" && c.AnthropicKey != "" {
+		cfg.AnthropicKey = c.AnthropicKey
+	}
+	// Default provider to anthropic
+	if cfg.Provider == "" {
+		cfg.Provider = "anthropic"
+	}
+	return cfg
 }
 
 // HealthStatus represents the health of a Signoz instance.

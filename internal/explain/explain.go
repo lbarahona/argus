@@ -15,7 +15,7 @@ import (
 type Options struct {
 	Service      string
 	Duration     int // minutes
-	AnthropicKey string
+	AIProvider   ai.Provider
 }
 
 // CorrelatedData holds all collected observability data for a service.
@@ -184,6 +184,6 @@ func Run(ctx context.Context, client signoz.SignozQuerier, instanceName string, 
 	}
 
 	prompt := BuildPrompt(data)
-	analyzer := ai.New(opts.AnthropicKey)
+	analyzer := ai.NewFromProvider(opts.AIProvider)
 	return analyzer.Analyze(prompt, writer)
 }
