@@ -101,6 +101,12 @@ argus ask "why is latency high on the payments service?"
 | `argus slo` | SLO tracking with error budgets and burn rates |
 | `argus budget check` | Error budget burndown with burn rate analysis |
 | `argus guard` | CI/CD deployment gate — SHIP/CAUTION/HOLD verdict |
+| `argus am alerts` | List firing alerts from Alertmanager |
+| `argus am silences` | List active silences |
+| `argus am silence-create` | Create a silence with label matchers |
+| `argus am silence-delete` | Expire a silence by ID |
+| `argus am status` | Check Alertmanager health and version |
+| `argus am summary` | Quick alert counts by severity and name |
 
 ### Logs
 
@@ -355,6 +361,54 @@ argus guard --strict --format json || exit 1
 # GitHub Actions example:
 # - name: Pre-deploy safety check
 #   run: argus guard --strict
+```
+
+### Alertmanager
+
+Argus integrates with Prometheus Alertmanager to query firing alerts, manage silences, and check cluster status.
+
+```yaml
+# Add to ~/.argus/config.yaml
+alertmanager:
+  url: http://alertmanager:9093
+  basic_auth:       # optional
+    username: admin
+    password: secret
+```
+
+```bash
+# List firing alerts
+argus am alerts
+
+# Show all alerts (including silenced/inhibited)
+argus am alerts --all
+
+# Filter by label
+argus am alerts --filter alertname=HighLatency
+
+# Quick summary — counts by severity
+argus am summary
+
+# List active silences
+argus am silences
+
+# Include expired silences
+argus am silences --expired
+
+# Create a 2-hour silence for a specific alert
+argus am silence-create -m alertname=HighLatency -d 2h -c "Deploying fix"
+
+# Silence with regex matcher
+argus am silence-create -m alertname=~"High.*" -m severity=warning -d 1h
+
+# Expire a silence
+argus am silence-delete <silence-id>
+
+# Check Alertmanager health
+argus am status
+
+# JSON output (all subcommands support --format json)
+argus am alerts -f json
 ```
 
 ## Configuration

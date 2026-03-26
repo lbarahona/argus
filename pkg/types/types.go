@@ -34,12 +34,27 @@ type BedrockConfig struct {
 	Model    string `yaml:"model"`
 }
 
+// AlertmanagerConfig holds Alertmanager connection details.
+type AlertmanagerConfig struct {
+	URL       string `yaml:"url" json:"url"`
+	BasicAuth struct {
+		Username string `yaml:"username,omitempty" json:"username,omitempty"`
+		Password string `yaml:"password,omitempty" json:"password,omitempty"`
+	} `yaml:"basic_auth,omitempty" json:"basic_auth,omitempty"`
+}
+
+// IsConfigured returns true if the Alertmanager URL is set.
+func (c AlertmanagerConfig) IsConfigured() bool {
+	return c.URL != ""
+}
+
 // Config represents the application configuration.
 type Config struct {
 	AnthropicKey    string              `yaml:"anthropic_key"`     // Legacy (still works)
 	AI              AIConfig            `yaml:"ai"`                // New structured AI config
 	DefaultInstance string              `yaml:"default_instance"`
 	Instances       map[string]Instance `yaml:"instances"`
+	Alertmanager    AlertmanagerConfig  `yaml:"alertmanager,omitempty"` // Alertmanager integration
 }
 
 // GetAIConfig returns the effective AI config, merging legacy fields.
