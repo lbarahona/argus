@@ -107,6 +107,12 @@ argus ask "why is latency high on the payments service?"
 | `argus am silence-delete` | Expire a silence by ID |
 | `argus am status` | Check Alertmanager health and version |
 | `argus am summary` | Quick alert counts by severity and name |
+| `argus prom rules` | List alerting and recording rules |
+| `argus prom targets` | Show scrape targets and their health |
+| `argus prom alerts` | Show firing and pending alerts from Prometheus |
+| `argus prom query` | Execute an instant PromQL query |
+| `argus prom status` | Show Prometheus version, health, and runtime info |
+| `argus prom summary` | Quick overview of rules, alerts, and targets |
 
 ### Logs
 
@@ -409,6 +415,45 @@ argus am status
 
 # JSON output (all subcommands support --format json)
 argus am alerts -f json
+```
+
+### Prometheus
+
+Query Prometheus directly for rules, targets, alerts, and instant PromQL queries.
+
+```bash
+# Configure Prometheus URL in ~/.argus/config.yaml:
+# prometheus:
+#   url: http://localhost:9090
+#   basic_auth:          # optional
+#     username: admin
+#     password: secret
+
+# List all alerting and recording rules
+argus prom rules
+
+# Filter by rule type
+argus prom rules --type alert
+argus prom rules --type record
+
+# Show scrape targets and their health
+argus prom targets
+
+# Show firing alerts from Prometheus
+argus prom alerts
+
+# Run instant PromQL queries
+argus prom query 'up'
+argus prom query 'rate(http_requests_total[5m])'
+
+# Quick overview (rules + alerts + targets)
+argus prom summary
+
+# Check Prometheus version and health
+argus prom status
+
+# JSON output (all subcommands support --format json)
+argus prom rules --format json
 ```
 
 ## Configuration
