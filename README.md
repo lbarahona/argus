@@ -107,6 +107,15 @@ argus ask "why is latency high on the payments service?"
 | `argus am silence-delete` | Expire a silence by ID |
 | `argus am status` | Check Alertmanager health and version |
 | `argus am summary` | Quick alert counts by severity and name |
+| `argus grafana dashboards` | List all Grafana dashboards by folder |
+| `argus grafana dashboard [uid]` | Get detailed dashboard info by UID |
+| `argus grafana search [query]` | Search dashboards and folders |
+| `argus grafana datasources` | List configured data sources |
+| `argus grafana folders` | List dashboard folders |
+| `argus grafana alerts` | List alert rules |
+| `argus grafana firing` | List firing alert instances |
+| `argus grafana status` | Check Grafana health and version |
+| `argus grafana summary` | Quick overview of Grafana instance |
 
 ### Logs
 
@@ -409,6 +418,49 @@ argus am status
 
 # JSON output (all subcommands support --format json)
 argus am alerts -f json
+```
+
+### Grafana
+
+Connect to your Grafana instance to browse dashboards, data sources, and alert rules:
+
+```yaml
+# ~/.argus/config.yaml
+grafana:
+  url: http://grafana:3000
+  api_key: glsa_xxxxxxxxxxxx  # optional: service account token
+```
+
+```bash
+# List all dashboards grouped by folder
+argus grafana dashboards
+
+# Search dashboards
+argus grafana search "kubernetes"
+
+# Get dashboard details by UID
+argus grafana dashboard abc123
+
+# List configured data sources
+argus grafana datasources
+
+# List folders
+argus grafana folders
+
+# List alert rules
+argus grafana alerts
+
+# Show firing alert instances
+argus grafana firing
+
+# Quick overview
+argus grafana summary
+
+# Health and version
+argus grafana status
+
+# JSON output (all subcommands support --format json)
+argus grafana dashboards --format json
 ```
 
 ## Configuration

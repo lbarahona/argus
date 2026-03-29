@@ -10,6 +10,7 @@ import (
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/alert"
 	amlib "github.com/lbarahona/argus/internal/alertmanager"
+	grafanalib "github.com/lbarahona/argus/internal/grafana"
 	"github.com/lbarahona/argus/internal/anomaly"
 	"github.com/lbarahona/argus/internal/budget"
 	"github.com/lbarahona/argus/internal/config"
@@ -88,6 +89,7 @@ func main() {
 		guardCmd(),
 		doctorCmd(),
 		amCmd(),
+		grafanaCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -3170,3 +3172,341 @@ func parseMatcher(s string) (amlib.Matcher, error) {
 }
 
 
+
+// ── Grafana Integration ─────────────────────────────────
+
+func getGrafanaClient() (*grafanalib.Client, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+	if !cfg.Grafana.IsConfigured() {
+		return nil, fmt.Errorf("grafana not configured — add grafana.url to your config:\n  argus config init  (or edit ~/.argus/config.yaml)")
+	}
+	gCfg := grafanalib.GrafanaConfig{
+		URL:    cfg.Grafana.URL,
+		APIKey: cfg.Grafana.APIKey,
+	}
+	return grafanalib.NewClient(gCfg), nil
+}
+
+func grafanaCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "grafana",
+		Short:   "Grafana integration — dashboards, data sources, alerts, and status",
+		Long:    "Query Grafana for dashboards, data sources, alert rules, and instance health.",
+		Aliases: []string{"graf"},
+	}
+
+	cmd.AddCommand(
+		grafanaDashboardsCmd(),
+		grafanaDashboardGetCmd(),
+		grafanaSearchCmd(),
+		grafanaDatasourcesCmd(),
+		grafanaFoldersCmd(),
+		grafanaAlertsCmd(),
+		grafanaAlertInstancesCmd(),
+		grafanaStatusCmd(),
+		grafanaSummaryCmd(),
+	)
+
+	return cmd
+}
+
+func grafanaDashboardsCmd() *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "dashboards",
+		Short: "List all dashboards",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getGrafanaClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			dashboards, err := client.Dashboards(ctx)
+			if err != nil {
+				return fmt.Errorf("fetching dashboards: %w", err)
+			}
+
+			if format == "json" {
+				fmt.Println(grafanalib.FormatJSON(dashboards))
+			} else {
+				fmt.Print(grafanalib.FormatDashboards(dashboards))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
+
+func grafanaDashboardGetCmd() *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "dashboard [uid]",
+		Short: "Get dashboard details by UID",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getGrafanaClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			dm, err := client.GetDashboard(ctx, args[0])
+			if err != nil {
+				return fmt.Errorf("fetching dashboard: %w", err)
+			}
+
+			if format == "json" {
+				fmt.Println(grafanalib.FormatJSON(dm))
+			} else {
+				fmt.Print(grafanalib.FormatDashboardDetail(dm))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
+
+func grafanaSearchCmd() *cobra.Command {
+	var (
+		format string
+		kind   string
+		limit  int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "search [query]",
+		Short: "Search dashboards and folders",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getGrafanaClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			query := ""
+			if len(args) > 0 {
+				query = strings.Join(args, " ")
+			}
+
+			results, err := client.Search(ctx, query, kind, limit)
+			if err != nil {
+				return fmt.Errorf("searching: %w", err)
+			}
+
+			if format == "json" {
+				fmt.Println(grafanalib.FormatJSON(results))
+			} else {
+				fmt.Print(grafanalib.FormatDashboards(results))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	cmd.Flags().StringVar(&kind, "type", "", "Filter by type: dash-db, dash-folder")
+	cmd.Flags().IntVar(&limit, "limit", 100, "Max results")
+	return cmd
+}
+
+func grafanaDatasourcesCmd() *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "datasources",
+		Short: "List configured data sources",
+		Aliases: []string{"ds"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getGrafanaClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			ds, err := client.Datasources(ctx)
+			if err != nil {
+				return fmt.Errorf("fetching data sources: %w", err)
+			}
+
+			if format == "json" {
+				fmt.Println(grafanalib.FormatJSON(ds))
+			} else {
+				fmt.Print(grafanalib.FormatDatasources(ds))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
+
+func grafanaFoldersCmd() *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "folders",
+		Short: "List folders",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getGrafanaClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			folders, err := client.Folders(ctx)
+			if err != nil {
+				return fmt.Errorf("fetching folders: %w", err)
+			}
+
+			if format == "json" {
+				fmt.Println(grafanalib.FormatJSON(folders))
+			} else {
+				fmt.Print(grafanalib.FormatFolders(folders))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
+
+func grafanaAlertsCmd() *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "alerts",
+		Short: "List alert rules",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getGrafanaClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			rules, err := client.AlertRules(ctx)
+			if err != nil {
+				return fmt.Errorf("fetching alert rules: %w", err)
+			}
+
+			if format == "json" {
+				fmt.Println(grafanalib.FormatJSON(rules))
+			} else {
+				fmt.Print(grafanalib.FormatAlertRules(rules))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
+
+func grafanaAlertInstancesCmd() *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "firing",
+		Short: "List firing alert instances",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getGrafanaClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			instances, err := client.AlertInstances(ctx)
+			if err != nil {
+				return fmt.Errorf("fetching alert instances: %w", err)
+			}
+
+			if format == "json" {
+				fmt.Println(grafanalib.FormatJSON(instances))
+			} else {
+				fmt.Print(grafanalib.FormatAlertInstances(instances))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
+
+func grafanaStatusCmd() *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show Grafana health and version",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getGrafanaClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			health, healthErr := client.Health(ctx)
+			if healthErr != nil {
+				return fmt.Errorf("grafana unreachable: %w", healthErr)
+			}
+
+			org, _ := client.Org(ctx) // org might fail without auth
+
+			if format == "json" {
+				data := map[string]interface{}{"health": health}
+				if org != nil {
+					data["org"] = org
+				}
+				fmt.Println(grafanalib.FormatJSON(data))
+			} else {
+				fmt.Print(grafanalib.FormatStatus(health, org))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
+
+func grafanaSummaryCmd() *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "summary",
+		Short: "Quick overview of Grafana instance",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getGrafanaClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			summary, err := client.BuildSummary(ctx)
+			if err != nil {
+				return fmt.Errorf("building summary: %w", err)
+			}
+
+			if format == "json" {
+				fmt.Println(grafanalib.FormatJSON(summary))
+			} else {
+				fmt.Print(grafanalib.FormatSummary(summary))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
