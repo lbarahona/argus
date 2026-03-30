@@ -56,6 +56,25 @@ type Config struct {
 	Instances       map[string]Instance `yaml:"instances"`
 	Alertmanager    AlertmanagerConfig  `yaml:"alertmanager,omitempty"` // Alertmanager integration
 	Grafana         GrafanaConfig       `yaml:"grafana,omitempty"`      // Grafana integration
+	Loki            LokiConfig          `yaml:"loki,omitempty"`         // Loki integration
+}
+
+// LokiConfig holds Loki connection details.
+type LokiConfig struct {
+	URL       string         `yaml:"url" json:"url"`
+	BasicAuth LokiBasicAuth  `yaml:"basic_auth,omitempty" json:"basic_auth,omitempty"`
+	TenantID  string         `yaml:"tenant_id,omitempty" json:"tenant_id,omitempty"`
+}
+
+// LokiBasicAuth holds basic auth credentials for Loki.
+type LokiBasicAuth struct {
+	Username string `yaml:"username,omitempty" json:"username,omitempty"`
+	Password string `yaml:"password,omitempty" json:"password,omitempty"`
+}
+
+// IsConfigured returns true if the Loki URL is set.
+func (c LokiConfig) IsConfigured() bool {
+	return c.URL != ""
 }
 
 // GrafanaConfig holds Grafana connection details.
