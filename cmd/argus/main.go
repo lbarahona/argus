@@ -10,7 +10,6 @@ import (
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/alert"
 	amlib "github.com/lbarahona/argus/internal/alertmanager"
-	grafanalib "github.com/lbarahona/argus/internal/grafana"
 	"github.com/lbarahona/argus/internal/anomaly"
 	"github.com/lbarahona/argus/internal/budget"
 	"github.com/lbarahona/argus/internal/config"
@@ -35,6 +34,8 @@ import (
 	"github.com/lbarahona/argus/internal/timeline"
 	"github.com/lbarahona/argus/internal/tui"
 	"github.com/lbarahona/argus/internal/watch"
+	grafanalib "github.com/lbarahona/argus/internal/grafana"
+	promlib "github.com/lbarahona/argus/internal/prometheus"
 	"github.com/lbarahona/argus/pkg/types"
 	"github.com/spf13/cobra"
 	"os/signal"
@@ -90,6 +91,7 @@ func main() {
 		doctorCmd(),
 		amCmd(),
 		grafanaCmd(),
+		promCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -3173,6 +3175,7 @@ func parseMatcher(s string) (amlib.Matcher, error) {
 
 
 
+
 // ── Grafana Integration ─────────────────────────────────
 
 func getGrafanaClient() (*grafanalib.Client, error) {
@@ -3508,5 +3511,245 @@ func grafanaSummaryCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
+
+
+// --- Prometheus commands ---
+
+func getPromClient() (*promlib.Client, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	if !cfg.Prometheus.IsConfigured() {
+		return nil, fmt.Errorf("prometheus not configured — add 'prometheus.url' to ~/.argus.yaml")
+	}
+	promCfg := promlib.PrometheusConfig{
+		URL: cfg.Prometheus.URL,
+	}
+	if cfg.Prometheus.BasicAuth.Username != "" {
+		promCfg.BasicAuth = promlib.BasicAuth{
+			Username: cfg.Prometheus.BasicAuth.Username,
+			Password: cfg.Prometheus.BasicAuth.Password,
+		}
+	}
+	return promlib.NewClient(promCfg), nil
+}
+
+func promCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "prom",
+		Short:   "Prometheus integration — query rules, targets, alerts, and metrics",
+		Long:    "Query Prometheus for alerting/recording rules, scrape targets, firing alerts, and run PromQL queries.",
+		Aliases: []string{"prometheus"},
+	}
+
+	cmd.AddCommand(
+		promRulesCmd(),
+		promTargetsCmd(),
+		promAlertsCmd(),
+		promQueryCmd(),
+		promStatusCmd(),
+		promSummaryCmd(),
+	)
+
+	return cmd
+}
+
+func promRulesCmd() *cobra.Command {
+	var ruleType string
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "rules",
+		Short: "List alerting and recording rules",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getPromClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			data, err := client.Rules(ctx, ruleType)
+			if err != nil {
+				return err
+			}
+
+			if format == "json" {
+				fmt.Println(promlib.FormatJSON(data))
+			} else {
+				fmt.Print(promlib.FormatRules(data, ruleType))
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&ruleType, "type", "", "Filter by rule type: alert, record")
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
+
+func promTargetsCmd() *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "targets",
+		Short: "Show scrape targets and their health",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getPromClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			data, err := client.Targets(ctx)
+			if err != nil {
+				return err
+			}
+
+			if format == "json" {
+				fmt.Println(promlib.FormatJSON(data))
+			} else {
+				fmt.Print(promlib.FormatTargets(data))
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
+
+func promAlertsCmd() *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "alerts",
+		Short: "Show firing and pending alerts from Prometheus",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getPromClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			data, err := client.Alerts(ctx)
+			if err != nil {
+				return err
+			}
+
+			if format == "json" {
+				fmt.Println(promlib.FormatJSON(data))
+			} else {
+				fmt.Print(promlib.FormatAlerts(data))
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
+
+func promQueryCmd() *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "query [promql]",
+		Short: "Execute an instant PromQL query",
+		Long:  "Run a PromQL query against Prometheus and display the results.\n\nExamples:\n  argus prom query 'up'\n  argus prom query 'rate(http_requests_total[5m])'",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getPromClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			result, err := client.Query(ctx, args[0], nil)
+			if err != nil {
+				return err
+			}
+
+			if format == "json" {
+				fmt.Println(promlib.FormatJSON(result))
+			} else {
+				fmt.Print(promlib.FormatQuery(result))
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
+
+func promStatusCmd() *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show Prometheus version, health, and runtime info",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getPromClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			healthy, _ := client.Healthy(ctx)
+			runtime, runtimeErr := client.RuntimeInfo(ctx)
+			build, buildErr := client.BuildInfo(ctx)
+
+			if runtimeErr != nil && buildErr != nil {
+				return fmt.Errorf("failed to fetch status: %v / %v", runtimeErr, buildErr)
+			}
+
+			if format == "json" {
+				data := map[string]interface{}{
+					"healthy": healthy,
+					"runtime": runtime,
+					"build":   build,
+				}
+				fmt.Println(promlib.FormatJSON(data))
+			} else {
+				fmt.Print(promlib.FormatStatus(runtime, build, healthy))
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	return cmd
+}
+
+func promSummaryCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "summary",
+		Short: "Quick overview of rules, alerts, and targets",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getPromClient()
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			rules, _ := client.Rules(ctx, "")
+			targets, _ := client.Targets(ctx)
+			alerts, _ := client.Alerts(ctx)
+
+			summary := promlib.BuildSummary(rules, targets, alerts)
+			fmt.Print(promlib.FormatSummary(summary))
+			return nil
+		},
+	}
+
 	return cmd
 }
