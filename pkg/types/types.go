@@ -48,6 +48,20 @@ func (c AlertmanagerConfig) IsConfigured() bool {
 	return c.URL != ""
 }
 
+// PrometheusConfig holds Prometheus connection details.
+type PrometheusConfig struct {
+	URL       string `yaml:"url" json:"url"`
+	BasicAuth struct {
+		Username string `yaml:"username,omitempty" json:"username,omitempty"`
+		Password string `yaml:"password,omitempty" json:"password,omitempty"`
+	} `yaml:"basic_auth,omitempty" json:"basic_auth,omitempty"`
+}
+
+// IsConfigured returns true if the Prometheus URL is set.
+func (c PrometheusConfig) IsConfigured() bool {
+	return c.URL != ""
+}
+
 // Config represents the application configuration.
 type Config struct {
 	AnthropicKey    string              `yaml:"anthropic_key"`     // Legacy (still works)
@@ -55,6 +69,7 @@ type Config struct {
 	DefaultInstance string              `yaml:"default_instance"`
 	Instances       map[string]Instance `yaml:"instances"`
 	Alertmanager    AlertmanagerConfig  `yaml:"alertmanager,omitempty"` // Alertmanager integration
+	Prometheus      PrometheusConfig    `yaml:"prometheus,omitempty"`   // Prometheus integration
 }
 
 // GetAIConfig returns the effective AI config, merging legacy fields.
