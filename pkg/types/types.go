@@ -69,7 +69,19 @@ type Config struct {
 	DefaultInstance string              `yaml:"default_instance"`
 	Instances       map[string]Instance `yaml:"instances"`
 	Alertmanager    AlertmanagerConfig  `yaml:"alertmanager,omitempty"` // Alertmanager integration
+	Grafana         GrafanaConfig       `yaml:"grafana,omitempty"`      // Grafana integration
 	Prometheus      PrometheusConfig    `yaml:"prometheus,omitempty"`   // Prometheus integration
+}
+
+// GrafanaConfig holds Grafana connection details.
+type GrafanaConfig struct {
+	URL    string `yaml:"url" json:"url"`
+	APIKey string `yaml:"api_key,omitempty" json:"api_key,omitempty"` // Service account token or API key
+}
+
+// IsConfigured returns true if the Grafana URL is set.
+func (c GrafanaConfig) IsConfigured() bool {
+	return c.URL != ""
 }
 
 // GetAIConfig returns the effective AI config, merging legacy fields.
