@@ -2,7 +2,7 @@
 
 **AI-powered observability CLI for SREs.**
 
-Argus connects to your [Signoz](https://signoz.io) instances and uses AI to analyze logs, metrics, and traces with natural language queries. Supports **Anthropic Claude**, **OpenAI GPT-4o**, and **Amazon Bedrock** as AI providers.
+Argus connects to your observability stack and uses AI to analyze logs, metrics, and traces with natural language queries. Integrates with **Signoz**, **Prometheus**, **Alertmanager**, **Grafana**, and **Loki**. Supports **Anthropic Claude**, **OpenAI GPT-4o**, and **Amazon Bedrock** as AI providers.
 
 > *"Why is latency high on the payments service?"* — Just ask Argus.
 
@@ -18,6 +18,8 @@ Argus connects to your [Signoz](https://signoz.io) instances and uses AI to anal
 - ⚡ **Streaming AI responses** — Real-time analysis output as tokens arrive
 - 🎨 **Beautiful terminal UI** — Severity-colored logs, formatted traces, metric tables
 - 🔧 **Simple configuration** — YAML config, multiple profiles, easy setup
+- 🔌 **Full observability stack** — Signoz + Alertmanager + Prometheus + Grafana + Loki
+- 🛡️ **CI/CD deployment gates** — SHIP/CAUTION/HOLD verdicts for safe deploys
 
 ## Installation
 
@@ -116,6 +118,19 @@ argus ask "why is latency high on the payments service?"
 | `argus grafana firing` | List firing alert instances |
 | `argus grafana status` | Check Grafana health and version |
 | `argus grafana summary` | Quick overview of Grafana instance |
+| `argus prom rules` | List alerting and recording rules |
+| `argus prom targets` | Show scrape targets and their health |
+| `argus prom alerts` | Show firing and pending alerts from Prometheus |
+| `argus prom query` | Execute an instant PromQL query |
+| `argus prom status` | Show Prometheus version, health, and runtime info |
+| `argus prom summary` | Quick overview of rules, alerts, and targets |
+| `argus loki query` | Query logs with LogQL |
+| `argus loki labels` | List all label names |
+| `argus loki label-values` | List values for a label |
+| `argus loki series` | Find matching log series |
+| `argus loki stats` | Show ingestion statistics |
+| `argus loki status` | Check Loki health and version |
+| `argus loki summary` | Quick overview of Loki instance |
 
 ### Logs
 
@@ -461,6 +476,85 @@ argus grafana status
 
 # JSON output (all subcommands support --format json)
 argus grafana dashboards --format json
+```
+
+### Prometheus
+
+Query Prometheus directly for rules, targets, alerts, and instant PromQL queries.
+
+```bash
+# Configure Prometheus URL in ~/.argus/config.yaml:
+# prometheus:
+#   url: http://localhost:9090
+#   basic_auth:          # optional
+#     username: admin
+#     password: secret
+
+# List all alerting and recording rules
+argus prom rules
+
+# Filter by rule type
+argus prom rules --type alert
+argus prom rules --type record
+
+# Show scrape targets and their health
+argus prom targets
+
+# Show firing alerts from Prometheus
+argus prom alerts
+
+# Run instant PromQL queries
+argus prom query 'up'
+argus prom query 'rate(http_requests_total[5m])'
+
+# Quick overview (rules + alerts + targets)
+argus prom summary
+
+# Check Prometheus version and health
+argus prom status
+
+# JSON output (all subcommands support --format json)
+argus prom rules --format json
+```
+
+### Loki
+
+Query Grafana Loki for log streams, labels, series, and ingestion stats.
+
+```yaml
+# ~/.argus/config.yaml
+loki:
+  url: http://loki:3100
+  basic_auth:       # optional
+    username: admin
+    password: secret
+  tenant_id: my-org  # optional, for multi-tenant setups
+```
+
+```bash
+# Query logs with LogQL
+argus loki query '{app="api-gateway"}'
+argus loki query '{namespace="production"} |= "error"' --limit 50
+
+# Discover labels and values
+argus loki labels
+argus loki label-values app
+argus loki label-values namespace --start 1h
+
+# Find matching log series
+argus loki series '{app="api-gateway"}'
+
+# Ingestion statistics
+argus loki stats
+
+# Health and version
+argus loki status
+
+# Quick overview
+argus loki summary
+
+# JSON output (all subcommands support --format json)
+argus loki query '{app="api"}' --format json
 ```
 
 ## Configuration
