@@ -8,13 +8,16 @@ import (
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/alert"
+	amlib "github.com/lbarahona/argus/internal/alertmanager"
 	"github.com/lbarahona/argus/internal/budget"
 	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/deploy"
-	"github.com/lbarahona/argus/internal/doctor"
 	"github.com/lbarahona/argus/internal/diff"
+	"github.com/lbarahona/argus/internal/doctor"
 	"github.com/lbarahona/argus/internal/explain"
+	grafanalib "github.com/lbarahona/argus/internal/grafana"
 	"github.com/lbarahona/argus/internal/guard"
+	promlib "github.com/lbarahona/argus/internal/prometheus"
 	"github.com/lbarahona/argus/internal/report"
 	"github.com/lbarahona/argus/internal/signoz"
 	"github.com/lbarahona/argus/internal/slo"
@@ -139,6 +142,31 @@ type DoctorInput struct {
 	Verbose bool `json:"verbose,omitempty" jsonschema:"show detailed information"`
 }
 
+type AlertmanagerAlertsInput struct {
+	ActiveOnly bool   `json:"active_only,omitempty" jsonschema:"only return active alerts"`
+	All        bool   `json:"all,omitempty" jsonschema:"include silenced and inhibited alerts"`
+	Filter     string `json:"filter,omitempty" jsonschema:"single Alertmanager label matcher, for example severity=critical"`
+	Receiver   string `json:"receiver,omitempty" jsonschema:"filter alerts by receiver name"`
+}
+
+type AlertmanagerSilencesInput struct {
+	IncludeExpired bool `json:"include_expired,omitempty" jsonschema:"include expired silences"`
+}
+
+type PrometheusRulesInput struct {
+	Type string `json:"type,omitempty" jsonschema:"filter by rule type: alert or record"`
+}
+
+type PrometheusQueryInput struct {
+	Query string `json:"query" jsonschema:"PromQL query to execute"`
+}
+
+type GrafanaSearchInput struct {
+	Query string `json:"query,omitempty" jsonschema:"search string for dashboards or folders"`
+	Type  string `json:"type,omitempty" jsonschema:"filter by result type: dash-db or dash-folder"`
+	Limit int    `json:"limit,omitempty" jsonschema:"maximum results to return (default 100)"`
+}
+
 // Helper to load config and get client
 func getClient(instance string) (*signoz.Client, string, *types.Config, error) {
 	cfg, err := config.Load()
@@ -150,6 +178,56 @@ func getClient(instance string) (*signoz.Client, string, *types.Config, error) {
 		return nil, "", nil, err
 	}
 	return signoz.New(*inst), instKey, cfg, nil
+}
+
+func getAlertmanagerClient() (*amlib.Client, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+	if !cfg.Alertmanager.IsConfigured() {
+		return nil, fmt.Errorf("alertmanager not configured")
+	}
+	amCfg := amlib.AlertmanagerConfig{URL: cfg.Alertmanager.URL}
+	if cfg.Alertmanager.BasicAuth.Username != "" {
+		amCfg.BasicAuth = amlib.BasicAuth{
+			Username: cfg.Alertmanager.BasicAuth.Username,
+			Password: cfg.Alertmanager.BasicAuth.Password,
+		}
+	}
+	return amlib.NewClient(amCfg), nil
+}
+
+func getPromClient() (*promlib.Client, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+	if !cfg.Prometheus.IsConfigured() {
+		return nil, fmt.Errorf("prometheus not configured")
+	}
+	promCfg := promlib.PrometheusConfig{URL: cfg.Prometheus.URL}
+	if cfg.Prometheus.BasicAuth.Username != "" {
+		promCfg.BasicAuth = promlib.BasicAuth{
+			Username: cfg.Prometheus.BasicAuth.Username,
+			Password: cfg.Prometheus.BasicAuth.Password,
+		}
+	}
+	return promlib.NewClient(promCfg), nil
+}
+
+func getGrafanaClient() (*grafanalib.Client, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+	if !cfg.Grafana.IsConfigured() {
+		return nil, fmt.Errorf("grafana not configured")
+	}
+	return grafanalib.NewClient(grafanalib.GrafanaConfig{
+		URL:    cfg.Grafana.URL,
+		APIKey: cfg.Grafana.APIKey,
+	}), nil
 }
 
 func defaults(val, def int) int {
@@ -450,8 +528,8 @@ func registerTools(server *mcp.Server) {
 			}
 		}
 		out := map[string]any{
-			"health":       statuses,
-			"services":     services,
+			"health":        statuses,
+			"services":      services,
 			"recent_errors": errorLogs,
 		}
 		r, _ := textResult(jsonText(out))
@@ -712,6 +790,382 @@ func registerTools(server *mcp.Server) {
 			return r, struct{}{}, nil
 		}
 		r, _ := textResult(string(data))
+		return r, struct{}{}, nil
+	})
+
+	// Alertmanager tools
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_am_alerts",
+		Description: "List Alertmanager alerts with optional filtering",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input AlertmanagerAlertsInput) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getAlertmanagerClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		active := !input.All
+		silenced := input.All
+		inhibited := input.All
+		if input.ActiveOnly {
+			active = true
+			silenced = false
+			inhibited = false
+		}
+
+		opts := &amlib.AlertListOptions{
+			Active:    &active,
+			Silenced:  &silenced,
+			Inhibited: &inhibited,
+			Receiver:  input.Receiver,
+		}
+		if input.Filter != "" {
+			opts.Filter = []string{input.Filter}
+		}
+
+		alerts, err := client.ListAlerts(ctx, opts)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(alerts))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_am_silences",
+		Description: "List Alertmanager silences",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input AlertmanagerSilencesInput) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getAlertmanagerClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		silences, err := client.ListSilences(ctx)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		if !input.IncludeExpired {
+			filtered := make([]amlib.Silence, 0, len(silences))
+			for _, s := range silences {
+				if s.Status.State != "expired" {
+					filtered = append(filtered, s)
+				}
+			}
+			silences = filtered
+		}
+		r, _ := textResult(jsonText(silences))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_am_status",
+		Description: "Get Alertmanager cluster health and version information",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getAlertmanagerClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		status, err := client.Status(ctx)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		healthy, latency, healthErr := client.Healthy(ctx)
+		if healthErr != nil {
+			r, _ := errorResult(healthErr)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(map[string]any{
+			"healthy": healthy,
+			"latency": latency.String(),
+			"status":  status,
+		}))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_am_summary",
+		Description: "Get a quick Alertmanager summary by alert name and severity",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getAlertmanagerClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		all := true
+		alerts, err := client.ListAlerts(ctx, &amlib.AlertListOptions{
+			Active:    &all,
+			Silenced:  &all,
+			Inhibited: &all,
+		})
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(amlib.BuildSummary(alerts)))
+		return r, struct{}{}, nil
+	})
+
+	// Prometheus tools
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_prom_rules",
+		Description: "List Prometheus alerting and recording rules",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input PrometheusRulesInput) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getPromClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		data, err := client.Rules(ctx, input.Type)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(data))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_prom_targets",
+		Description: "List Prometheus scrape targets and their health",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getPromClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		data, err := client.Targets(ctx)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(data))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_prom_alerts",
+		Description: "List active Prometheus alerts",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getPromClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		data, err := client.Alerts(ctx)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(data))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_prom_query",
+		Description: "Execute an instant PromQL query",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input PrometheusQueryInput) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getPromClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		data, err := client.Query(ctx, input.Query, nil)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(data))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_prom_status",
+		Description: "Get Prometheus version, health, and runtime information",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getPromClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		healthy, _ := client.Healthy(ctx)
+		runtime, runtimeErr := client.RuntimeInfo(ctx)
+		build, buildErr := client.BuildInfo(ctx)
+		if runtimeErr != nil && buildErr != nil {
+			r, _ := errorResult(fmt.Errorf("failed to fetch status: %v / %v", runtimeErr, buildErr))
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(map[string]any{
+			"healthy": healthy,
+			"runtime": runtime,
+			"build":   build,
+		}))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_prom_summary",
+		Description: "Get a quick Prometheus summary of rules, alerts, and targets",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getPromClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		rules, _ := client.Rules(ctx, "")
+		targets, _ := client.Targets(ctx)
+		alerts, _ := client.Alerts(ctx)
+		r, _ := textResult(jsonText(promlib.BuildSummary(rules, targets, alerts)))
+		return r, struct{}{}, nil
+	})
+
+	// Grafana tools
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_grafana_dashboards",
+		Description: "List Grafana dashboards",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getGrafanaClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		dashboards, err := client.Dashboards(ctx)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(dashboards))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_grafana_search",
+		Description: "Search Grafana dashboards and folders",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input GrafanaSearchInput) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getGrafanaClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		results, err := client.Search(ctx, input.Query, input.Type, defaults(input.Limit, 100))
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(results))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_grafana_datasources",
+		Description: "List Grafana data sources",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getGrafanaClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		datasources, err := client.Datasources(ctx)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(datasources))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_grafana_alerts",
+		Description: "List Grafana alert rules",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getGrafanaClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		rules, err := client.AlertRules(ctx)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(rules))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_grafana_firing",
+		Description: "List firing Grafana alert instances",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getGrafanaClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		instances, err := client.AlertInstances(ctx)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(instances))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_grafana_status",
+		Description: "Get Grafana health, version, and organization details",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getGrafanaClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		health, err := client.Health(ctx)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		org, _ := client.Org(ctx)
+		r, _ := textResult(jsonText(map[string]any{
+			"health": health,
+			"org":    org,
+		}))
+		return r, struct{}{}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "argus_grafana_summary",
+		Description: "Get a quick Grafana summary including dashboards, datasources, and alerts",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, struct{}, error) {
+		client, err := getGrafanaClient()
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+
+		summary, err := client.BuildSummary(ctx)
+		if err != nil {
+			r, _ := errorResult(err)
+			return r, struct{}{}, nil
+		}
+		r, _ := textResult(jsonText(summary))
 		return r, struct{}{}, nil
 	})
 }

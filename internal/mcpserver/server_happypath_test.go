@@ -181,6 +181,178 @@ func mockAIHandler() http.Handler {
 	return mux
 }
 
+func mockAlertmanagerHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v2/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"cluster": map[string]any{
+				"name":   "am-prod",
+				"status": "ready",
+				"peers":  []map[string]any{{"name": "am-0", "address": "10.0.0.1"}},
+			},
+			"versionInfo": map[string]any{"version": "0.28.0"},
+			"uptime":      time.Now().Format(time.RFC3339),
+		})
+	})
+	mux.HandleFunc("/api/v2/alerts", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"labels":       map[string]string{"alertname": "HighLatency", "severity": "critical", "service": "payment-service"},
+				"annotations":  map[string]string{"summary": "Payments are slow"},
+				"startsAt":     time.Now().Add(-10 * time.Minute).Format(time.RFC3339),
+				"endsAt":       time.Now().Add(50 * time.Minute).Format(time.RFC3339),
+				"updatedAt":    time.Now().Format(time.RFC3339),
+				"generatorURL": "http://prometheus/graph?g0.expr=latency",
+				"fingerprint":  "abc123",
+				"receivers":    []map[string]string{{"name": "pagerduty"}},
+				"status":       map[string]any{"state": "active", "silencedBy": []string{}, "inhibitedBy": []string{}},
+			},
+		})
+	})
+	mux.HandleFunc("/api/v2/silences", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"id":        "silence-12345678",
+				"status":    map[string]string{"state": "active"},
+				"updatedAt": time.Now().Format(time.RFC3339),
+				"comment":   "deploy in progress",
+				"createdBy": "logan",
+				"startsAt":  time.Now().Add(-5 * time.Minute).Format(time.RFC3339),
+				"endsAt":    time.Now().Add(55 * time.Minute).Format(time.RFC3339),
+				"matchers":  []map[string]any{{"name": "service", "value": "payment-service", "isEqual": true, "isRegex": false}},
+			},
+		})
+	})
+	return mux
+}
+
+func mockPrometheusHandler() http.Handler {
+	mux := http.NewServeMux()
+	now := time.Now()
+	mux.HandleFunc("/-/healthy", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "ok")
+	})
+	mux.HandleFunc("/api/v1/status/buildinfo", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": "success",
+			"data":   map[string]any{"version": "2.55.0", "revision": "abc", "goVersion": "go1.24.0"},
+		})
+	})
+	mux.HandleFunc("/api/v1/status/runtimeinfo", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": "success",
+			"data":   map[string]any{"startTime": now.Add(-24 * time.Hour).Format(time.RFC3339), "storageRetention": "15d", "GOMAXPROCS": 4},
+		})
+	})
+	mux.HandleFunc("/api/v1/rules", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": "success",
+			"data": map[string]any{
+				"groups": []map[string]any{
+					{
+						"name":     "platform",
+						"file":     "/etc/prometheus/rules.yaml",
+						"interval": 30,
+						"rules": []map[string]any{
+							{
+								"name":   "HighLatency",
+								"query":  "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))",
+								"health": "ok",
+								"state":  "firing",
+								"type":   "alerting",
+								"alerts": []map[string]any{{
+									"labels":   map[string]string{"service": "payment-service"},
+									"state":    "firing",
+									"activeAt": now.Add(-5 * time.Minute).Format(time.RFC3339),
+									"value":    "1",
+								}},
+							},
+						},
+					},
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/api/v1/targets", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": "success",
+			"data": map[string]any{
+				"activeTargets": []map[string]any{{
+					"labels":             map[string]string{"instance": "payments:9090"},
+					"scrapePool":         "payments",
+					"scrapeUrl":          "http://payments:9090/metrics",
+					"lastScrape":         now.Add(-30 * time.Second).Format(time.RFC3339),
+					"lastScrapeDuration": 0.02,
+					"health":             "up",
+					"lastError":          "",
+				}},
+				"droppedTargets": []any{},
+			},
+		})
+	})
+	mux.HandleFunc("/api/v1/alerts", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": "success",
+			"data": map[string]any{"alerts": []map[string]any{{
+				"labels":      map[string]string{"alertname": "HighLatency", "severity": "critical"},
+				"annotations": map[string]string{"summary": "p99 too high"},
+				"state":       "firing",
+				"activeAt":    now.Add(-4 * time.Minute).Format(time.RFC3339),
+				"value":       "1",
+			}}},
+		})
+	})
+	mux.HandleFunc("/api/v1/query", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": "success",
+			"data": map[string]any{"resultType": "vector", "result": []map[string]any{{
+				"metric": map[string]string{"__name__": "up", "job": "payments"},
+				"value":  []any{fmt.Sprintf("%d", now.Unix()), "1"},
+			}}},
+		})
+	})
+	return mux
+}
+
+func mockGrafanaHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/search", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]any{{"id": 1, "uid": "pay-123", "title": "Payments Overview", "uri": "db/payments-overview", "url": "/d/pay-123/payments-overview", "slug": "payments-overview", "type": "dash-db", "folderTitle": "Platform"}})
+	})
+	mux.HandleFunc("/api/datasources", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]any{{"id": 1, "uid": "prom-main", "name": "Prometheus", "type": "prometheus", "typeName": "Prometheus", "access": "proxy", "url": "http://prometheus:9090", "isDefault": true, "readOnly": false}})
+	})
+	mux.HandleFunc("/api/v1/provisioning/alert-rules", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]any{{"id": 1, "uid": "rule-1", "folderUID": "platform", "ruleGroup": "payments", "title": "Payments Error Rate", "condition": "A", "noDataState": "NoData", "execErrState": "Error", "for": "5m", "labels": map[string]string{"service": "payment-service"}, "annotations": map[string]string{"summary": "Payments failing"}, "updated": time.Now().Format(time.RFC3339)}})
+	})
+	mux.HandleFunc("/api/alertmanager/grafana/api/v2/alerts", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]any{{"labels": map[string]string{"alertname": "PaymentsErrorRate", "severity": "warning"}, "annotations": map[string]string{"summary": "Error rate elevated"}, "startsAt": time.Now().Add(-2 * time.Minute).Format(time.RFC3339), "endsAt": time.Now().Add(10 * time.Minute).Format(time.RFC3339), "updatedAt": time.Now().Format(time.RFC3339), "generatorURL": "http://grafana/alerting", "fingerprint": "g-123", "receivers": []map[string]string{{"name": "slack"}}, "status": map[string]any{"state": "active", "silencedBy": []string{}, "inhibitedBy": []string{}}}})
+	})
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"database": "ok", "version": "11.2.0", "commit": "abc123"})
+	})
+	mux.HandleFunc("/api/org", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"id": 1, "name": "Lester Labs"})
+	})
+	return mux
+}
+
 // withMockSignoz sets up a temp HOME with a valid config pointing to the mock
 // Signoz and AI servers, then runs the given function.
 func withMockSignoz(t *testing.T, signozURL, aiURL string, f func()) {
@@ -219,6 +391,44 @@ instances:
 		t.Setenv("ANTHROPIC_BASE_URL", aiURL)
 	}
 
+	f()
+}
+
+func withMockIntegrations(t *testing.T, signozURL, aiURL, amURL, promURL, grafanaURL string, f func()) {
+	t.Helper()
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	configDir := filepath.Join(tmp, ".argus")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("creating config dir: %v", err)
+	}
+
+	cfgYAML := fmt.Sprintf(`default_instance: prod
+anthropic_key: "sk-mock-key-for-testing"
+ai:
+  provider: anthropic
+  model: claude-3-5-haiku-20241022
+  anthropic_key: "sk-mock-key-for-testing"
+instances:
+  prod:
+    name: Production
+    url: %s
+    api_key: mock-api-key
+alertmanager:
+  url: %s
+prometheus:
+  url: %s
+grafana:
+  url: %s
+`, signozURL, amURL, promURL, grafanaURL)
+
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(cfgYAML), 0600); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+	if aiURL != "" {
+		t.Setenv("ANTHROPIC_BASE_URL", aiURL)
+	}
 	f()
 }
 
@@ -1182,4 +1392,189 @@ func TestTool_ArgusGuard_NamedInstance(t *testing.T) {
 	})
 }
 
+func TestTool_AlertmanagerTools_HappyPath(t *testing.T) {
+	signoz := httptest.NewServer(mockSignozHandler())
+	defer signoz.Close()
+	aiServer := httptest.NewServer(mockAIHandler())
+	defer aiServer.Close()
+	amServer := httptest.NewServer(mockAlertmanagerHandler())
+	defer amServer.Close()
+	promServer := httptest.NewServer(mockPrometheusHandler())
+	defer promServer.Close()
+	grafanaServer := httptest.NewServer(mockGrafanaHandler())
+	defer grafanaServer.Close()
 
+	withMockIntegrations(t, signoz.URL, aiServer.URL, amServer.URL, promServer.URL, grafanaServer.URL, func() {
+		cs := newTestSession(t)
+
+		alerts := callTool(t, cs, "argus_am_alerts", map[string]any{"active_only": true})
+		if alerts.IsError {
+			t.Fatalf("argus_am_alerts returned error: %s", textOf(t, alerts))
+		}
+		if text := textOf(t, alerts); !strings.Contains(text, "HighLatency") {
+			t.Fatalf("expected HighLatency in alerts output, got: %s", text)
+		}
+
+		silences := callTool(t, cs, "argus_am_silences", map[string]any{})
+		if silences.IsError {
+			t.Fatalf("argus_am_silences returned error: %s", textOf(t, silences))
+		}
+		if text := textOf(t, silences); !strings.Contains(text, "deploy in progress") {
+			t.Fatalf("expected silence comment in output, got: %s", text)
+		}
+
+		status := callTool(t, cs, "argus_am_status", map[string]any{})
+		if status.IsError {
+			t.Fatalf("argus_am_status returned error: %s", textOf(t, status))
+		}
+		if text := textOf(t, status); !strings.Contains(text, "0.28.0") || !strings.Contains(text, "am-prod") {
+			t.Fatalf("expected version and cluster in output, got: %s", text)
+		}
+
+		summary := callTool(t, cs, "argus_am_summary", map[string]any{})
+		if summary.IsError {
+			t.Fatalf("argus_am_summary returned error: %s", textOf(t, summary))
+		}
+		if text := textOf(t, summary); !strings.Contains(text, "critical") || !strings.Contains(text, "HighLatency") {
+			t.Fatalf("expected summary content, got: %s", text)
+		}
+	})
+}
+
+func TestTool_PrometheusTools_HappyPath(t *testing.T) {
+	signoz := httptest.NewServer(mockSignozHandler())
+	defer signoz.Close()
+	aiServer := httptest.NewServer(mockAIHandler())
+	defer aiServer.Close()
+	amServer := httptest.NewServer(mockAlertmanagerHandler())
+	defer amServer.Close()
+	promServer := httptest.NewServer(mockPrometheusHandler())
+	defer promServer.Close()
+	grafanaServer := httptest.NewServer(mockGrafanaHandler())
+	defer grafanaServer.Close()
+
+	withMockIntegrations(t, signoz.URL, aiServer.URL, amServer.URL, promServer.URL, grafanaServer.URL, func() {
+		cs := newTestSession(t)
+
+		rules := callTool(t, cs, "argus_prom_rules", map[string]any{"type": "alert"})
+		if rules.IsError {
+			t.Fatalf("argus_prom_rules returned error: %s", textOf(t, rules))
+		}
+		if text := textOf(t, rules); !strings.Contains(text, "HighLatency") {
+			t.Fatalf("expected rule name in output, got: %s", text)
+		}
+
+		targets := callTool(t, cs, "argus_prom_targets", map[string]any{})
+		if targets.IsError {
+			t.Fatalf("argus_prom_targets returned error: %s", textOf(t, targets))
+		}
+		if text := textOf(t, targets); !strings.Contains(text, "payments:9090") {
+			t.Fatalf("expected target instance in output, got: %s", text)
+		}
+
+		alerts := callTool(t, cs, "argus_prom_alerts", map[string]any{})
+		if alerts.IsError {
+			t.Fatalf("argus_prom_alerts returned error: %s", textOf(t, alerts))
+		}
+		if text := textOf(t, alerts); !strings.Contains(text, "p99 too high") {
+			t.Fatalf("expected alert annotation in output, got: %s", text)
+		}
+
+		query := callTool(t, cs, "argus_prom_query", map[string]any{"query": "up"})
+		if query.IsError {
+			t.Fatalf("argus_prom_query returned error: %s", textOf(t, query))
+		}
+		if text := textOf(t, query); !strings.Contains(text, "\"up\"") || !strings.Contains(text, "payments") {
+			t.Fatalf("expected query result content, got: %s", text)
+		}
+
+		status := callTool(t, cs, "argus_prom_status", map[string]any{})
+		if status.IsError {
+			t.Fatalf("argus_prom_status returned error: %s", textOf(t, status))
+		}
+		if text := textOf(t, status); !strings.Contains(text, "2.55.0") || !strings.Contains(text, "15d") {
+			t.Fatalf("expected build/runtime content, got: %s", text)
+		}
+
+		summary := callTool(t, cs, "argus_prom_summary", map[string]any{})
+		if summary.IsError {
+			t.Fatalf("argus_prom_summary returned error: %s", textOf(t, summary))
+		}
+		if text := textOf(t, summary); !strings.Contains(text, "TotalAlertRules") || !strings.Contains(text, "FiringAlerts") {
+			t.Fatalf("expected summary fields, got: %s", text)
+		}
+	})
+}
+
+func TestTool_GrafanaTools_HappyPath(t *testing.T) {
+	signoz := httptest.NewServer(mockSignozHandler())
+	defer signoz.Close()
+	aiServer := httptest.NewServer(mockAIHandler())
+	defer aiServer.Close()
+	amServer := httptest.NewServer(mockAlertmanagerHandler())
+	defer amServer.Close()
+	promServer := httptest.NewServer(mockPrometheusHandler())
+	defer promServer.Close()
+	grafanaServer := httptest.NewServer(mockGrafanaHandler())
+	defer grafanaServer.Close()
+
+	withMockIntegrations(t, signoz.URL, aiServer.URL, amServer.URL, promServer.URL, grafanaServer.URL, func() {
+		cs := newTestSession(t)
+
+		dashboards := callTool(t, cs, "argus_grafana_dashboards", map[string]any{})
+		if dashboards.IsError {
+			t.Fatalf("argus_grafana_dashboards returned error: %s", textOf(t, dashboards))
+		}
+		if text := textOf(t, dashboards); !strings.Contains(text, "Payments Overview") {
+			t.Fatalf("expected dashboard title in output, got: %s", text)
+		}
+
+		search := callTool(t, cs, "argus_grafana_search", map[string]any{"query": "Payments", "limit": float64(5)})
+		if search.IsError {
+			t.Fatalf("argus_grafana_search returned error: %s", textOf(t, search))
+		}
+		if text := textOf(t, search); !strings.Contains(text, "pay-123") {
+			t.Fatalf("expected dashboard UID in search output, got: %s", text)
+		}
+
+		datasources := callTool(t, cs, "argus_grafana_datasources", map[string]any{})
+		if datasources.IsError {
+			t.Fatalf("argus_grafana_datasources returned error: %s", textOf(t, datasources))
+		}
+		if text := textOf(t, datasources); !strings.Contains(text, "Prometheus") {
+			t.Fatalf("expected datasource name in output, got: %s", text)
+		}
+
+		alerts := callTool(t, cs, "argus_grafana_alerts", map[string]any{})
+		if alerts.IsError {
+			t.Fatalf("argus_grafana_alerts returned error: %s", textOf(t, alerts))
+		}
+		if text := textOf(t, alerts); !strings.Contains(text, "Payments Error Rate") {
+			t.Fatalf("expected alert rule in output, got: %s", text)
+		}
+
+		firing := callTool(t, cs, "argus_grafana_firing", map[string]any{})
+		if firing.IsError {
+			t.Fatalf("argus_grafana_firing returned error: %s", textOf(t, firing))
+		}
+		if text := textOf(t, firing); !strings.Contains(text, "PaymentsErrorRate") {
+			t.Fatalf("expected firing alert name in output, got: %s", text)
+		}
+
+		status := callTool(t, cs, "argus_grafana_status", map[string]any{})
+		if status.IsError {
+			t.Fatalf("argus_grafana_status returned error: %s", textOf(t, status))
+		}
+		if text := textOf(t, status); !strings.Contains(text, "11.2.0") || !strings.Contains(text, "Lester Labs") {
+			t.Fatalf("expected grafana status content, got: %s", text)
+		}
+
+		summary := callTool(t, cs, "argus_grafana_summary", map[string]any{})
+		if summary.IsError {
+			t.Fatalf("argus_grafana_summary returned error: %s", textOf(t, summary))
+		}
+		if text := textOf(t, summary); !strings.Contains(text, "Dashboards") || !strings.Contains(text, "Datasources") {
+			t.Fatalf("expected summary fields, got: %s", text)
+		}
+	})
+}

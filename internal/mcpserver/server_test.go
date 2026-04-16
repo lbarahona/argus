@@ -623,6 +623,23 @@ func TestRegisterTools_ToolsAreListable(t *testing.T) {
 			"argus_budget",
 			"argus_guard",
 			"argus_doctor",
+			"argus_am_alerts",
+			"argus_am_silences",
+			"argus_am_status",
+			"argus_am_summary",
+			"argus_prom_rules",
+			"argus_prom_targets",
+			"argus_prom_alerts",
+			"argus_prom_query",
+			"argus_prom_status",
+			"argus_prom_summary",
+			"argus_grafana_dashboards",
+			"argus_grafana_search",
+			"argus_grafana_datasources",
+			"argus_grafana_alerts",
+			"argus_grafana_firing",
+			"argus_grafana_status",
+			"argus_grafana_summary",
 		}
 
 		registered := make(map[string]bool)
@@ -638,6 +655,59 @@ func TestRegisterTools_ToolsAreListable(t *testing.T) {
 
 		if len(res.Tools) < len(wantTools) {
 			t.Errorf("expected at least %d tools, got %d", len(wantTools), len(res.Tools))
+		}
+	})
+}
+
+func TestTool_ArgusAlertmanagerTools_NoConfig(t *testing.T) {
+	withEmptyHome(t, func() {
+		cs := newTestSession(t)
+		for _, tool := range []string{"argus_am_alerts", "argus_am_silences", "argus_am_status", "argus_am_summary"} {
+			result := callTool(t, cs, tool, map[string]any{})
+			if !result.IsError {
+				t.Errorf("expected error result for %s", tool)
+			}
+		}
+	})
+}
+
+func TestTool_ArgusPrometheusTools_NoConfig(t *testing.T) {
+	withEmptyHome(t, func() {
+		cs := newTestSession(t)
+		cases := map[string]map[string]any{
+			"argus_prom_rules":   {},
+			"argus_prom_targets": {},
+			"argus_prom_alerts":  {},
+			"argus_prom_query":   {"query": "up"},
+			"argus_prom_status":  {},
+			"argus_prom_summary": {},
+		}
+		for tool, args := range cases {
+			result := callTool(t, cs, tool, args)
+			if !result.IsError {
+				t.Errorf("expected error result for %s", tool)
+			}
+		}
+	})
+}
+
+func TestTool_ArgusGrafanaTools_NoConfig(t *testing.T) {
+	withEmptyHome(t, func() {
+		cs := newTestSession(t)
+		cases := map[string]map[string]any{
+			"argus_grafana_dashboards":  {},
+			"argus_grafana_search":      {"query": "kubernetes"},
+			"argus_grafana_datasources": {},
+			"argus_grafana_alerts":      {},
+			"argus_grafana_firing":      {},
+			"argus_grafana_status":      {},
+			"argus_grafana_summary":     {},
+		}
+		for tool, args := range cases {
+			result := callTool(t, cs, tool, args)
+			if !result.IsError {
+				t.Errorf("expected error result for %s", tool)
+			}
 		}
 	})
 }
