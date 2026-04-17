@@ -10,33 +10,33 @@ import (
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/alert"
 	amlib "github.com/lbarahona/argus/internal/alertmanager"
-	grafanalib "github.com/lbarahona/argus/internal/grafana"
-	lokilib "github.com/lbarahona/argus/internal/loki"
 	"github.com/lbarahona/argus/internal/anomaly"
 	"github.com/lbarahona/argus/internal/budget"
 	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/correlate"
+	"github.com/lbarahona/argus/internal/deploy"
 	"github.com/lbarahona/argus/internal/deps"
 	"github.com/lbarahona/argus/internal/diff"
-	"github.com/lbarahona/argus/internal/guard"
-	"github.com/lbarahona/argus/internal/incident"
-	"github.com/lbarahona/argus/internal/deploy"
 	"github.com/lbarahona/argus/internal/doctor"
 	"github.com/lbarahona/argus/internal/explain"
 	"github.com/lbarahona/argus/internal/forecast"
+	grafanalib "github.com/lbarahona/argus/internal/grafana"
+	"github.com/lbarahona/argus/internal/guard"
+	"github.com/lbarahona/argus/internal/incident"
+	lokilib "github.com/lbarahona/argus/internal/loki"
 	"github.com/lbarahona/argus/internal/mcpserver"
-	pmlib "github.com/lbarahona/argus/internal/postmortem"
-	"github.com/lbarahona/argus/internal/runbook"
 	"github.com/lbarahona/argus/internal/output"
+	pmlib "github.com/lbarahona/argus/internal/postmortem"
+	promlib "github.com/lbarahona/argus/internal/prometheus"
 	"github.com/lbarahona/argus/internal/report"
+	"github.com/lbarahona/argus/internal/runbook"
+	"github.com/lbarahona/argus/internal/scorecard"
 	"github.com/lbarahona/argus/internal/signoz"
 	"github.com/lbarahona/argus/internal/slo"
-	topkg "github.com/lbarahona/argus/internal/top"
-	"github.com/lbarahona/argus/internal/scorecard"
 	"github.com/lbarahona/argus/internal/timeline"
+	topkg "github.com/lbarahona/argus/internal/top"
 	"github.com/lbarahona/argus/internal/tui"
 	"github.com/lbarahona/argus/internal/watch"
-	promlib "github.com/lbarahona/argus/internal/prometheus"
 	"github.com/lbarahona/argus/pkg/types"
 	"github.com/spf13/cobra"
 	"os/signal"
@@ -353,10 +353,10 @@ func logsCmd() *cobra.Command {
 					query, instKey, dataContext)
 
 				provider, err := getAIProvider(cfg)
-			if err != nil {
-				return fmt.Errorf("creating AI provider: %w", err)
-			}
-			analyzer := ai.NewFromProvider(provider)
+				if err != nil {
+					return fmt.Errorf("creating AI provider: %w", err)
+				}
+				analyzer := ai.NewFromProvider(provider)
 				return analyzer.Analyze(prompt, os.Stdout)
 			}
 
@@ -457,10 +457,10 @@ func tracesCmd() *cobra.Command {
 					query, instKey, result.Raw)
 
 				provider, err := getAIProvider(cfg)
-			if err != nil {
-				return fmt.Errorf("creating AI provider: %w", err)
-			}
-			analyzer := ai.NewFromProvider(provider)
+				if err != nil {
+					return fmt.Errorf("creating AI provider: %w", err)
+				}
+				analyzer := ai.NewFromProvider(provider)
 				return analyzer.Analyze(prompt, os.Stdout)
 			}
 
@@ -520,10 +520,10 @@ func metricsCmd() *cobra.Command {
 					query, instKey, result.Raw)
 
 				provider, err := getAIProvider(cfg)
-			if err != nil {
-				return fmt.Errorf("creating AI provider: %w", err)
-			}
-			analyzer := ai.NewFromProvider(provider)
+				if err != nil {
+					return fmt.Errorf("creating AI provider: %w", err)
+				}
+				analyzer := ai.NewFromProvider(provider)
 				return analyzer.Analyze(prompt, os.Stdout)
 			}
 
@@ -699,10 +699,10 @@ func reportCmd() *cobra.Command {
 			fmt.Printf("%s Generating health report...\n", output.MutedStyle.Render("⏳"))
 
 			r, err := report.Generate(ctx, client, instKey, report.Options{
-				Duration:     duration,
-				WithAI:       withAI,
-				Format:       format,
-				AIProvider:   provider,
+				Duration:   duration,
+				WithAI:     withAI,
+				Format:     format,
+				AIProvider: provider,
 			})
 			if err != nil {
 				return err
@@ -1170,9 +1170,9 @@ Think of it as having a senior SRE look at all your dashboards at once.`,
 				output.MutedStyle.Render("🔍"), output.AccentStyle.Render(args[0]), output.AccentStyle.Render(instKey))
 
 			data, err := explain.Collect(ctx, client, instKey, explain.Options{
-				Service:      args[0],
-				Duration:     duration,
-				AIProvider:   provider,
+				Service:    args[0],
+				Duration:   duration,
+				AIProvider: provider,
 			})
 			if err != nil {
 				return err
@@ -1223,12 +1223,12 @@ func anomalyCmd() *cobra.Command {
 			ctx := context.Background()
 
 			opts := anomaly.Options{
-				Duration:     duration,
-				Sensitivity:  sensitivity,
-				Service:      service,
-				WithAI:       withAI,
-				AIProvider:   provider,
-				Quiet:        quiet,
+				Duration:    duration,
+				Sensitivity: sensitivity,
+				Service:     service,
+				WithAI:      withAI,
+				AIProvider:  provider,
+				Quiet:       quiet,
 			}
 
 			fmt.Printf("🔍 Scanning for anomalies (last %d min, sensitivity=%.1f)...\n\n", duration, sensitivity)
@@ -1328,11 +1328,11 @@ Use --ai to generate an AI-powered incident narrative.`,
 			ctx := context.Background()
 
 			opts := timeline.Options{
-				Duration:     duration,
-				Service:      service,
-				WithAI:       withAI,
-				Format:       format,
-				AIProvider:   provider,
+				Duration:   duration,
+				Service:    service,
+				WithAI:     withAI,
+				Format:     format,
+				AIProvider: provider,
 			}
 
 			if withAI && !hasAIConfig(cfg) {
@@ -1446,7 +1446,8 @@ the root cause in a cascade.`,
   argus correlate --service api-gateway
   argus correlate --duration 30 --ai
   argus correlate --bucket 30 --min-events 5
-  argus correlate --markdown`,
+  argus correlate --markdown
+  argus correlate stack --duration 30`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
 			if err != nil {
@@ -1462,11 +1463,11 @@ the root cause in a cascade.`,
 			ctx := context.Background()
 
 			opts := correlate.Options{
-				Duration:     duration,
-				Service:      service,
-				BucketSize:   bucketSize,
-				MinEvents:    minEvents,
-				AIProvider:   provider,
+				Duration:   duration,
+				Service:    service,
+				BucketSize: bucketSize,
+				MinEvents:  minEvents,
+				AIProvider: provider,
 			}
 
 			if useAI {
@@ -1502,7 +1503,73 @@ the root cause in a cascade.`,
 	cmd.Flags().IntVar(&minEvents, "min-events", 3, "Minimum events to form a cluster")
 	cmd.Flags().BoolVar(&useAI, "ai", false, "Include AI-powered correlation analysis")
 	cmd.Flags().BoolVar(&markdown, "markdown", false, "Output as markdown")
+	cmd.AddCommand(correlateStackCmd())
 
+	return cmd
+}
+
+func correlateStackCmd() *cobra.Command {
+	var duration int
+	var format string
+	var logLimit int
+	var samples int
+
+	cmd := &cobra.Command{
+		Use:   "stack",
+		Short: "Correlate active alerts across Alertmanager, Prometheus, Grafana, and Loki",
+		Long: `Correlate active alerts across Alertmanager, Prometheus, Grafana, and Loki.
+
+Useful during incident response when you want one view of which services are
+screaming across the stack, plus a few related Loki log samples to confirm the
+blast radius.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			amClient, err := getAMClient()
+			if err != nil {
+				return err
+			}
+			promClient, err := getPromClient()
+			if err != nil {
+				return err
+			}
+			grafanaClient, err := getGrafanaClient()
+			if err != nil {
+				return err
+			}
+			lokiClient, err := getLokiClient()
+			if err != nil {
+				return err
+			}
+
+			ctx, cancel := context.WithTimeout(cmd.Context(), 45*time.Second)
+			defer cancel()
+
+			result, err := correlate.RunStack(ctx, amClient, promClient, grafanaClient, lokiClient, correlate.StackOptions{
+				Duration:    duration,
+				LogLimit:    logLimit,
+				SampleLimit: samples,
+			})
+			if err != nil {
+				return err
+			}
+
+			switch format {
+			case "json":
+				out, err := jsonMarshal(result)
+				if err != nil {
+					return err
+				}
+				fmt.Println(string(out))
+			default:
+				fmt.Print(correlate.RenderStack(result))
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to look back for Loki samples")
+	cmd.Flags().IntVar(&logLimit, "log-limit", 50, "Maximum Loki log entries to scan per service")
+	cmd.Flags().IntVar(&samples, "samples", 3, "Maximum Loki log samples to show per correlated group")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
 	return cmd
 }
 
@@ -1730,8 +1797,8 @@ across teams via version control.`,
 	var format string
 	var category string
 	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "List all runbooks",
+		Use:     "list",
+		Short:   "List all runbooks",
 		Aliases: []string{"ls"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			store := runbook.NewStore()
@@ -1806,10 +1873,10 @@ across teams via version control.`,
 
 	// delete
 	cmd.AddCommand(&cobra.Command{
-		Use:   "delete <id>",
-		Short: "Delete a runbook",
+		Use:     "delete <id>",
+		Short:   "Delete a runbook",
 		Aliases: []string{"rm"},
-		Args:  cobra.ExactArgs(1),
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			store := runbook.NewStore()
 			rb, err := store.Load(args[0])
@@ -2011,11 +2078,11 @@ func scorecardCmd() *cobra.Command {
 			fmt.Printf("%s Generating reliability scorecard...\n", output.MutedStyle.Render("⏳"))
 
 			sc, err := scorecard.Generate(ctx, client, instKey, scorecard.Options{
-				Duration:     duration,
-				Service:      service,
-				WithAI:       withAI,
-				Format:       format,
-				AIProvider:   provider,
+				Duration:   duration,
+				Service:    service,
+				WithAI:     withAI,
+				Format:     format,
+				AIProvider: provider,
 			})
 			if err != nil {
 				return err
@@ -2081,12 +2148,12 @@ Risk levels:
 				output.MutedStyle.Render("🔮"), output.AccentStyle.Render(instKey), duration, horizon)
 
 			r, err := forecast.Generate(ctx, client, instKey, forecast.Options{
-				Duration:     duration,
-				Horizon:      horizon,
-				Service:      service,
-				Format:       format,
-				WithAI:       withAI,
-				AIProvider:   provider,
+				Duration:   duration,
+				Horizon:    horizon,
+				Service:    service,
+				Format:     format,
+				WithAI:     withAI,
+				AIProvider: provider,
 			})
 			if err != nil {
 				return err
@@ -2139,14 +2206,14 @@ func depsCmd() *cobra.Command {
 			fmt.Printf("%s Mapping service dependencies...\n", output.MutedStyle.Render("⏳"))
 
 			dm, err := deps.Generate(ctx, deps.Options{
-				Querier:  client,
-				Instance: instKey,
-				Duration: duration,
-				Service:  service,
-				Format:   format,
-				AI:       withAI,
+				Querier:    client,
+				Instance:   instKey,
+				Duration:   duration,
+				Service:    service,
+				Format:     format,
+				AI:         withAI,
 				AIProvider: provider,
-				Writer:   os.Stdout,
+				Writer:     os.Stdout,
 			})
 			if err != nil {
 				return err
@@ -2513,13 +2580,13 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
 				output.MutedStyle.Render("🚀"), output.AccentStyle.Render(instKey), duration, sensitivity)
 
 			r, err := deploy.Detect(ctx, client, instKey, deploy.Options{
-				Duration:     duration,
-				Buckets:      buckets,
-				Service:      service,
-				Sensitivity:  sensitivity,
-				Format:       format,
-				WithAI:       withAI,
-				AIProvider:   provider,
+				Duration:    duration,
+				Buckets:     buckets,
+				Service:     service,
+				Sensitivity: sensitivity,
+				Format:      format,
+				WithAI:      withAI,
+				AIProvider:  provider,
 			})
 			if err != nil {
 				return err
@@ -3526,7 +3593,6 @@ func parseMatcher(s string) (amlib.Matcher, error) {
 	return amlib.Matcher{}, fmt.Errorf("invalid matcher %q — use format name=value or name!=value", s)
 }
 
-
 // ── Grafana Integration ─────────────────────────────────
 
 func getGrafanaClient() (*grafanalib.Client, error) {
@@ -3676,8 +3742,8 @@ func grafanaDatasourcesCmd() *cobra.Command {
 	var format string
 
 	cmd := &cobra.Command{
-		Use:   "datasources",
-		Short: "List configured data sources",
+		Use:     "datasources",
+		Short:   "List configured data sources",
 		Aliases: []string{"ds"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getGrafanaClient()
@@ -3864,7 +3930,6 @@ func grafanaSummaryCmd() *cobra.Command {
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
 	return cmd
 }
-
 
 // --- Prometheus commands ---
 
