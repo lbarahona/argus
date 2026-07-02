@@ -44,7 +44,20 @@ type Timeline struct {
 	Events      []Event
 	Services    []string
 	AINarrative string
+
+	// Truncated is true when the error log fetch hit its query limit,
+	// meaning older events may be missing and patterns may be skewed
+	// toward "rising"/"new".
+	Truncated bool
+	// DataCaveat is a human-readable warning describing the truncation,
+	// set only when Truncated is true.
+	DataCaveat string
 }
+
+// timelineFetchLimit is the max number of error log entries fetched per
+// query for timeline reconstruction. Fetches are newest-N, so hitting this
+// limit means older events are undercounted.
+const timelineFetchLimit = 500
 
 // Options configures timeline generation.
 type Options struct {
@@ -80,9 +93,14 @@ func Generate(ctx context.Context, client signoz.SignozQuerier, instKey string, 
 
 	// 2. Collect error logs
 	serviceFilter := opts.Service
-	errorLogs, err := client.QueryLogs(ctx, serviceFilter, dur, 500, "ERROR")
+	errorLogs, err := client.QueryLogs(ctx, serviceFilter, dur, timelineFetchLimit, "ERROR")
 	if err != nil {
 		return nil, fmt.Errorf("querying error logs: %w", err)
+	}
+
+	if len(errorLogs.Logs) >= timelineFetchLimit {
+		tl.Truncated = true
+		tl.DataCaveat = fmt.Sprintf("Log fetch hit the %d-entry limit; older buckets undercount and trends may be skewed toward 'rising'.", timelineFetchLimit)
 	}
 
 	// 3. Collect traces for latency analysis
@@ -438,6 +456,10 @@ func (tl *Timeline) RenderTerminal(w io.Writer) {
 	fmt.Fprintf(w, "  Events:   %d\n", len(tl.Events))
 	fmt.Fprintf(w, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
 
+	if tl.Truncated && tl.DataCaveat != "" {
+		fmt.Fprintf(w, "  ⚠️  %s\n\n", tl.DataCaveat)
+	}
+
 	if len(tl.Events) == 0 {
 		fmt.Fprintf(w, "  ✅ No incidents detected in this time window.\n\n")
 		return
@@ -503,6 +525,10 @@ func (tl *Timeline) RenderMarkdown(w io.Writer) {
 		tl.StartTime.Format("15:04:05"), tl.EndTime.Format("15:04:05"), tl.Duration)
 	fmt.Fprintf(w, "- **Services:** %s\n", strings.Join(tl.Services, ", "))
 	fmt.Fprintf(w, "- **Events:** %d\n\n", len(tl.Events))
+
+	if tl.Truncated && tl.DataCaveat != "" {
+		fmt.Fprintf(w, "> ⚠️ **%s**\n\n", tl.DataCaveat)
+	}
 
 	if len(tl.Events) == 0 {
 		fmt.Fprintf(w, "✅ No incidents detected.\n")

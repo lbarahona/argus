@@ -14,6 +14,10 @@ func (r *Result) RenderTerminal(w io.Writer) {
 	fmt.Fprintf(w, "  Instance: %s  |  Window: %dm  |  Sensitivity: %s\n", r.Instance, r.Duration, r.Sensitivity)
 	fmt.Fprintf(w, "  Generated: %s\n\n", r.GeneratedAt.Format("2006-01-02 15:04:05"))
 
+	if r.Truncated && r.DataCaveat != "" {
+		fmt.Fprintf(w, "  ⚠️  %s\n\n", r.DataCaveat)
+	}
+
 	// Overall verdict
 	verdictIcon := impactIcon(r.Summary.OverallImpact)
 	fmt.Fprintf(w, "  %s Overall Impact: %s (score: %s)\n",
@@ -101,6 +105,10 @@ func (r *Result) RenderMarkdown(w io.Writer) {
 	fmt.Fprintf(w, "- **Window:** %d minutes\n", r.Duration)
 	fmt.Fprintf(w, "- **Sensitivity:** %s\n", r.Sensitivity)
 	fmt.Fprintf(w, "- **Generated:** %s\n\n", r.GeneratedAt.Format("2006-01-02 15:04:05"))
+
+	if r.Truncated && r.DataCaveat != "" {
+		fmt.Fprintf(w, "> ⚠️ **%s**\n\n", r.DataCaveat)
+	}
 
 	// Summary
 	fmt.Fprintf(w, "## Summary\n\n")

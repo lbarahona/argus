@@ -89,7 +89,20 @@ type Result struct {
 	Summary        Summary         `json:"summary"`
 	AISummary      string          `json:"ai_summary,omitempty"`
 	GeneratedAt    time.Time       `json:"generated_at"`
+
+	// Truncated is true when the log fetch hit its query limit, meaning
+	// older buckets may undercount and change points may be skewed toward
+	// "rising"/"new".
+	Truncated bool `json:"truncated,omitempty"`
+	// DataCaveat is a human-readable warning describing the truncation,
+	// set only when Truncated is true.
+	DataCaveat string `json:"data_caveat,omitempty"`
 }
+
+// deployFetchLimit is the max number of log entries fetched per query for
+// change-point detection. Fetches are newest-N, so hitting this limit means
+// older buckets are undercounted.
+const deployFetchLimit = 1000
 
 // Summary provides a high-level overview.
 type Summary struct {
@@ -170,7 +183,7 @@ func Detect(ctx context.Context, client signoz.SignozQuerier, instKey string, op
 	}
 
 	// Fetch error logs for the full duration
-	allLogs, err := client.QueryLogs(ctx, opts.Service, opts.Duration, 1000, "ERROR")
+	allLogs, err := client.QueryLogs(ctx, opts.Service, opts.Duration, deployFetchLimit, "ERROR")
 	if err != nil {
 		return nil, fmt.Errorf("querying logs: %w", err)
 	}
@@ -188,6 +201,11 @@ func Detect(ctx context.Context, client signoz.SignozQuerier, instKey string, op
 		Buckets:     opts.Buckets,
 		Sensitivity: opts.Sensitivity,
 		GeneratedAt: now,
+	}
+
+	if len(allLogs.Logs) >= deployFetchLimit {
+		result.Truncated = true
+		result.DataCaveat = fmt.Sprintf("Log fetch hit the %d-entry limit; older buckets undercount and trends may be skewed toward 'rising'.", deployFetchLimit)
 	}
 
 	bucketSize := time.Duration(opts.Duration/opts.Buckets) * time.Minute

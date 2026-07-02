@@ -185,6 +185,43 @@ func TestGenerateWithLatencySpike(t *testing.T) {
 	}
 }
 
+func TestGenerate_TruncationCaveat(t *testing.T) {
+	now := time.Now()
+	logs := make([]types.LogEntry, timelineFetchLimit) // == the fetch limit
+	for i := range logs {
+		logs[i] = types.LogEntry{ServiceName: "api", Timestamp: now.Add(-time.Duration(i) * time.Second), Body: "err"}
+	}
+	mock := &mockQuerier{
+		healthOk: true,
+		services: []types.Service{{Name: "api", NumCalls: 100, NumErrors: 1}},
+		logs:     &types.QueryResult{Logs: logs},
+	}
+
+	tl, err := Generate(context.Background(), mock, "test", Options{Duration: 60})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !tl.Truncated || tl.DataCaveat == "" {
+		t.Errorf("fetch at limit must set Truncated + DataCaveat, got %+v / %q", tl.Truncated, tl.DataCaveat)
+	}
+}
+
+func TestGenerate_NoTruncationBelowLimit(t *testing.T) {
+	mock := &mockQuerier{
+		healthOk: true,
+		services: []types.Service{{Name: "api", NumCalls: 100, NumErrors: 1}},
+		logs:     &types.QueryResult{Logs: []types.LogEntry{{ServiceName: "api", Timestamp: time.Now(), Body: "err"}}},
+	}
+
+	tl, err := Generate(context.Background(), mock, "test", Options{Duration: 60})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tl.Truncated || tl.DataCaveat != "" {
+		t.Errorf("fetch below limit must not set Truncated/DataCaveat, got %+v / %q", tl.Truncated, tl.DataCaveat)
+	}
+}
+
 func TestDetectErrorSpikesMultipleServices(t *testing.T) {
 	now := time.Now()
 	var logs []types.LogEntry

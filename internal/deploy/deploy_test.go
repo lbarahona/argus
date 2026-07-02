@@ -337,6 +337,41 @@ func TestDetect_ServiceFilter(t *testing.T) {
 	}
 }
 
+func TestDetect_TruncationCaveat(t *testing.T) {
+	now := time.Now()
+	logs := make([]types.LogEntry, deployFetchLimit) // == the fetch limit
+	for i := range logs {
+		logs[i] = types.LogEntry{ServiceName: "api", Timestamp: now.Add(-time.Duration(i) * time.Second)}
+	}
+	mock := &mockQuerier{
+		services: []types.Service{{Name: "api"}},
+		logs:     &types.QueryResult{Logs: logs},
+	}
+
+	result, err := Detect(context.Background(), mock, "test", Options{Duration: 60, Buckets: 6})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Truncated || result.DataCaveat == "" {
+		t.Errorf("fetch at limit must set Truncated + DataCaveat, got %+v / %q", result.Truncated, result.DataCaveat)
+	}
+}
+
+func TestDetect_NoTruncationBelowLimit(t *testing.T) {
+	mock := &mockQuerier{
+		services: []types.Service{{Name: "api"}},
+		logs:     &types.QueryResult{Logs: []types.LogEntry{{ServiceName: "api", Timestamp: time.Now()}}},
+	}
+
+	result, err := Detect(context.Background(), mock, "test", Options{Duration: 60, Buckets: 6})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Truncated || result.DataCaveat != "" {
+		t.Errorf("fetch below limit must not set Truncated/DataCaveat, got %+v / %q", result.Truncated, result.DataCaveat)
+	}
+}
+
 func TestPercentile(t *testing.T) {
 	data := []float64{1, 2, 3, 4, 5, 6, 7, 8, 9, 100}
 	p99 := percentile(data, 99)

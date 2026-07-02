@@ -318,6 +318,51 @@ func TestGenerate_ServiceNotFound(t *testing.T) {
 	}
 }
 
+func TestGenerate_TruncationCaveat(t *testing.T) {
+	now := time.Now()
+	errLogs := make([]types.LogEntry, forecastFetchLimit) // == the fetch limit
+	for i := range errLogs {
+		errLogs[i] = types.LogEntry{ServiceName: "api-service", Timestamp: now.Add(-time.Duration(i) * time.Second)}
+	}
+	mock := &mockQuerier{
+		services: []types.Service{
+			{Name: "api-service", NumErrors: 10, NumCalls: 1000, ErrorRate: 1.0},
+		},
+		logs: map[string]*types.QueryResult{
+			"ERROR": {Logs: errLogs},
+			"":      {Logs: []types.LogEntry{}},
+		},
+	}
+
+	report, err := Generate(context.Background(), mock, "test", Options{Duration: 60, Horizon: 30})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !report.Truncated || report.DataCaveat == "" {
+		t.Errorf("fetch at limit must set Truncated + DataCaveat, got %+v / %q", report.Truncated, report.DataCaveat)
+	}
+}
+
+func TestGenerate_NoTruncationBelowLimit(t *testing.T) {
+	mock := &mockQuerier{
+		services: []types.Service{
+			{Name: "api-service", NumErrors: 10, NumCalls: 1000, ErrorRate: 1.0},
+		},
+		logs: map[string]*types.QueryResult{
+			"ERROR": {Logs: []types.LogEntry{{ServiceName: "api-service", Timestamp: time.Now()}}},
+			"":      {Logs: []types.LogEntry{}},
+		},
+	}
+
+	report, err := Generate(context.Background(), mock, "test", Options{Duration: 60, Horizon: 30})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if report.Truncated || report.DataCaveat != "" {
+		t.Errorf("fetch below limit must not set Truncated/DataCaveat, got %+v / %q", report.Truncated, report.DataCaveat)
+	}
+}
+
 func TestRenderTerminal(t *testing.T) {
 	report := &Report{
 		GeneratedAt:    time.Now(),

@@ -79,7 +79,19 @@ type Report struct {
 	StableCount    int
 	DegradingCount int
 	CriticalCount  int
+
+	// Truncated is true when a log fetch hit its query limit, meaning
+	// older buckets may undercount and trends may be skewed toward "rising".
+	Truncated bool
+	// DataCaveat is a human-readable warning describing the truncation,
+	// set only when Truncated is true.
+	DataCaveat string
 }
+
+// forecastFetchLimit is the max number of log entries fetched per query
+// for trend analysis. Fetches are newest-N, so hitting this limit means
+// older buckets are undercounted.
+const forecastFetchLimit = 1000
 
 // Generate produces a forecast report from Signoz data.
 func Generate(ctx context.Context, client signoz.SignozQuerier, instance string, opts Options) (*Report, error) {
@@ -109,13 +121,13 @@ func Generate(ctx context.Context, client signoz.SignozQuerier, instance string,
 	}
 
 	// Get error logs bucketed over the duration for trend analysis
-	allLogs, err := client.QueryLogs(ctx, "", opts.Duration, 1000, "ERROR")
+	allLogs, err := client.QueryLogs(ctx, "", opts.Duration, forecastFetchLimit, "ERROR")
 	if err != nil {
 		return nil, fmt.Errorf("querying error logs: %w", err)
 	}
 
 	// Get all logs for call volume estimation
-	allCallLogs, err := client.QueryLogs(ctx, "", opts.Duration, 1000, "")
+	allCallLogs, err := client.QueryLogs(ctx, "", opts.Duration, forecastFetchLimit, "")
 	if err != nil {
 		// Non-fatal, we can work without call volume trends
 		allCallLogs = &types.QueryResult{}
@@ -145,6 +157,11 @@ func Generate(ctx context.Context, client signoz.SignozQuerier, instance string,
 		Horizon:       opts.Horizon,
 		Services:      forecasts,
 		TotalServices: len(forecasts),
+	}
+
+	if len(allLogs.Logs) >= forecastFetchLimit || len(allCallLogs.Logs) >= forecastFetchLimit {
+		report.Truncated = true
+		report.DataCaveat = fmt.Sprintf("Log fetch hit the %d-entry limit; older buckets undercount and trends may be skewed toward 'rising'.", forecastFetchLimit)
 	}
 
 	for _, f := range forecasts {
@@ -412,6 +429,10 @@ func (r *Report) RenderTerminal(w io.Writer) {
 		output.AccentStyle.Render(fmt.Sprintf("%dm", r.Horizon)))
 	fmt.Fprintf(w, "  Generated: %s\n\n", r.GeneratedAt.Format("2006-01-02 15:04:05"))
 
+	if r.Truncated && r.DataCaveat != "" {
+		fmt.Fprintf(w, "  %s\n\n", output.WarningStyle.Render("⚠️  "+r.DataCaveat))
+	}
+
 	// Summary bar
 	fmt.Fprintf(w, "  Services: %d total  ", r.TotalServices)
 	fmt.Fprintf(w, "✅ %d stable  ", r.StableCount)
@@ -483,6 +504,11 @@ func (r *Report) RenderMarkdown(w io.Writer) {
 	fmt.Fprintf(w, "**Instance:** %s  \n", r.Instance)
 	fmt.Fprintf(w, "**Historical window:** %d minutes | **Forecast horizon:** %d minutes  \n", r.Duration, r.Horizon)
 	fmt.Fprintf(w, "**Generated:** %s  \n\n", r.GeneratedAt.Format("2006-01-02 15:04:05"))
+
+	if r.Truncated && r.DataCaveat != "" {
+		fmt.Fprintf(w, "> ⚠️ **%s**\n\n", r.DataCaveat)
+	}
+
 	fmt.Fprintf(w, "**Summary:** %d services — ✅ %d stable, ⚠️ %d degrading, 🔴 %d critical\n\n",
 		r.TotalServices, r.StableCount, r.DegradingCount, r.CriticalCount)
 
