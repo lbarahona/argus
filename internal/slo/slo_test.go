@@ -342,6 +342,32 @@ func TestCheckAvailabilitySubUnitBurnIsOK(t *testing.T) {
 	}
 }
 
+func TestCheckAvailabilityBurnRateEscalation(t *testing.T) {
+	c := &Checker{}
+	// 0.7% error rate on a 99.9% / 30d SLO = 7x burn: consumed is tiny
+	// (~5.8%) but the budget dies in ~4 days — must not report "ok".
+	s := SLO{Name: "avail", Type: "availability", Service: "api", Target: 99.9, Window: "30d"}
+	services := []types.Service{{Name: "api", NumCalls: 100000, NumErrors: 700}}
+	result := c.checkAvailability(s, services)
+	if result.Status != "warning" {
+		t.Errorf("7x burn should escalate to warning, got %q (consumed %.2f%%)", result.Status, result.BudgetConsumed)
+	}
+
+	// 2% error rate = 20x burn: page-level.
+	services = []types.Service{{Name: "api", NumCalls: 100000, NumErrors: 2000}}
+	result = c.checkAvailability(s, services)
+	if result.Status != "critical" {
+		t.Errorf("20x burn should escalate to critical, got %q", result.Status)
+	}
+
+	// 0.9x burn stays ok (regression guard for Tier 1 behavior).
+	services = []types.Service{{Name: "api", NumCalls: 100000, NumErrors: 90}}
+	result = c.checkAvailability(s, services)
+	if result.Status != "ok" {
+		t.Errorf("0.9x burn should stay ok, got %q", result.Status)
+	}
+}
+
 // ──────────────────────────────────────────────
 // Report Tests
 // ──────────────────────────────────────────────

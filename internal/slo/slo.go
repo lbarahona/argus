@@ -285,7 +285,7 @@ func (c *Checker) checkAvailability(slo SLO, services []types.Service) Result {
 	}
 
 	// Status based on budget consumption
-	result.Status = classifyStatus(result.BudgetConsumed)
+	result.Status = escalateForBurnRate(classifyStatus(result.BudgetConsumed), result.BurnRate)
 
 	return result
 }
@@ -339,6 +339,28 @@ func (c *Checker) checkLatency(ctx context.Context, slo SLO, services []types.Se
 	result.Status = classifyStatus(result.BudgetConsumed)
 
 	return result
+}
+
+// escalateForBurnRate raises an ok/warning status when the burn rate alone
+// demands attention. Long SLO windows make consumed-based thresholds nearly
+// untrippable from a 6h observation (a 30d SLO needs 60x burn to hit
+// "warning"), so sustained burn escalates directly — thresholds mirror the
+// budget package's classifyAlert (6x ticket, 14.4x page).
+func escalateForBurnRate(status string, burnRate float64) string {
+	rank := map[string]int{"ok": 0, "warning": 1, "critical": 2, "exhausted": 3}
+	var escalated string
+	switch {
+	case burnRate >= 14.4:
+		escalated = "critical"
+	case burnRate >= 6:
+		escalated = "warning"
+	default:
+		return status
+	}
+	if rank[escalated] > rank[status] {
+		return escalated
+	}
+	return status
 }
 
 func classifyStatus(budgetConsumed float64) string {
