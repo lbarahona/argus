@@ -199,6 +199,36 @@ func TestCheckErrorRateOK(t *testing.T) {
 	}
 }
 
+func TestCheckErrorRateUsesPercentageAsIs(t *testing.T) {
+	mock := &mockSignozClient{
+		listServicesFunc: func(ctx context.Context) ([]types.Service, error) {
+			// ErrorRate is a percentage, exactly as signoz.Client.ListServices reports it.
+			return []types.Service{
+				{Name: "api", NumCalls: 1000, NumErrors: 10, ErrorRate: 1.0},
+			}, nil
+		},
+	}
+
+	checker := NewChecker(mock, "test")
+	cfg := &AlertConfig{
+		Rules: []Rule{
+			{Name: "errors", Type: "error_rate", Operator: "gt", Warning: 5.0, Critical: 15.0},
+		},
+	}
+
+	rpt, err := checker.CheckAll(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rpt.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(rpt.Results))
+	}
+	if rpt.Results[0].Severity != SeverityOK {
+		t.Errorf("1%% error rate with 5%%/15%% thresholds should be OK, got %v (value %.2f)",
+			rpt.Results[0].Severity, rpt.Results[0].Value)
+	}
+}
+
 func TestCheckErrorRateMissingService(t *testing.T) {
 	mock := &mockSignozClient{
 		listServicesFunc: func(ctx context.Context) ([]types.Service, error) {
@@ -375,7 +405,7 @@ func TestReportExitCode(t *testing.T) {
 
 func TestFormatText(t *testing.T) {
 	rpt := &Report{
-		Instance:  "prod",
+		Instance: "prod",
 		Results: []CheckResult{
 			{Rule: "r1", Service: "api", Severity: SeverityCritical, Status: "critical", Message: "bad"},
 			{Rule: "r2", Service: "web", Severity: SeverityOK, Status: "ok", Message: "good"},

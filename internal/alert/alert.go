@@ -29,8 +29,8 @@ type Rule struct {
 	Name        string            `yaml:"name" json:"name"`
 	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
 	Service     string            `yaml:"service,omitempty" json:"service,omitempty"` // empty = all services
-	Type        string            `yaml:"type" json:"type"`                          // error_rate, latency, log_errors, service_down
-	Operator    string            `yaml:"operator" json:"operator"`                  // gt, lt, gte, lte, eq
+	Type        string            `yaml:"type" json:"type"`                           // error_rate, latency, log_errors, service_down
+	Operator    string            `yaml:"operator" json:"operator"`                   // gt, lt, gte, lte, eq
 	Warning     float64           `yaml:"warning" json:"warning"`
 	Critical    float64           `yaml:"critical" json:"critical"`
 	Duration    string            `yaml:"duration,omitempty" json:"duration,omitempty"` // e.g. "5m", "1h"
@@ -102,13 +102,13 @@ func (s Severity) Icon() string {
 
 // CheckResult holds the outcome of evaluating one rule.
 type CheckResult struct {
-	Rule     string   `json:"rule"`
-	Service  string   `json:"service"`
-	Type     string   `json:"type"`
-	Severity Severity `json:"severity"`
-	Status   string   `json:"status"` // "ok", "warning", "critical"
-	Value    float64  `json:"value"`
-	Message  string   `json:"message"`
+	Rule     string            `json:"rule"`
+	Service  string            `json:"service"`
+	Type     string            `json:"type"`
+	Severity Severity          `json:"severity"`
+	Status   string            `json:"status"` // "ok", "warning", "critical"
+	Value    float64           `json:"value"`
+	Message  string            `json:"message"`
 	Labels   map[string]string `json:"labels,omitempty"`
 }
 
@@ -319,8 +319,8 @@ func (ch *Checker) checkErrorRate(rule Rule, services []types.Service, serviceMa
 	var results []CheckResult
 
 	checkService := func(svc types.Service) {
-		rate := svc.ErrorRate * 100 // Convert to percentage
-		if svc.NumCalls > 0 && svc.ErrorRate == 0 {
+		rate := svc.ErrorRate // ListServices already reports a percentage
+		if svc.NumCalls > 0 && rate == 0 {
 			rate = float64(svc.NumErrors) / float64(svc.NumCalls) * 100
 		}
 
@@ -426,12 +426,12 @@ func (ch *Checker) checkLogErrors(ctx context.Context, rule Rule, services []typ
 			}
 		}
 		results = append(results, CheckResult{
-			Rule:    rule.Name,
-			Service: rule.Service,
-			Type:    rule.Type,
+			Rule:     rule.Name,
+			Service:  rule.Service,
+			Type:     rule.Type,
 			Severity: SeverityWarning,
-			Status:  "warning",
-			Message: fmt.Sprintf("Service %q not found", rule.Service),
+			Status:   "warning",
+			Message:  fmt.Sprintf("Service %q not found", rule.Service),
 		})
 	} else {
 		for _, svc := range services {
