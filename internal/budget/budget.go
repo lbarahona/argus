@@ -15,6 +15,11 @@ import (
 	"github.com/lbarahona/argus/pkg/types"
 )
 
+// observedWindowMins is the window the Signoz ListServices data covers (6h,
+// fixed by the client). Budget consumption must be scaled by how much of
+// the SLO window this observation actually represents.
+const observedWindowMins = 360.0
+
 // ──────────────────────────────────────────────
 // Types
 // ──────────────────────────────────────────────
@@ -26,11 +31,11 @@ type ServiceLister interface {
 
 // Options configures budget analysis.
 type Options struct {
-	Window       string // analysis window label: 1h, 6h, 24h, 7d, 30d
-	Service      string // optional: filter to specific service
-	Format       string // "terminal" or "markdown" or "json"
-	WithAI       bool   // include AI-powered recommendations
-	AIProvider   ai.Provider
+	Window     string // analysis window label: 1h, 6h, 24h, 7d, 30d
+	Service    string // optional: filter to specific service
+	Format     string // "terminal" or "markdown" or "json"
+	WithAI     bool   // include AI-powered recommendations
+	AIProvider ai.Provider
 }
 
 // BurnWindow represents error budget consumption in a specific time window.
@@ -46,24 +51,24 @@ type BurnWindow struct {
 
 // BudgetReport is the full error budget analysis for one SLO.
 type BudgetReport struct {
-	SLO              slo.SLO     `json:"slo"`
-	WindowLabel      string      `json:"window"`
-	TotalBudget      float64     `json:"total_budget_pct"`     // e.g. 0.1 for 99.9% SLO
-	BudgetConsumed   float64     `json:"budget_consumed_pct"`  // % of budget used
-	BudgetRemaining  float64     `json:"budget_remaining_pct"` // % remaining
-	CurrentAvail     float64     `json:"current_availability"` // e.g. 99.95%
-	BurnRate1h       float64     `json:"burn_rate_1h"`         // short-window burn rate
-	BurnRate6h       float64     `json:"burn_rate_6h"`         // long-window burn rate
-	BurnWindows      []BurnWindow `json:"burn_windows"`
-	ExhaustionETA    *time.Time  `json:"exhaustion_eta,omitempty"`
-	ExhaustionIn     string      `json:"exhaustion_in,omitempty"`
-	Status           string      `json:"status"`           // healthy, burning, critical, exhausted
-	Alert            string      `json:"alert,omitempty"`  // multi-window alert status
-	Policy           string      `json:"policy,omitempty"` // recommended action
-	Trend            string      `json:"trend"`            // improving, stable, degrading
-	TotalRequests    int         `json:"total_requests"`
-	FailedRequests   int         `json:"failed_requests"`
-	Datapoints       []BurnPoint `json:"datapoints,omitempty"` // for burndown chart
+	SLO             slo.SLO      `json:"slo"`
+	WindowLabel     string       `json:"window"`
+	TotalBudget     float64      `json:"total_budget_pct"`     // e.g. 0.1 for 99.9% SLO
+	BudgetConsumed  float64      `json:"budget_consumed_pct"`  // % of budget used
+	BudgetRemaining float64      `json:"budget_remaining_pct"` // % remaining
+	CurrentAvail    float64      `json:"current_availability"` // e.g. 99.95%
+	BurnRate1h      float64      `json:"burn_rate_1h"`         // short-window burn rate
+	BurnRate6h      float64      `json:"burn_rate_6h"`         // long-window burn rate
+	BurnWindows     []BurnWindow `json:"burn_windows"`
+	ExhaustionETA   *time.Time   `json:"exhaustion_eta,omitempty"`
+	ExhaustionIn    string       `json:"exhaustion_in,omitempty"`
+	Status          string       `json:"status"`           // healthy, burning, critical, exhausted
+	Alert           string       `json:"alert,omitempty"`  // multi-window alert status
+	Policy          string       `json:"policy,omitempty"` // recommended action
+	Trend           string       `json:"trend"`            // improving, stable, degrading
+	TotalRequests   int          `json:"total_requests"`
+	FailedRequests  int          `json:"failed_requests"`
+	Datapoints      []BurnPoint  `json:"datapoints,omitempty"` // for burndown chart
 }
 
 // BurnPoint represents a point in the burndown chart.
@@ -204,7 +209,13 @@ func (a *Analyzer) calculateOverallBudget(br *BudgetReport, s slo.SLO, services 
 	br.CurrentAvail = 100.0 - errorRate
 
 	if br.TotalBudget > 0 {
-		br.BudgetConsumed = math.Min(100.0, (errorRate/br.TotalBudget)*100)
+		burnRate := errorRate / br.TotalBudget
+		windowMins := float64(s.WindowMinutes())
+		observed := math.Min(observedWindowMins, windowMins)
+		// Budget consumed during the observed window, as a share of the
+		// full-window budget. A 1.0 burn rate consumes budget exactly at
+		// window pace; only the observed fraction of the window is known.
+		br.BudgetConsumed = math.Min(100.0, burnRate*(observed/windowMins)*100)
 		br.BudgetRemaining = math.Max(0, 100.0-br.BudgetConsumed)
 	}
 
@@ -264,7 +275,9 @@ func predictExhaustion(br *BudgetReport) {
 	// Use burn rate to project forward
 	// If we consumed X% in 6h, project when we'll hit 100%
 	burnRate := br.BurnRate6h
-	if burnRate <= 0 {
+	if burnRate <= 1.0 {
+		// At or below 1.0x the budget is consumed no faster than the rolling
+		// SLO window replenishes it — it never exhausts.
 		return
 	}
 

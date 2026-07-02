@@ -256,8 +256,8 @@ func TestCalculateOverallBudget(t *testing.T) {
 
 	t.Run("budget burning", func(t *testing.T) {
 		br := BudgetReport{TotalBudget: 0.1}
-		s := slo.SLO{Service: "api", Target: 99.9}
-		// 0.06% error rate = 60% of 0.1% budget
+		s := slo.SLO{Service: "api", Target: 99.9, Window: "6h"}
+		// 0.06% error rate = 60% of 0.1% budget, observed over the full 6h window
 		services := []types.Service{{Name: "api", NumCalls: 10000, NumErrors: 6}}
 		a.calculateOverallBudget(&br, s, services)
 		if br.Status != "burning" {
@@ -270,8 +270,8 @@ func TestCalculateOverallBudget(t *testing.T) {
 
 	t.Run("budget critical", func(t *testing.T) {
 		br := BudgetReport{TotalBudget: 0.1}
-		s := slo.SLO{Service: "api", Target: 99.9}
-		// 0.09% error rate = 90% of 0.1% budget
+		s := slo.SLO{Service: "api", Target: 99.9, Window: "6h"}
+		// 0.09% error rate = 90% of 0.1% budget, observed over the full 6h window
 		services := []types.Service{{Name: "api", NumCalls: 10000, NumErrors: 9}}
 		a.calculateOverallBudget(&br, s, services)
 		if br.Status != "critical" {
@@ -281,7 +281,8 @@ func TestCalculateOverallBudget(t *testing.T) {
 
 	t.Run("budget exhausted", func(t *testing.T) {
 		br := BudgetReport{TotalBudget: 0.1}
-		s := slo.SLO{Service: "api", Target: 99.9}
+		s := slo.SLO{Service: "api", Target: 99.9, Window: "6h"}
+		// 0.15% error rate = 150% of 0.1% budget, observed over the full 6h window
 		services := []types.Service{{Name: "api", NumCalls: 10000, NumErrors: 15}}
 		a.calculateOverallBudget(&br, s, services)
 		if br.Status != "exhausted" {
@@ -307,6 +308,24 @@ func TestCalculateOverallBudget(t *testing.T) {
 			t.Errorf("failed requests should be 30, got %d", br.FailedRequests)
 		}
 	})
+}
+
+func TestCalculateOverallBudgetSubUnitBurnIsHealthy(t *testing.T) {
+	a := &Analyzer{}
+	br := BudgetReport{TotalBudget: 0.1}
+	s := slo.SLO{Service: "api", Target: 99.9, Window: "30d"}
+	// 0.09% error rate over the observed 6h = 0.9x burn: sustainable forever.
+	services := []types.Service{{Name: "api", NumCalls: 100000, NumErrors: 90}}
+
+	a.calculateOverallBudget(&br, s, services)
+
+	if br.Status != "healthy" {
+		t.Errorf("0.9x burn on a 30d window should be healthy, got %q (consumed %.2f%%)",
+			br.Status, br.BudgetConsumed)
+	}
+	if br.BudgetConsumed > 1.0 {
+		t.Errorf("6h at 0.9x burn should consume <1%% of a 30d budget, got %.2f%%", br.BudgetConsumed)
+	}
 }
 
 // ──────────────────────────────────────────────
@@ -383,6 +402,23 @@ func TestPredictExhaustion(t *testing.T) {
 			t.Error("burning budget should have exhaustion description")
 		}
 	})
+}
+
+func TestPredictExhaustionSubUnitBurnNeverExhausts(t *testing.T) {
+	br := BudgetReport{
+		SLO:             slo.SLO{Target: 99.9, Window: "30d"},
+		TotalBudget:     0.1,
+		BudgetConsumed:  50,
+		BudgetRemaining: 50,
+		BurnRate6h:      0.9,
+	}
+	predictExhaustion(&br)
+	if br.ExhaustionIn != "" {
+		t.Errorf("burn rate 0.9 must never predict exhaustion, got %q", br.ExhaustionIn)
+	}
+	if br.ExhaustionETA != nil {
+		t.Errorf("burn rate 0.9 must not set an ETA, got %v", br.ExhaustionETA)
+	}
 }
 
 // ──────────────────────────────────────────────
@@ -472,7 +508,8 @@ func TestAnalyzeIntegration(t *testing.T) {
 		t.Fatalf("expected 2 reports, got %d", len(report.Reports))
 	}
 
-	// API gateway: 0.05% error rate, budget is 0.1% → 50% consumed
+	// API gateway: 0.05% error rate over the observed 6h = 0.5x burn on a
+	// 30d SLO window → well under 1% consumed, not "burning".
 	apiReport := report.Reports[0]
 	if apiReport.TotalRequests != 100000 {
 		t.Errorf("API total requests = %d, want 100000", apiReport.TotalRequests)
@@ -480,11 +517,12 @@ func TestAnalyzeIntegration(t *testing.T) {
 	if apiReport.FailedRequests != 50 {
 		t.Errorf("API failed requests = %d, want 50", apiReport.FailedRequests)
 	}
-	if apiReport.Status != "burning" {
-		t.Errorf("API status = %q, want burning (50%% consumed)", apiReport.Status)
+	if apiReport.Status != "healthy" {
+		t.Errorf("API status = %q, want healthy (0.5x burn consumes <1%% of a 30d budget)", apiReport.Status)
 	}
 
-	// Auth service: 0.02% error rate, budget is 0.05% → 40% consumed
+	// Auth service: 0.02% error rate over the observed 6h = 0.4x burn on a
+	// 30d SLO window → healthy.
 	authReport := report.Reports[1]
 	if authReport.TotalRequests != 50000 {
 		t.Errorf("Auth total requests = %d, want 50000", authReport.TotalRequests)
