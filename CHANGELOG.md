@@ -2,6 +2,74 @@
 
 All notable changes to Argus will be documented in this file.
 
+## [v0.8.0] - Unreleased
+
+### Breaking Changes
+
+#### Command map
+
+| Old | New |
+| --- | --- |
+| `argus top` | `argus services --sort {errors,rate,calls}` (`--sort name`, the default, is the original listing; add `--limit`/`-l`) |
+| `argus scorecard` | `argus report --grade` |
+| `argus dashboard` | removed (use `argus status`) |
+| `argus anomaly` | `argus analyze anomalies` |
+| `argus timeline` | `argus analyze timeline` |
+| `argus correlate` | `argus analyze correlate` (`stack` subcommand moves with it) |
+| `argus deploy` | `argus analyze changes` |
+| `argus diff` | `argus analyze diff` |
+| `argus budget check` | `argus slo budget` (same flags; top-level `budget` command is gone) |
+| `argus alert` | `argus rules` (`init`/`list`/`check` subcommands and `~/.argus/alerts.yaml` unchanged) |
+| `argus instances` | removed (`argus use` with no arguments already lists configured instances) |
+| `argus loki log` (alias) | removed (`argus loki query` still works) |
+
+#### Flag changes
+
+- `logs`: `-s` (severity) removed — use `--severity`
+- `analyze anomalies`: `-s` (sensitivity) removed — use `--sensitivity`; `-s` now means `--service`; `-q` (quiet) removed — use `--quiet`
+- `incident create`: `-s` (severity) and `-d` (description) removed — use `--severity`/`--description`
+- `incident update`: `-a` (author) removed — use `--author` (`incident list` keeps `-a` for `--all`)
+- `postmortem list`: `-n` (limit) replaced by `-l`/`--limit`
+- `grafana`, `prom`, `postmortem`: `--format` gains the `-f` shorthand (previously long-only on these three)
+- Duration flags across the CLI now accept human durations (`90m`, `2h`, `1h30m`) in addition to bare minutes
+
+#### Exit codes
+
+- `slo budget` (formerly `budget check`): critical-tier now exits **2** (was 1) and warning-tier (`burning` status, ticket/watch alerts) now exits **1** (was 0) — matches the `alert`/`slo`/`guard` convention. **CI gates keying off budget's old exit codes must update in both directions.**
+- `slo check` gains `--fail-on-no-data`: exits 1 when any SLO result is `no_data`, without downgrading a higher exit code from a real warning/critical finding
+- An unrecognized `--format`/`-f` value on any command now exits **1** with a validation error instead of proceeding and failing later (or silently falling back)
+
+### Added
+
+- `runbook run --execute`: actually executes command/check steps (previously always a dry run), with per-step confirmation, timeouts, captured output, and a run log saved under `~/.argus/runbooks/runs/`; a failed run exits 1
+- Shell completion for flags (`--instance`, `--format`, duration flags) and for ID arguments (`incident update`/`resolve`/`timeline`, `runbook show`/`run`/`delete`/`validate`, `postmortem show`/`export`/`delete`/`generate`), degrading gracefully instead of erroring when a store can't be loaded
+- `slo check --fail-on-no-data` for CI gates that need to treat a broken data pipeline (SLOs stuck at `no_data`) as a failure instead of a silent pass
+- `loki query` decodes and renders matrix/vector metric results (`rate(...)`, `count_over_time(...)`), not just log streams — previously these either failed to decode or were silently dropped
+- `WindowedQuerier` (`QueryLogsRange`, `QueryTracesRange`, `ListServicesRange`) for absolute time-range queries; `analyze diff` and `postmortem generate` now query their historical/previous windows for real instead of approximating from the current one
+- Truncation caveats surfaced in output wherever results are capped (trace fetches, forecast/deploy/timeline bucketing, diff, log bodies) instead of silently skewing results
+- AI provider hardening: SSE stream errors and `max_tokens` truncation are now surfaced instead of swallowed; the AI HTTP transport honors `HTTPS_PROXY`/`HTTP_PROXY` and has bounded per-phase timeouts (with a longer, header-timeout-free path for Bedrock's non-streaming invoke endpoint); context-aware `Analyze`/`AnalyzeWithHistory`/`AnalyzeSync` variants let the MCP server and TUI propagate cancellation
+- Amazon Bedrock provider now sends the correct `bedrock-2023-05-31` payload and parses the invoke response, so it actually works against real AWS (previously broken)
+- Default Anthropic model updated to `claude-sonnet-5`
+- CI now runs tests and lint on every push and pull request (previously untriggered/misconfigured)
+
+### Fixed
+
+Highlights from the Tier 1-3 correctness passes (full detail in commit history):
+
+- Empty Signoz result envelopes no longer parsed as phantom log/trace entries
+- Error rates were being multiplied by 100 a second time (already a percentage) in `alert`, `explain`, and `postmortem` — thresholds and AI prompts now see the real value
+- `alert`'s `log_errors` rule fetched only 1 log, making its threshold effectively unreachable
+- Log severity filtering now matches `severity_text` case-insensitively (was missing lowercase/mixed-case values)
+- Budget and SLO burn-rate math: consumption now scales by the observed window (previously over/under-counted on short windows), exhaustion is only predicted above 1.0x burn, and long-window SLOs escalate status on sustained burn instead of staying "ok"
+- MCP `am_alerts` with `all=true` no longer drops firing alerts
+- Config, incident, postmortem, and runbook stores write atomically (temp file + fsync + rename) instead of risking truncation on a crash mid-write
+- Signoz v3 metrics parsing handles real object-shaped string-valued series (was failing on live data)
+- `deps` discovers cross-service edges via one unfiltered trace query (previously missed edges depending on filter scope)
+- `watch` computes real per-service P99 from traces so latency alerts can actually fire (was a stub)
+- `scorecard` error trends are now derived from time-bucketed logs instead of comparing identical data to itself
+- `postmortem` enriches metrics from the actual incident window (not an arbitrary recent window) and correctly parses markdown-formatted AI section headers, with a raw-analysis fallback and an honest caveat when enrichment falls back
+- Hardening batch: panics, MCP URL/UID escaping, path traversal, and ID-ambiguity issues closed; TUI history clamped; output ordering (status/dashboard/doctor/anomaly) made deterministic; all string truncation is rune-safe (`textutil.Truncate`), no more split multibyte UTF-8
+
 ## [v0.7.0] - 2026-04-05
 
 ### Full Observability Stack Release 🔭
