@@ -648,7 +648,7 @@ func parseWindow(w string) int {
 	w = strings.TrimSpace(strings.ToLower(w))
 	var val int
 	var unit string
-	fmt.Sscanf(w, "%d%s", &val, &unit)
+	_, _ = fmt.Sscanf(w, "%d%s", &val, &unit) // best-effort; zero falls through to default
 	if val == 0 {
 		return 1440
 	}

@@ -47,7 +47,7 @@ func (p *OpenAIProvider) AnalyzeWithSystem(ctx context.Context, system string, m
 	oaiMessages := make([]openaiMessage, 0, len(messages)+1)
 	oaiMessages = append(oaiMessages, openaiMessage{Role: "system", Content: system})
 	for _, m := range messages {
-		oaiMessages = append(oaiMessages, openaiMessage{Role: m.Role, Content: m.Content})
+		oaiMessages = append(oaiMessages, openaiMessage(m))
 	}
 
 	reqBody := openaiRequest{

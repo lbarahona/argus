@@ -538,7 +538,7 @@ func buildAIPrompt(pm *Postmortem) string {
 	}
 
 	if pm.Metrics.TotalErrors > 0 {
-		sb.WriteString(fmt.Sprintf("\nMetrics:\n"))
+		sb.WriteString("\nMetrics:\n")
 		sb.WriteString(fmt.Sprintf("  Total errors: %d\n", pm.Metrics.TotalErrors))
 		sb.WriteString(fmt.Sprintf("  Peak error rate: %.2f%%\n", pm.Metrics.PeakErrorRate))
 

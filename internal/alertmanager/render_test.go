@@ -64,9 +64,8 @@ func TestFormatAlerts_SuppressedFiltered(t *testing.T) {
 
 	// showAll=false should filter suppressed
 	out := FormatAlerts(alerts, false)
-	if strings.Contains(out, "Silenced") {
-		// The rendering shows all in the count but may filter display
-		// Just ensure it doesn't panic
+	if out == "" {
+		t.Error("FormatAlerts with showAll=false should still render output")
 	}
 
 	// showAll=true should show all

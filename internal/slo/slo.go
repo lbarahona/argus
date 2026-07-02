@@ -59,7 +59,7 @@ func (s SLO) WindowMinutes() int {
 	}
 	var val int
 	var unit string
-	fmt.Sscanf(w, "%d%s", &val, &unit)
+	_, _ = fmt.Sscanf(w, "%d%s", &val, &unit) // best-effort; zero values fall through to default
 	switch unit {
 	case "m", "min":
 		return val

@@ -131,7 +131,7 @@ func TestGetInstance(t *testing.T) {
 	}
 
 	// Get by name
-	inst, key, err = GetInstance(cfg, "staging")
+	_, key, err = GetInstance(cfg, "staging")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

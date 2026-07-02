@@ -1,7 +1,6 @@
 package mcpserver
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -14,7 +13,6 @@ import (
 	"time"
 
 	"github.com/lbarahona/argus/pkg/types"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ─── mock Signoz HTTP server ──────────────────────────────────────────────────
@@ -432,40 +430,6 @@ grafana:
 	}
 	f()
 }
-
-// newHappyTestSession creates an MCP client session backed by a mock Signoz server.
-// Returns the session and a cleanup function.
-func newHappyTestSession(t *testing.T, signozURL, aiURL string) *mcp.ClientSession {
-	t.Helper()
-	var cs *mcp.ClientSession
-	withMockSignoz(t, signozURL, aiURL, func() {
-		ctx := context.Background()
-		server := mcp.NewServer(
-			&mcp.Implementation{Name: "argus-test", Version: "1.0"},
-			&mcp.ServerOptions{},
-		)
-		registerTools(server)
-
-		cTransport, sTransport := mcp.NewInMemoryTransports()
-		serverSession, err := server.Connect(ctx, sTransport, nil)
-		if err != nil {
-			t.Fatalf("server.Connect: %v", err)
-		}
-		t.Cleanup(func() { serverSession.Close() })
-
-		cs, err = mcp.NewClient(
-			&mcp.Implementation{Name: "test-client", Version: "1.0"},
-			nil,
-		).Connect(ctx, cTransport, nil)
-		if err != nil {
-			t.Fatalf("client.Connect: %v", err)
-		}
-		t.Cleanup(func() { cs.Close() })
-	})
-	return cs
-}
-
-// ─── Happy path tool tests ────────────────────────────────────────────────────
 
 func TestTool_ArgusStatus_WithInstances(t *testing.T) {
 	signoz := httptest.NewServer(mockSignozHandler())

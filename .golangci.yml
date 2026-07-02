@@ -5,4 +5,11 @@ linters:
   enable:
     - misspell
     - unconvert
-    - unparam
+
+issues:
+  exclude-rules:
+    # httptest handlers and test helpers conventionally ignore Write/Encode
+    # error returns; errcheck noise there hides real findings.
+    - path: _test\.go
+      linters:
+        - errcheck

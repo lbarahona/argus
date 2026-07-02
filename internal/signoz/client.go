@@ -325,12 +325,6 @@ func defaultSelectColumns(dataSource string) []SelectColumn {
 	}
 }
 
-// queryRangeResponse represents the API response structure.
-type queryRangeResponse struct {
-	Status string          `json:"status"`
-	Data   json.RawMessage `json:"data"`
-}
-
 // queryRangeResultItem represents a single result series.
 type queryRangeResultItem struct {
 	QueryName string                   `json:"queryName"`

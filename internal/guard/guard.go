@@ -704,13 +704,13 @@ func renderVerdict(v Verdict, score int) string {
 	gauge := renderConfidenceGauge(score, 30)
 	switch v {
 	case VerdictShip:
-		return output.SuccessStyle.Render(fmt.Sprintf("  🚀 SHIP IT  ")) +
+		return output.SuccessStyle.Render("  🚀 SHIP IT  ") +
 			fmt.Sprintf("  Confidence: %s %d/100", gauge, score)
 	case VerdictCaution:
-		return output.WarningStyle.Render(fmt.Sprintf("  ⚠️  CAUTION  ")) +
+		return output.WarningStyle.Render("  ⚠️  CAUTION  ") +
 			fmt.Sprintf("  Confidence: %s %d/100", gauge, score)
 	case VerdictHold:
-		return output.ErrorStyle.Render(fmt.Sprintf("  🛑 HOLD     ")) +
+		return output.ErrorStyle.Render("  🛑 HOLD     ") +
 			fmt.Sprintf("  Confidence: %s %d/100", gauge, score)
 	default:
 		return "Unknown"

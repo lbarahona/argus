@@ -45,7 +45,7 @@ across teams via version control.`,
 				fmt.Printf("⚠️  Found %d existing runbooks in %s\n", len(existing), store.Dir())
 				fmt.Print("Add sample runbooks anyway? (y/N): ")
 				var answer string
-				fmt.Scanln(&answer)
+				_, _ = fmt.Scanln(&answer) // EOF/error leaves answer empty → "N"
 				if strings.ToLower(answer) != "y" {
 					fmt.Println("Aborted.")
 					return nil
@@ -148,7 +148,7 @@ across teams via version control.`,
 			}
 			fmt.Printf("Delete runbook %q? (y/N): ", rb.Name)
 			var answer string
-			fmt.Scanln(&answer)
+			_, _ = fmt.Scanln(&answer) // EOF/error leaves answer empty → "N"
 			if strings.ToLower(answer) != "y" {
 				fmt.Println("Aborted.")
 				return nil

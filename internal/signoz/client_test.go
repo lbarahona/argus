@@ -594,10 +594,8 @@ func TestSignozQuerierInterface(t *testing.T) {
 	}))
 	defer server.Close()
 
-	var querier SignozQuerier = New(types.Instance{URL: server.URL})
-	if querier == nil {
-		t.Error("Client should implement SignozQuerier")
-	}
+	// Compile-time proof that Client satisfies SignozQuerier.
+	var _ SignozQuerier = New(types.Instance{URL: server.URL})
 }
 
 func TestQueryLogsEmptyResultNoPhantomEntries(t *testing.T) {

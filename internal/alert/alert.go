@@ -54,11 +54,11 @@ func (r Rule) DurationMinutes() int {
 	}
 	if strings.HasSuffix(d, "h") {
 		var h int
-		fmt.Sscanf(d, "%dh", &h)
+		_, _ = fmt.Sscanf(d, "%dh", &h) // best-effort; 0 falls through to default
 		return h * 60
 	}
 	var m int
-	fmt.Sscanf(d, "%dm", &m)
+	_, _ = fmt.Sscanf(d, "%dm", &m) // best-effort; 0 falls through to default
 	if m == 0 {
 		return 5
 	}

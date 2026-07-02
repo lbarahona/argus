@@ -118,7 +118,7 @@ func (s *IncidentStore) generateID() string {
 	for _, inc := range s.Incidents {
 		if strings.HasPrefix(inc.ID, prefix) {
 			var num int
-			fmt.Sscanf(inc.ID[len(prefix):], "%d", &num)
+			_, _ = fmt.Sscanf(inc.ID[len(prefix):], "%d", &num) // non-numeric suffix counts as 0
 			if num > max {
 				max = num
 			}

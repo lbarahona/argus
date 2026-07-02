@@ -23,7 +23,7 @@ func configCmd() *cobra.Command {
 				fmt.Printf("⚠️  Config already exists at %s\n", config.Path())
 				fmt.Print("Overwrite? (y/N): ")
 				var answer string
-				fmt.Scanln(&answer)
+				_, _ = fmt.Scanln(&answer) // EOF/error leaves answer empty → "N"
 				if strings.ToLower(answer) != "y" {
 					fmt.Println("Aborted.")
 					return nil

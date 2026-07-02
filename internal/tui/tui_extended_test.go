@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -206,7 +207,7 @@ func TestRun_ClearThenHistoryThenExit(t *testing.T) {
 	s.stdout = out
 	s.stdin = strings.NewReader("/clear\n/history\nexit\n")
 
-	err := s.Run(nil)
+	err := s.Run(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -226,7 +227,7 @@ func TestRun_MultipleEmptyLines(t *testing.T) {
 	s.stdout = out
 	s.stdin = strings.NewReader("\n\n\n\nexit\n")
 
-	err := s.Run(nil)
+	err := s.Run(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
