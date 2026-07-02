@@ -734,3 +734,59 @@ func TestParseMetricPointNumericObjectValue(t *testing.T) {
 		t.Errorf("timestamp = %v, want 1708070400000ms", entry.Timestamp.UnixMilli())
 	}
 }
+
+// ──────────────────────────────────────────────
+// WindowedQuerier: absolute time-range queries
+// ──────────────────────────────────────────────
+
+func TestQueryLogsRangeUsesAbsoluteWindow(t *testing.T) {
+	var payload QueryRangePayload
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &payload)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"success","data":{"result":[{"queryName":"A","list":null}]}}`)
+	}))
+	defer server.Close()
+
+	start := time.Date(2026, 6, 30, 10, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 6, 30, 11, 0, 0, 0, time.UTC)
+
+	client := New(types.Instance{URL: server.URL})
+	if _, err := client.QueryLogsRange(context.Background(), "api", start, end, 50, "ERROR"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if payload.Start != start.UnixMilli() || payload.End != end.UnixMilli() {
+		t.Errorf("payload window = [%d, %d], want [%d, %d]",
+			payload.Start, payload.End, start.UnixMilli(), end.UnixMilli())
+	}
+}
+
+func TestListServicesRangeSendsAbsoluteWindow(t *testing.T) {
+	var gotStart, gotEnd string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotStart, gotEnd = body["start"], body["end"]
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	}))
+	defer server.Close()
+
+	start := time.Date(2026, 6, 30, 10, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 6, 30, 11, 0, 0, 0, time.UTC)
+
+	client := New(types.Instance{URL: server.URL})
+	if _, err := client.ListServicesRange(context.Background(), start, end); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if gotStart != fmt.Sprintf("%d", start.UnixNano()) || gotEnd != fmt.Sprintf("%d", end.UnixNano()) {
+		t.Errorf("services window = [%s, %s], want the absolute range in ns", gotStart, gotEnd)
+	}
+}
+
+func TestClientImplementsWindowedQuerier(t *testing.T) {
+	var _ WindowedQuerier = (*Client)(nil)
+}

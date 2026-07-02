@@ -26,6 +26,19 @@ type SignozQuerier interface {
 // Compile-time check that Client implements SignozQuerier.
 var _ SignozQuerier = (*Client)(nil)
 
+// WindowedQuerier is implemented by queriers that support absolute
+// time-range queries. SignozQuerier's methods always anchor to time.Now();
+// consumers that need historical windows type-assert to this interface and
+// must degrade visibly when it is unavailable.
+type WindowedQuerier interface {
+	QueryLogsRange(ctx context.Context, service string, start, end time.Time, limit int, severityFilter string) (*types.QueryResult, error)
+	QueryTracesRange(ctx context.Context, service string, start, end time.Time, limit int) (*types.QueryResult, error)
+	ListServicesRange(ctx context.Context, start, end time.Time) ([]types.Service, error)
+}
+
+// Compile-time check that Client implements WindowedQuerier.
+var _ WindowedQuerier = (*Client)(nil)
+
 // Client communicates with a Signoz instance.
 type Client struct {
 	baseURL    string
@@ -80,15 +93,18 @@ func (c *Client) Health(ctx context.Context) (bool, time.Duration, error) {
 	return false, latency, fmt.Errorf("status %d", resp.StatusCode)
 }
 
-// ListServices returns services known to Signoz.
+// ListServices returns services known to Signoz over the default 6h window.
 func (c *Client) ListServices(ctx context.Context) ([]types.Service, error) {
 	now := time.Now()
-	start := now.Add(-6 * time.Hour)
+	return c.ListServicesRange(ctx, now.Add(-6*time.Hour), now)
+}
 
+// ListServicesRange returns services with aggregates over [start, end].
+func (c *Client) ListServicesRange(ctx context.Context, start, end time.Time) ([]types.Service, error) {
 	// Signoz v1/services requires a POST with start/end timestamps (epoch nanoseconds as strings).
 	reqBody := map[string]interface{}{
 		"start": fmt.Sprintf("%d", start.UnixNano()),
-		"end":   fmt.Sprintf("%d", now.UnixNano()),
+		"end":   fmt.Sprintf("%d", end.UnixNano()),
 	}
 	body, err := json.Marshal(reqBody)
 	if err != nil {
@@ -212,12 +228,20 @@ type QueryRangeParams struct {
 	SelectColumns      []SelectColumn
 	Limit              int
 	DurationMinutes    int
+	// StartTime/EndTime, when both non-zero, pin the query to an absolute
+	// window instead of the DurationMinutes lookback from now.
+	StartTime time.Time
+	EndTime   time.Time
 }
 
 // BuildQueryRangePayload constructs a v3-compatible query_range request.
 func BuildQueryRangePayload(params QueryRangeParams) QueryRangePayload {
 	now := time.Now()
 	start := now.Add(-time.Duration(params.DurationMinutes) * time.Minute)
+	if !params.StartTime.IsZero() && !params.EndTime.IsZero() {
+		start = params.StartTime
+		now = params.EndTime
+	}
 
 	step := 60
 	if params.PanelType == "graph" && params.DurationMinutes > 0 {
@@ -338,8 +362,17 @@ func (c *Client) postQueryRange(ctx context.Context, payload QueryRangePayload) 
 	return respBody, nil
 }
 
-// QueryLogs queries logs from Signoz.
+// QueryLogs queries logs from Signoz over the last durationMinutes.
 func (c *Client) QueryLogs(ctx context.Context, service string, durationMinutes, limit int, severityFilter string) (*types.QueryResult, error) {
+	return c.queryLogs(ctx, service, durationMinutes, time.Time{}, time.Time{}, limit, severityFilter)
+}
+
+// QueryLogsRange queries logs over an absolute [start, end] window.
+func (c *Client) QueryLogsRange(ctx context.Context, service string, start, end time.Time, limit int, severityFilter string) (*types.QueryResult, error) {
+	return c.queryLogs(ctx, service, 0, start, end, limit, severityFilter)
+}
+
+func (c *Client) queryLogs(ctx context.Context, service string, durationMinutes int, start, end time.Time, limit int, severityFilter string) (*types.QueryResult, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -368,6 +401,8 @@ func (c *Client) QueryLogs(ctx context.Context, service string, durationMinutes,
 		OrderBy:           []OrderByItem{{ColumnName: "timestamp", Order: "desc"}},
 		Limit:             limit,
 		DurationMinutes:   durationMinutes,
+		StartTime:         start,
+		EndTime:           end,
 	})
 
 	respBody, err := c.postQueryRange(ctx, payload)
@@ -443,8 +478,17 @@ func (c *Client) QueryMetrics(ctx context.Context, metricName string, durationMi
 	}, nil
 }
 
-// QueryTraces queries traces from Signoz.
+// QueryTraces queries traces from Signoz over the last durationMinutes.
 func (c *Client) QueryTraces(ctx context.Context, service string, durationMinutes, limit int) (*types.QueryResult, error) {
+	return c.queryTraces(ctx, service, durationMinutes, time.Time{}, time.Time{}, limit)
+}
+
+// QueryTracesRange queries traces over an absolute [start, end] window.
+func (c *Client) QueryTracesRange(ctx context.Context, service string, start, end time.Time, limit int) (*types.QueryResult, error) {
+	return c.queryTraces(ctx, service, 0, start, end, limit)
+}
+
+func (c *Client) queryTraces(ctx context.Context, service string, durationMinutes int, start, end time.Time, limit int) (*types.QueryResult, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -466,6 +510,8 @@ func (c *Client) QueryTraces(ctx context.Context, service string, durationMinute
 		OrderBy:           []OrderByItem{{ColumnName: "timestamp", Order: "desc"}},
 		Limit:             limit,
 		DurationMinutes:   durationMinutes,
+		StartTime:         start,
+		EndTime:           end,
 	})
 
 	respBody, err := c.postQueryRange(ctx, payload)
