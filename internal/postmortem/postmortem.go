@@ -551,17 +551,38 @@ func buildAIPrompt(pm *Postmortem) string {
 	return sb.String()
 }
 
+// normalizeHeaderLine strips leading markdown/list decoration ("## ", "**",
+// "1. ", "> ") and trailing "**"/":" noise so section headers match however
+// the model formats them.
+func normalizeHeaderLine(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimLeft(s, "#>_ ")
+	s = strings.TrimPrefix(s, "**")
+	// numbered lists: "1. " / "2) "
+	for len(s) > 0 && s[0] >= '0' && s[0] <= '9' {
+		s = s[1:]
+	}
+	s = strings.TrimPrefix(s, ".")
+	s = strings.TrimPrefix(s, ")")
+	s = strings.TrimSpace(s)
+	s = strings.TrimSuffix(s, "**")
+	return s
+}
+
 func parseAIResponse(pm *Postmortem, response string) {
 	sections := map[string]string{}
 	currentSection := ""
 	var currentContent strings.Builder
 
 	for _, line := range strings.Split(response, "\n") {
-		trimmed := strings.TrimSpace(line)
-		upper := strings.ToUpper(trimmed)
+		normalized := normalizeHeaderLine(line)
+		upper := strings.ToUpper(normalized)
 
-		// Only match section headers at start of line (not inside list items)
-		isSectionLine := !strings.HasPrefix(trimmed, "-") && !strings.HasPrefix(trimmed, "*") && !strings.HasPrefix(trimmed, "[")
+		// Bullets ("- x", "* x") are content, but bold ("**X**") is decoration.
+		trimmed := strings.TrimSpace(line)
+		isSectionLine := !strings.HasPrefix(trimmed, "- ") &&
+			!(strings.HasPrefix(trimmed, "* ") && !strings.HasPrefix(trimmed, "**")) &&
+			!strings.HasPrefix(trimmed, "[")
 
 		newSection := ""
 		if isSectionLine {
@@ -577,12 +598,17 @@ func parseAIResponse(pm *Postmortem, response string) {
 				{"IMPACT:", "impact"},
 			}
 			for _, h := range headers {
-				if strings.HasPrefix(upper, h.prefix) {
+				if strings.HasPrefix(upper, h.prefix) || upper == strings.TrimSuffix(h.prefix, ":") {
 					newSection = h.section
-					// Strip the header prefix from the line (case-insensitive)
-					line = strings.TrimSpace(line)
-					if len(line) >= len(h.prefix) {
-						line = strings.TrimSpace(line[len(h.prefix):])
+					// Strip the header prefix from the normalized line (case-insensitive)
+					line = normalized
+					if strings.HasPrefix(upper, h.prefix) {
+						if len(line) >= len(h.prefix) {
+							line = strings.TrimSpace(line[len(h.prefix):])
+						}
+					} else {
+						// Matched without trailing colon (e.g. "## ROOT CAUSE"): nothing to strip.
+						line = ""
 					}
 					break
 				}
@@ -609,6 +635,12 @@ func parseAIResponse(pm *Postmortem, response string) {
 	}
 	if currentSection != "" {
 		sections[currentSection] = strings.TrimSpace(currentContent.String())
+	}
+
+	if len(sections) == 0 && strings.TrimSpace(response) != "" {
+		// No recognizable sections: keep the analysis rather than discarding it.
+		pm.RootCause = strings.TrimSpace(response)
+		return
 	}
 
 	if rc, ok := sections["root_cause"]; ok {

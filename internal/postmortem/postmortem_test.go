@@ -431,6 +431,32 @@ ACTION ITEMS:
 	assert.Empty(t, pm.Lessons)
 }
 
+func TestParseAIResponseMarkdownHeaders(t *testing.T) {
+	cases := []string{
+		"**ROOT CAUSE:** The pool was exhausted.\n\n**LESSONS LEARNED:**\n- Size pools",
+		"## ROOT CAUSE\nThe pool was exhausted.\n\n## LESSONS LEARNED\n- Size pools",
+		"1. ROOT CAUSE: The pool was exhausted.\n2. LESSONS LEARNED:\n- Size pools",
+	}
+	for i, response := range cases {
+		pm := &Postmortem{}
+		parseAIResponse(pm, response)
+		if !strings.Contains(pm.RootCause, "pool was exhausted") {
+			t.Errorf("case %d: root cause lost from markdown-formatted response, got %q", i, pm.RootCause)
+		}
+		if len(pm.Lessons) == 0 {
+			t.Errorf("case %d: lessons lost", i)
+		}
+	}
+}
+
+func TestParseAIResponseNoHeadersKeepsRawAnalysis(t *testing.T) {
+	pm := &Postmortem{}
+	parseAIResponse(pm, "The incident was caused by a cache stampede after the deploy.")
+	if !strings.Contains(pm.RootCause, "cache stampede") {
+		t.Errorf("headerless response must be preserved in RootCause, got %q", pm.RootCause)
+	}
+}
+
 // ──────────────────────────────────────────────
 // Tests: Action item parsing
 // ──────────────────────────────────────────────
