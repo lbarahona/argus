@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1439,6 +1440,45 @@ func TestTool_AlertmanagerTools_HappyPath(t *testing.T) {
 			t.Fatalf("expected summary content, got: %s", text)
 		}
 	})
+}
+
+func TestTool_AmAlerts_AllIncludesActive(t *testing.T) {
+	signoz := httptest.NewServer(mockSignozHandler())
+	defer signoz.Close()
+	aiServer := httptest.NewServer(mockAIHandler())
+	defer aiServer.Close()
+
+	var gotQuery url.Values
+	amServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v2/alerts" {
+			gotQuery = r.URL.Query()
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `[]`)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer amServer.Close()
+	promServer := httptest.NewServer(mockPrometheusHandler())
+	defer promServer.Close()
+	grafanaServer := httptest.NewServer(mockGrafanaHandler())
+	defer grafanaServer.Close()
+
+	withMockIntegrations(t, signoz.URL, aiServer.URL, amServer.URL, promServer.URL, grafanaServer.URL, func() {
+		cs := newTestSession(t)
+		result := callTool(t, cs, "argus_am_alerts", map[string]any{"all": true})
+		if result.IsError {
+			t.Fatalf("argus_am_alerts returned error: %s", textOf(t, result))
+		}
+	})
+
+	if gotQuery.Get("active") != "true" {
+		t.Errorf("all=true must keep active=true, got active=%q", gotQuery.Get("active"))
+	}
+	if gotQuery.Get("silenced") != "true" || gotQuery.Get("inhibited") != "true" {
+		t.Errorf("all=true should include silenced and inhibited, got silenced=%q inhibited=%q",
+			gotQuery.Get("silenced"), gotQuery.Get("inhibited"))
+	}
 }
 
 func TestTool_PrometheusTools_HappyPath(t *testing.T) {

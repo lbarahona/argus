@@ -804,11 +804,12 @@ func registerTools(server *mcp.Server) {
 			return r, struct{}{}, nil
 		}
 
-		active := !input.All
+		// Active alerts are always included; "all" additionally includes
+		// silenced and inhibited ones, "active_only" excludes them.
+		active := true
 		silenced := input.All
 		inhibited := input.All
 		if input.ActiveOnly {
-			active = true
 			silenced = false
 			inhibited = false
 		}
