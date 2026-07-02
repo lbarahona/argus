@@ -63,6 +63,7 @@ across teams via version control.`,
 	// list
 	var format string
 	var category string
+	fmts := formatSet{JSON: true}
 	listCmd := &cobra.Command{
 		Use:     "list",
 		Short:   "List all runbooks",
@@ -90,7 +91,7 @@ across teams via version control.`,
 			}, nil, rbs)
 		},
 	}
-	addFormatFlag(listCmd, &format, "text")
+	addFormatFlag(listCmd, &format, "text", fmts)
 	listCmd.Flags().StringVarP(&category, "category", "c", "", "Filter by category")
 	cmd.AddCommand(listCmd)
 

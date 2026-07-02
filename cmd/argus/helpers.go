@@ -118,27 +118,58 @@ func completeIDs(load func() ([]string, error)) func(cmd *cobra.Command, args []
 	}
 }
 
-// validFormats matches renderOutput's accepted values.
-var validFormats = []string{"terminal", "markdown", "json"}
-
-// addFormatFlag registers -f/--format with completion. def preserves each
-// command's existing default string.
-func addFormatFlag(cmd *cobra.Command, target *string, def string) {
-	cmd.Flags().StringVarP(target, "format", "f", def, "Output format: terminal, markdown, json")
-	_ = cmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return validFormats, cobra.ShellCompDirectiveNoFileComp
-	})
+// formatSet names the render targets a command actually supports. Terminal
+// is always supported; Markdown/JSON opt in to the rest. It is the single
+// source of truth for a command's --format flag: help text, shell
+// completion, and (via validate) the eager pre-work gate all derive from it,
+// so a flag can never advertise a format renderOutput will go on to reject.
+type formatSet struct {
+	Markdown bool
+	JSON     bool // terminal is always supported
 }
 
-// validateFormat rejects unknown formats before any expensive work happens.
-// renderOutput re-validates at render time; this is the eager gate.
-func validateFormat(format string) error {
-	switch format {
-	case "", "terminal", "text", "table", "markdown", "md", "json":
-		return nil
-	default:
-		return fmt.Errorf("unknown format %q (valid: terminal, markdown, json)", format)
+// list returns the supported format names in display order.
+func (fs formatSet) list() []string {
+	out := []string{"terminal"}
+	if fs.Markdown {
+		out = append(out, "markdown")
 	}
+	if fs.JSON {
+		out = append(out, "json")
+	}
+	return out
+}
+
+// validate rejects formats outside the set (synonyms text/table/md
+// accepted). Known-but-unsupported formats get a "not supported by this
+// command" message; genuinely unrecognized formats get "unknown format".
+func (fs formatSet) validate(format string) error {
+	switch format {
+	case "", "terminal", "text", "table":
+		return nil
+	case "markdown", "md":
+		if fs.Markdown {
+			return nil
+		}
+	case "json":
+		if fs.JSON {
+			return nil
+		}
+	default:
+		return fmt.Errorf("unknown format %q (valid: %s)", format, strings.Join(fs.list(), ", "))
+	}
+	return fmt.Errorf("format %q is not supported by this command (valid: %s)", format, strings.Join(fs.list(), ", "))
+}
+
+// addFormatFlag registers -f/--format with completion. def preserves each
+// command's existing default string. fs drives both the help text and the
+// shell completion values, so they always match what the command actually
+// renders.
+func addFormatFlag(cmd *cobra.Command, target *string, def string, fs formatSet) {
+	cmd.Flags().StringVarP(target, "format", "f", def, "Output format: "+strings.Join(fs.list(), ", "))
+	_ = cmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return fs.list(), cobra.ShellCompDirectiveNoFileComp
+	})
 }
 
 // minutesValue is a pflag.Value accepting bare minutes ("90") or Go-style

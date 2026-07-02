@@ -101,13 +101,14 @@ func doctorCmd() *cobra.Command {
 		verbose bool
 		format  string
 	)
+	fmts := formatSet{Markdown: true, JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Diagnose configuration and connectivity issues",
 		Long:  "Run diagnostic checks on config, Signoz instances, AI keys, and network connectivity.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateFormat(format); err != nil {
+			if err := fmts.validate(format); err != nil {
 				return err
 			}
 			ctx := cmd.Context()
@@ -140,7 +141,7 @@ func doctorCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed information for each check")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 
 	return cmd
 }

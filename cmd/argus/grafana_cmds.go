@@ -53,6 +53,7 @@ func grafanaCmd() *cobra.Command {
 
 func grafanaDashboardsCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "dashboards",
@@ -76,12 +77,13 @@ func grafanaDashboardsCmd() *cobra.Command {
 			}, nil, dashboards)
 		},
 	}
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	return cmd
 }
 
 func grafanaDashboardGetCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "dashboard [uid]",
@@ -106,7 +108,7 @@ func grafanaDashboardGetCmd() *cobra.Command {
 			}, nil, dm)
 		},
 	}
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	return cmd
 }
 
@@ -116,6 +118,7 @@ func grafanaSearchCmd() *cobra.Command {
 		kind   string
 		limit  int
 	)
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "search [query]",
@@ -144,7 +147,7 @@ func grafanaSearchCmd() *cobra.Command {
 			}, nil, results)
 		},
 	}
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	cmd.Flags().StringVar(&kind, "type", "", "Filter by type: dash-db, dash-folder")
 	cmd.Flags().IntVar(&limit, "limit", 100, "Max results")
 	return cmd
@@ -152,6 +155,7 @@ func grafanaSearchCmd() *cobra.Command {
 
 func grafanaDatasourcesCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:     "datasources",
@@ -176,12 +180,13 @@ func grafanaDatasourcesCmd() *cobra.Command {
 			}, nil, ds)
 		},
 	}
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	return cmd
 }
 
 func grafanaFoldersCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "folders",
@@ -205,12 +210,13 @@ func grafanaFoldersCmd() *cobra.Command {
 			}, nil, folders)
 		},
 	}
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	return cmd
 }
 
 func grafanaAlertsCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "alerts",
@@ -234,12 +240,13 @@ func grafanaAlertsCmd() *cobra.Command {
 			}, nil, rules)
 		},
 	}
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	return cmd
 }
 
 func grafanaAlertInstancesCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "firing",
@@ -263,12 +270,13 @@ func grafanaAlertInstancesCmd() *cobra.Command {
 			}, nil, instances)
 		},
 	}
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	return cmd
 }
 
 func grafanaStatusCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -299,12 +307,13 @@ func grafanaStatusCmd() *cobra.Command {
 			}, nil, data)
 		},
 	}
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	return cmd
 }
 
 func grafanaSummaryCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "summary",
@@ -328,6 +337,6 @@ func grafanaSummaryCmd() *cobra.Command {
 			}, nil, summary)
 		},
 	}
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	return cmd
 }

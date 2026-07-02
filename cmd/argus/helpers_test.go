@@ -253,19 +253,80 @@ func TestAddDurationFlag_ParsesFromCommandLine(t *testing.T) {
 	assert.Equal(t, 120, duration)
 }
 
-func TestValidateFormat_Synonyms(t *testing.T) {
-	for _, format := range []string{"", "terminal", "text", "table", "markdown", "md", "json"} {
-		t.Run(format, func(t *testing.T) {
-			assert.NoError(t, validateFormat(format))
+func TestFormatSet_List(t *testing.T) {
+	tests := []struct {
+		name string
+		fs   formatSet
+		want []string
+	}{
+		{name: "terminal only", fs: formatSet{}, want: []string{"terminal"}},
+		{name: "markdown only", fs: formatSet{Markdown: true}, want: []string{"terminal", "markdown"}},
+		{name: "json only", fs: formatSet{JSON: true}, want: []string{"terminal", "json"}},
+		{name: "markdown and json", fs: formatSet{Markdown: true, JSON: true}, want: []string{"terminal", "markdown", "json"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.fs.list())
 		})
 	}
 }
 
-func TestValidateFormat_UnknownErrors(t *testing.T) {
-	err := validateFormat("bogus")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `unknown format "bogus"`)
-	assert.Contains(t, err.Error(), "valid: terminal, markdown, json")
+func TestFormatSet_Validate(t *testing.T) {
+	tests := []struct {
+		name       string
+		fs         formatSet
+		format     string
+		wantErr    bool
+		errContain string
+	}{
+		// terminal + its synonyms are always accepted, regardless of set.
+		{name: "empty format always ok", fs: formatSet{}, format: ""},
+		{name: "terminal always ok", fs: formatSet{}, format: "terminal"},
+		{name: "text synonym always ok", fs: formatSet{}, format: "text"},
+		{name: "table synonym always ok", fs: formatSet{}, format: "table"},
+
+		// in-set passes, including synonyms.
+		{name: "markdown in set", fs: formatSet{Markdown: true}, format: "markdown"},
+		{name: "md synonym in set", fs: formatSet{Markdown: true}, format: "md"},
+		{name: "json in set", fs: formatSet{JSON: true}, format: "json"},
+
+		// out-of-set: known format, but not supported by this command.
+		{
+			name: "markdown out of set", fs: formatSet{JSON: true}, format: "markdown",
+			wantErr: true, errContain: `format "markdown" is not supported by this command (valid: terminal, json)`,
+		},
+		{
+			name: "md synonym out of set", fs: formatSet{JSON: true}, format: "md",
+			wantErr: true, errContain: `format "md" is not supported by this command (valid: terminal, json)`,
+		},
+		{
+			name: "json out of set", fs: formatSet{Markdown: true}, format: "json",
+			wantErr: true, errContain: `format "json" is not supported by this command (valid: terminal, markdown)`,
+		},
+		{
+			name: "json out of set with empty set", fs: formatSet{}, format: "json",
+			wantErr: true, errContain: `format "json" is not supported by this command (valid: terminal)`,
+		},
+
+		// unknown formats are always rejected, with the set's own list.
+		{
+			name: "unknown format", fs: formatSet{Markdown: true}, format: "bogus",
+			wantErr: true, errContain: `unknown format "bogus" (valid: terminal, markdown)`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.fs.validate(tt.format)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContain)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
 }
 
 func TestAddInstanceFlag_RegistersWithoutPanic(t *testing.T) {
@@ -337,7 +398,7 @@ func TestAddFormatFlag_RegistersWithoutPanicAndDefault(t *testing.T) {
 	var format string
 
 	assert.NotPanics(t, func() {
-		addFormatFlag(cmd, &format, "terminal")
+		addFormatFlag(cmd, &format, "terminal", formatSet{Markdown: true, JSON: true})
 	})
 
 	flag := cmd.Flags().Lookup("format")
@@ -346,14 +407,53 @@ func TestAddFormatFlag_RegistersWithoutPanicAndDefault(t *testing.T) {
 	assert.Equal(t, "terminal", format)
 }
 
-func TestAddFormatFlag_CompletionReturnsValidFormats(t *testing.T) {
-	cmd := &cobra.Command{Use: "test"}
-	var format string
-	addFormatFlag(cmd, &format, "")
+func TestAddFormatFlag_CompletionReflectsSet(t *testing.T) {
+	tests := []struct {
+		name string
+		fs   formatSet
+	}{
+		{name: "terminal only", fs: formatSet{}},
+		{name: "markdown only", fs: formatSet{Markdown: true}},
+		{name: "json only", fs: formatSet{JSON: true}},
+		{name: "markdown and json", fs: formatSet{Markdown: true, JSON: true}},
+	}
 
-	completionFunc, exists := cmd.GetFlagCompletionFunc("format")
-	require.True(t, exists)
-	completions, directive := completionFunc(cmd, nil, "")
-	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	assert.Equal(t, validFormats, completions)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test"}
+			var format string
+			addFormatFlag(cmd, &format, "", tt.fs)
+
+			completionFunc, exists := cmd.GetFlagCompletionFunc("format")
+			require.True(t, exists)
+			completions, directive := completionFunc(cmd, nil, "")
+			assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+			assert.Equal(t, tt.fs.list(), completions)
+		})
+	}
+}
+
+func TestAddFormatFlag_HelpTextReflectsSet(t *testing.T) {
+	tests := []struct {
+		name string
+		fs   formatSet
+		want string
+	}{
+		{name: "terminal only", fs: formatSet{}, want: "Output format: terminal"},
+		{name: "markdown only", fs: formatSet{Markdown: true}, want: "Output format: terminal, markdown"},
+		{name: "json only", fs: formatSet{JSON: true}, want: "Output format: terminal, json"},
+		{name: "markdown and json", fs: formatSet{Markdown: true, JSON: true}, want: "Output format: terminal, markdown, json"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test"}
+			var format string
+			addFormatFlag(cmd, &format, "", tt.fs)
+
+			flag := cmd.Flags().Lookup("format")
+			require.NotNil(t, flag)
+			assert.Equal(t, tt.want, flag.Usage)
+		})
+	}
 }

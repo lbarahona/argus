@@ -49,6 +49,7 @@ func postmortemGenerateCmd() *cobra.Command {
 	var useAI bool
 	var format string
 	var instance string
+	fmts := formatSet{Markdown: true, JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "generate <incident-id>",
@@ -56,7 +57,7 @@ func postmortemGenerateCmd() *cobra.Command {
 		Long:  "Collects incident timeline, Signoz metrics, error logs, and optionally runs AI analysis to produce a structured postmortem document.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateFormat(format); err != nil {
+			if err := fmts.validate(format); err != nil {
 				return err
 			}
 			incidentID := args[0]
@@ -153,7 +154,7 @@ func postmortemGenerateCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&useAI, "ai", false, "Enable AI-powered root cause analysis and action items")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	addInstanceFlag(cmd, &instance)
 	cmd.ValidArgsFunction = completeIDs(incidentIDs)
 
@@ -185,13 +186,14 @@ func postmortemListCmd() *cobra.Command {
 
 func postmortemShowCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{Markdown: true, JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "show <postmortem-id>",
 		Short: "Display a postmortem",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateFormat(format); err != nil {
+			if err := fmts.validate(format); err != nil {
 				return err
 			}
 			store, err := pmlib.Load()
@@ -218,7 +220,7 @@ func postmortemShowCmd() *cobra.Command {
 		},
 	}
 
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	cmd.ValidArgsFunction = completeIDs(postmortemIDs)
 
 	return cmd

@@ -59,6 +59,8 @@ func lokiQueryCmd() *cobra.Command {
 		labels   bool
 	)
 
+	fmts := formatSet{JSON: true}
+
 	cmd := &cobra.Command{
 		Use:   "query [logql]",
 		Short: "Query logs with LogQL",
@@ -103,7 +105,7 @@ Examples:
 
 	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back (e.g. 90, 90m, 2h)")
 	cmd.Flags().IntVarP(&limit, "limit", "l", 100, "Maximum number of log entries")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	cmd.Flags().BoolVar(&labels, "labels", false, "Show labels for each log entry")
 
 	return cmd
@@ -114,6 +116,8 @@ func lokiLabelsCmd() *cobra.Command {
 		duration int
 		format   string
 	)
+
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "labels",
@@ -143,7 +147,7 @@ func lokiLabelsCmd() *cobra.Command {
 	}
 
 	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back (e.g. 90, 90m, 2h)")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 
 	return cmd
 }
@@ -153,6 +157,8 @@ func lokiLabelValuesCmd() *cobra.Command {
 		duration int
 		format   string
 	)
+
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "label-values [label]",
@@ -185,7 +191,7 @@ func lokiLabelValuesCmd() *cobra.Command {
 	}
 
 	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back (e.g. 90, 90m, 2h)")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 
 	return cmd
 }
@@ -195,6 +201,8 @@ func lokiSeriesCmd() *cobra.Command {
 		duration int
 		format   string
 	)
+
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "series [matcher...]",
@@ -228,7 +236,7 @@ func lokiSeriesCmd() *cobra.Command {
 	}
 
 	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back (e.g. 90, 90m, 2h)")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 
 	return cmd
 }
@@ -239,6 +247,8 @@ func lokiStatsCmd() *cobra.Command {
 		query    string
 		format   string
 	)
+
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "stats",
@@ -282,13 +292,14 @@ func lokiStatsCmd() *cobra.Command {
 
 	addDurationFlag(cmd, &duration, 60, "Duration in minutes (e.g. 90, 90m, 2h)")
 	cmd.Flags().StringVarP(&query, "query", "q", "", "Optional LogQL selector to scope stats (default: derived from your labels)")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 
 	return cmd
 }
 
 func lokiStatusCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -320,12 +331,13 @@ func lokiStatusCmd() *cobra.Command {
 		},
 	}
 
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	return cmd
 }
 
 func lokiSummaryCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "summary",
@@ -351,6 +363,6 @@ func lokiSummaryCmd() *cobra.Command {
 		},
 	}
 
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	return cmd
 }

@@ -59,6 +59,7 @@ func amAlertsCmd() *cobra.Command {
 		showAll bool
 		filter  []string
 	)
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "alerts",
@@ -93,7 +94,7 @@ func amAlertsCmd() *cobra.Command {
 		},
 	}
 
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	cmd.Flags().BoolVarP(&showAll, "all", "a", false, "Show all alerts (including suppressed)")
 	cmd.Flags().StringArrayVar(&filter, "filter", nil, "Label filter (e.g. alertname=HighLatency)")
 
@@ -105,6 +106,7 @@ func amSilencesCmd() *cobra.Command {
 		format      string
 		showExpired bool
 	)
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "silences",
@@ -130,7 +132,7 @@ func amSilencesCmd() *cobra.Command {
 		},
 	}
 
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	cmd.Flags().BoolVar(&showExpired, "expired", false, "Include expired silences")
 
 	return cmd
@@ -236,6 +238,7 @@ func amSilenceDeleteCmd() *cobra.Command {
 
 func amStatusCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -262,12 +265,13 @@ func amStatusCmd() *cobra.Command {
 		},
 	}
 
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	return cmd
 }
 
 func amSummaryCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "summary",
@@ -312,7 +316,7 @@ func amSummaryCmd() *cobra.Command {
 		},
 	}
 
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	return cmd
 }
 

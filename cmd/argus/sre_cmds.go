@@ -67,6 +67,7 @@ Exit codes: 0 = all OK, 1 = warnings, 2 = critical alerts found.`,
 
 	var instance string
 	var format string
+	fmts := formatSet{JSON: true}
 	checkCmd := &cobra.Command{
 		Use:   "check",
 		Short: "Evaluate all alert rules against Signoz",
@@ -79,7 +80,7 @@ Exit code reflects highest severity: 0=ok, 1=warning, 2=critical.`,
   argus rules check -i production
   argus rules check --format json | jq '.summary'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateFormat(format); err != nil {
+			if err := fmts.validate(format); err != nil {
 				return err
 			}
 			alertCfg, err := alert.LoadAlerts()
@@ -112,7 +113,7 @@ Exit code reflects highest severity: 0=ok, 1=warning, 2=critical.`,
 		},
 	}
 	addInstanceFlag(checkCmd, &instance)
-	addFormatFlag(checkCmd, &format, "text")
+	addFormatFlag(checkCmd, &format, "text", fmts)
 	cmd.AddCommand(checkCmd)
 
 	return cmd
@@ -178,6 +179,7 @@ Exit codes: 0 = all OK, 1 = warnings, 2 = critical/exhausted.`,
 	var instance string
 	var format string
 	var failOnNoData bool
+	fmts := formatSet{JSON: true}
 	checkCmd := &cobra.Command{
 		Use:   "check",
 		Short: "Evaluate all SLOs against Signoz data",
@@ -195,7 +197,7 @@ already applies.`,
   argus slo check --fail-on-no-data
   argus slo check --format json | jq '.results[] | select(.status != "ok")'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateFormat(format); err != nil {
+			if err := fmts.validate(format); err != nil {
 				return err
 			}
 			sloCfg, err := slo.LoadSLOs()
@@ -228,7 +230,7 @@ already applies.`,
 		},
 	}
 	addInstanceFlag(checkCmd, &instance)
-	addFormatFlag(checkCmd, &format, "text")
+	addFormatFlag(checkCmd, &format, "text", fmts)
 	checkCmd.Flags().BoolVar(&failOnNoData, "fail-on-no-data", false, "Exit 1 if any SLO has no data (unless a worse status already applies)")
 	cmd.AddCommand(checkCmd)
 
@@ -240,6 +242,7 @@ already applies.`,
 func budgetCmd() *cobra.Command {
 	var instance, service, format, window string
 	var useAI bool
+	fmts := formatSet{Markdown: true, JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "budget",
@@ -263,7 +266,7 @@ Exit codes: 0 = healthy, 1 = warning (burning/ticket/watch), 2 = critical (criti
   argus slo budget --ai
   argus slo budget --window 24h`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateFormat(format); err != nil {
+			if err := fmts.validate(format); err != nil {
 				return err
 			}
 			sloCfg, err := slo.LoadSLOs()
@@ -323,7 +326,7 @@ Exit codes: 0 = healthy, 1 = warning (burning/ticket/watch), 2 = critical (criti
 	}
 	addInstanceFlag(cmd, &instance)
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	cmd.Flags().StringVarP(&window, "window", "w", "6h", "Analysis window: 1h, 6h, 24h, 7d, 30d")
 	cmd.Flags().BoolVar(&useAI, "ai", false, "Include AI-powered recommendations")
 
@@ -335,6 +338,7 @@ func guardCmd() *cobra.Command {
 	var strict, useAI bool
 	var maxErrorRate, maxP99Latency float64
 	var minCallVolume int
+	fmts := formatSet{Markdown: true, JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "guard",
@@ -368,7 +372,7 @@ Use --strict for critical services (lower thresholds, blocks on warnings).`,
   - name: Pre-deploy check
     run: argus guard --strict --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateFormat(format); err != nil {
+			if err := fmts.validate(format); err != nil {
 				return err
 			}
 			sctx, err := newSignozContext(instance)
@@ -430,7 +434,7 @@ Use --strict for critical services (lower thresholds, blocks on warnings).`,
 
 	addInstanceFlag(cmd, &instance)
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Check specific service only")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	cmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: lower thresholds, block on warnings")
 	cmd.Flags().BoolVar(&useAI, "ai", false, "Include AI deployment advisory")
 	cmd.Flags().Float64Var(&maxErrorRate, "max-error-rate", 0, "Max acceptable error rate %% (0 = default)")

@@ -72,6 +72,7 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 	var all bool
 	var limit int
 	var format string
+	fmts := formatSet{JSON: true}
 	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List incidents (active by default)",
@@ -101,7 +102,7 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 	}
 	listCmd.Flags().BoolVarP(&all, "all", "a", false, "Show all incidents (including resolved)")
 	listCmd.Flags().IntVarP(&limit, "limit", "l", 20, "Max incidents to show (with --all)")
-	addFormatFlag(listCmd, &format, "text")
+	addFormatFlag(listCmd, &format, "text", fmts)
 	cmd.AddCommand(listCmd)
 
 	// update

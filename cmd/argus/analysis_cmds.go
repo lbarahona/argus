@@ -30,6 +30,7 @@ func reportCmd() *cobra.Command {
 	var format string
 	var grade bool
 	var service string
+	fmts := formatSet{Markdown: true}
 
 	cmd := &cobra.Command{
 		Use:   "report",
@@ -45,7 +46,7 @@ score. Use for weekly reviews, shift handoffs, or SLA reporting.`,
   argus report --grade --service api-gateway
   argus report --format markdown`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateFormat(format); err != nil {
+			if err := fmts.validate(format); err != nil {
 				return err
 			}
 			if service != "" && !grade {
@@ -113,7 +114,7 @@ score. Use for weekly reviews, shift handoffs, or SLA reporting.`,
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-generated summary (uses Anthropic API)")
 	cmd.Flags().BoolVar(&grade, "grade", false, "Generate a service reliability scorecard instead of a health report")
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to a single service (only valid with --grade)")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 
 	return cmd
 }
@@ -383,6 +384,7 @@ func timelineCmd() *cobra.Command {
 	var service string
 	var withAI bool
 	var format string
+	fmts := formatSet{Markdown: true}
 
 	cmd := &cobra.Command{
 		Use:   "timeline",
@@ -404,7 +406,7 @@ Use --ai to generate an AI-powered incident narrative.`,
   argus analyze timeline --format markdown > incident-report.md
   argus analyze timeline -i production --duration 30 --ai`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateFormat(format); err != nil {
+			if err := fmts.validate(format); err != nil {
 				return err
 			}
 			sctx, err := newSignozContext(instance)
@@ -446,7 +448,7 @@ Use --ai to generate an AI-powered incident narrative.`,
 	addDurationFlag(cmd, &duration, 60, "Time window in minutes (e.g. 90, 90m, 2h)")
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to a specific service")
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Generate AI incident narrative")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 
 	return cmd
 }
@@ -459,6 +461,7 @@ func correlateCmd() *cobra.Command {
 	var minEvents int
 	var useAI bool
 	var format string
+	fmts := formatSet{Markdown: true}
 
 	cmd := &cobra.Command{
 		Use:   "correlate",
@@ -528,7 +531,7 @@ the root cause in a cascade.`,
 	cmd.Flags().IntVar(&bucketSize, "bucket", 60, "Time bucket size in seconds for clustering")
 	cmd.Flags().IntVar(&minEvents, "min-events", 3, "Minimum events to form a cluster")
 	cmd.Flags().BoolVar(&useAI, "ai", false, "Include AI-powered correlation analysis")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	cmd.AddCommand(correlateStackCmd())
 
 	return cmd
@@ -539,6 +542,7 @@ func correlateStackCmd() *cobra.Command {
 	var format string
 	var logLimit int
 	var samples int
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "stack",
@@ -588,7 +592,7 @@ blast radius.`,
 	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back for Loki samples (e.g. 90, 90m, 2h)")
 	cmd.Flags().IntVar(&logLimit, "log-limit", 50, "Maximum Loki log entries to scan per service")
 	cmd.Flags().IntVar(&samples, "samples", 3, "Maximum Loki log samples to show per correlated group")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	return cmd
 }
 
@@ -599,6 +603,7 @@ func forecastCmd() *cobra.Command {
 	var service string
 	var format string
 	var withAI bool
+	fmts := formatSet{Markdown: true}
 
 	cmd := &cobra.Command{
 		Use:   "forecast",
@@ -616,7 +621,7 @@ Risk levels:
   argus forecast -s api-service --ai
   argus forecast -f markdown > forecast.md`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateFormat(format); err != nil {
+			if err := fmts.validate(format); err != nil {
 				return err
 			}
 			sctx, err := newSignozContext(instance)
@@ -661,7 +666,7 @@ Risk levels:
 	addDurationFlag(cmd, &duration, 120, "Historical duration in minutes to analyze (e.g. 90, 90m, 2h)")
 	cmd.Flags().IntVar(&horizon, "horizon", 60, "Forecast horizon in minutes")
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-powered analysis (uses Anthropic API)")
 
 	return cmd
@@ -673,13 +678,14 @@ func depsCmd() *cobra.Command {
 	var service string
 	var format string
 	var withAI bool
+	fmts := formatSet{Markdown: true}
 
 	cmd := &cobra.Command{
 		Use:   "deps",
 		Short: "Map service dependencies from trace data",
 		Long:  "Discover upstream and downstream service dependencies by analyzing trace spans. Shows call volumes, error rates, and latency between services. Outputs an ASCII dependency graph and optional Mermaid diagram.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateFormat(format); err != nil {
+			if err := fmts.validate(format); err != nil {
 				return err
 			}
 			sctx, err := newSignozContext(instance)
@@ -722,7 +728,7 @@ func depsCmd() *cobra.Command {
 	addInstanceFlag(cmd, &instance)
 	addDurationFlag(cmd, &duration, 60, "Duration in minutes to analyze (e.g. 90, 90m, 2h)")
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to show only deps for this service")
-	addFormatFlag(cmd, &format, "table")
+	addFormatFlag(cmd, &format, "table", fmts)
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI architecture analysis")
 
 	return cmd
@@ -736,6 +742,7 @@ func deployCmd() *cobra.Command {
 	var sensitivity string
 	var format string
 	var withAI bool
+	fmts := formatSet{Markdown: true}
 
 	cmd := &cobra.Command{
 		Use:   "changes",
@@ -762,7 +769,7 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
   argus analyze changes -s payment-api --ai
   argus analyze changes -f markdown > deploy-report.md`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateFormat(format); err != nil {
+			if err := fmts.validate(format); err != nil {
 				return err
 			}
 			sctx, err := newSignozContext(instance)
@@ -809,7 +816,7 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
 	cmd.Flags().IntVarP(&buckets, "buckets", "b", 12, "Number of time buckets for analysis")
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
 	cmd.Flags().StringVar(&sensitivity, "sensitivity", "medium", "Detection sensitivity: low, medium, high")
-	addFormatFlag(cmd, &format, "terminal")
+	addFormatFlag(cmd, &format, "terminal", fmts)
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-powered deployment analysis (uses Anthropic API)")
 
 	return cmd

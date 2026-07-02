@@ -55,6 +55,7 @@ func promCmd() *cobra.Command {
 func promRulesCmd() *cobra.Command {
 	var ruleType string
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "rules",
@@ -80,12 +81,13 @@ func promRulesCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&ruleType, "type", "", "Filter by rule type: alert, record")
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	return cmd
 }
 
 func promTargetsCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "targets",
@@ -110,12 +112,13 @@ func promTargetsCmd() *cobra.Command {
 		},
 	}
 
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	return cmd
 }
 
 func promAlertsCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "alerts",
@@ -140,12 +143,13 @@ func promAlertsCmd() *cobra.Command {
 		},
 	}
 
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	return cmd
 }
 
 func promQueryCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "query [promql]",
@@ -172,12 +176,13 @@ func promQueryCmd() *cobra.Command {
 		},
 	}
 
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	return cmd
 }
 
 func promStatusCmd() *cobra.Command {
 	var format string
+	fmts := formatSet{JSON: true}
 
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -211,7 +216,7 @@ func promStatusCmd() *cobra.Command {
 		},
 	}
 
-	addFormatFlag(cmd, &format, "text")
+	addFormatFlag(cmd, &format, "text", fmts)
 	return cmd
 }
 
