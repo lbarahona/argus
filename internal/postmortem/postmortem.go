@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lbarahona/argus/internal/ai"
+	"github.com/lbarahona/argus/internal/fsutil"
 	"github.com/lbarahona/argus/internal/incident"
 	"github.com/lbarahona/argus/internal/output"
 	"github.com/lbarahona/argus/internal/signoz"
@@ -167,7 +168,7 @@ func (s *PostmortemStore) Save() error {
 	if err != nil {
 		return fmt.Errorf("marshaling postmortems: %w", err)
 	}
-	return os.WriteFile(storePath(), data, 0o644)
+	return fsutil.WriteFileAtomic(storePath(), data, 0o644)
 }
 
 // FindByID finds a postmortem by ID.

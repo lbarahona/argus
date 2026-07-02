@@ -133,6 +133,36 @@ func TestSaveAndLoad(t *testing.T) {
 	}
 }
 
+func TestSaveIsAtomicAndLeavesNoTempFiles(t *testing.T) {
+	cleanup := setupTestStore(t)
+	defer cleanup()
+
+	store := &IncidentStore{}
+	store.Create("db outage", SeverityCritical, []string{"api"}, "alice", "primary down")
+	if err := store.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	home, _ := os.UserHomeDir()
+	entries, err := os.ReadDir(filepath.Join(home, ".argus"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".tmp-") {
+			t.Errorf("temp file left behind: %s", e.Name())
+		}
+	}
+
+	loaded, err := Load()
+	if err != nil {
+		t.Fatalf("Load after Save: %v", err)
+	}
+	if len(loaded.Incidents) != 1 {
+		t.Errorf("expected 1 incident after reload, got %d", len(loaded.Incidents))
+	}
+}
+
 func TestRecentIncidents(t *testing.T) {
 	cleanup := setupTestStore(t)
 	defer cleanup()

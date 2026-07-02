@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lbarahona/argus/internal/fsutil"
 	"github.com/lbarahona/argus/internal/output"
 	"gopkg.in/yaml.v3"
 )
@@ -101,7 +102,7 @@ func (s *IncidentStore) Save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(storePath(), data, 0644)
+	return fsutil.WriteFileAtomic(storePath(), data, 0o644)
 }
 
 // ──────────────────────────────────────────────

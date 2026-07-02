@@ -488,6 +488,44 @@ func TestStoreSaveAndLoad(t *testing.T) {
 	assert.Equal(t, "Test postmortem", loaded.Postmortems[0].Title)
 }
 
+func TestSaveIsAtomicAndLeavesNoTempFiles(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	now := time.Now()
+	store := &PostmortemStore{
+		Postmortems: []Postmortem{
+			{
+				ID:        "pm-001",
+				Title:     "Test postmortem",
+				Severity:  "critical",
+				Status:    "draft",
+				CreatedAt: now,
+				UpdatedAt: now,
+			},
+		},
+	}
+
+	err := store.Save()
+	require.NoError(t, err)
+
+	home, _ := os.UserHomeDir()
+	entries, err := os.ReadDir(filepath.Join(home, ".argus"))
+	require.NoError(t, err)
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".tmp-") {
+			t.Errorf("temp file left behind: %s", e.Name())
+		}
+	}
+
+	loaded, err := Load()
+	require.NoError(t, err)
+	require.Len(t, loaded.Postmortems, 1)
+	assert.Equal(t, "pm-001", loaded.Postmortems[0].ID)
+}
+
 func TestLoadEmpty(t *testing.T) {
 	origHome := os.Getenv("HOME")
 	tmpDir := t.TempDir()
