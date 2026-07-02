@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -725,26 +726,21 @@ func parseMetricsResponse(data []byte) ([]types.MetricEntry, error) {
 	}
 
 	var items []queryRangeResultItem
-	if err := json.Unmarshal(resultBytes, &items); err == nil && len(items) > 0 {
+	if err := json.Unmarshal(resultBytes, &items); err == nil && isResultItemShape(items) {
 		var metrics []types.MetricEntry
 		for _, item := range items {
 			for _, series := range item.Series {
 				var s struct {
 					Labels map[string]string `json:"labels"`
-					Values [][]interface{}   `json:"values"`
+					Values []json.RawMessage `json:"values"`
 				}
 				if err := json.Unmarshal(series, &s); err != nil {
 					continue
 				}
-				for _, v := range s.Values {
-					if len(v) >= 2 {
-						ts, _ := v[0].(float64)
-						val, _ := v[1].(float64)
-						metrics = append(metrics, types.MetricEntry{
-							Timestamp: time.UnixMilli(int64(ts)),
-							Value:     val,
-							Labels:    s.Labels,
-						})
+				for _, raw := range s.Values {
+					if entry, ok := parseMetricPoint(raw); ok {
+						entry.Labels = s.Labels
+						metrics = append(metrics, entry)
 					}
 				}
 			}
@@ -753,4 +749,33 @@ func parseMetricsResponse(data []byte) ([]types.MetricEntry, error) {
 	}
 
 	return nil, nil
+}
+
+// parseMetricPoint decodes one series point. Signoz v3 marshals points as
+// {"timestamp": <epoch-ms>, "value": "<float-as-string>"}; Prometheus-style
+// [ts, value] tuples are kept as a fallback for older/proxied responses.
+func parseMetricPoint(raw json.RawMessage) (types.MetricEntry, bool) {
+	var obj struct {
+		Timestamp int64  `json:"timestamp"`
+		Value     string `json:"value"`
+	}
+	if err := json.Unmarshal(raw, &obj); err == nil && obj.Timestamp != 0 {
+		if v, err := strconv.ParseFloat(obj.Value, 64); err == nil {
+			return types.MetricEntry{Timestamp: time.UnixMilli(obj.Timestamp), Value: v}, true
+		}
+	}
+
+	var tuple []interface{}
+	if err := json.Unmarshal(raw, &tuple); err == nil && len(tuple) >= 2 {
+		ts, _ := tuple[0].(float64)
+		switch v := tuple[1].(type) {
+		case float64:
+			return types.MetricEntry{Timestamp: time.UnixMilli(int64(ts)), Value: v}, true
+		case string:
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				return types.MetricEntry{Timestamp: time.UnixMilli(int64(ts)), Value: f}, true
+			}
+		}
+	}
+	return types.MetricEntry{}, false
 }

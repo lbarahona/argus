@@ -546,6 +546,32 @@ func TestQueryMetrics(t *testing.T) {
 	}
 }
 
+func TestQueryMetricsRealV3ObjectValues(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"success","data":{"result":[{"queryName":"A","series":[{"labels":{"host":"web-1"},"values":[{"timestamp":1708070400000,"value":"42.5"},{"timestamp":1708070460000,"value":"43.1"}]}]}]}}`)
+	}))
+	defer server.Close()
+
+	client := New(types.Instance{URL: server.URL})
+	result, err := client.QueryMetrics(context.Background(), "cpu_usage", 60)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Metrics) != 2 {
+		t.Fatalf("expected 2 metric points from v3 object-shaped values, got %d", len(result.Metrics))
+	}
+	if result.Metrics[0].Value != 42.5 {
+		t.Errorf("point 0 value = %v, want 42.5", result.Metrics[0].Value)
+	}
+	if result.Metrics[0].Labels["host"] != "web-1" {
+		t.Errorf("labels not preserved: %v", result.Metrics[0].Labels)
+	}
+	if result.Metrics[0].Timestamp.UnixMilli() != 1708070400000 {
+		t.Errorf("timestamp = %v, want 1708070400000ms", result.Metrics[0].Timestamp.UnixMilli())
+	}
+}
+
 func TestQueryLogsServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
