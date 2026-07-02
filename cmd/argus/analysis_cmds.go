@@ -79,7 +79,7 @@ score. Use for weekly reviews, shift handoffs, or SLA reporting.`,
 					return err
 				}
 
-				return renderOutput(format, func() error {
+				return renderOutput(format, fmts, func() error {
 					scorecard.RenderTerminal(os.Stdout, sc)
 					return nil
 				}, func() error {
@@ -99,7 +99,7 @@ score. Use for weekly reviews, shift handoffs, or SLA reporting.`,
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				r.RenderTerminal(os.Stdout)
 				return nil
 			}, func() error {
@@ -441,7 +441,7 @@ Use --ai to generate an AI-powered incident narrative.`,
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				tl.RenderTerminal(os.Stdout)
 				return nil
 			}, func() error {
@@ -486,6 +486,9 @@ the root cause in a cascade.`,
   argus analyze correlate --format markdown
   argus analyze correlate stack --duration 30`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
@@ -522,7 +525,7 @@ the root cause in a cascade.`,
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				correlate.Render(result)
 				return nil
 			}, func() error {
@@ -560,6 +563,9 @@ Useful during incident response when you want one view of which services are
 screaming across the stack, plus a few related Loki log samples to confirm the
 blast radius.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			amClient, err := getAMClient()
 			if err != nil {
 				return err
@@ -589,7 +595,7 @@ blast radius.`,
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(correlate.RenderStack(result))
 				return nil
 			}, nil, result)
@@ -659,7 +665,7 @@ Risk levels:
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				r.RenderTerminal(os.Stdout)
 				return nil
 			}, func() error {
@@ -722,7 +728,7 @@ func depsCmd() *cobra.Command {
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				deps.RenderTable(os.Stdout, dm)
 				return nil
 			}, func() error {
@@ -808,7 +814,7 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				r.RenderTerminal(os.Stdout)
 				return nil
 			}, func() error {

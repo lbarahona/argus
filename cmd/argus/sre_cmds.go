@@ -100,7 +100,7 @@ Exit code reflects highest severity: 0=ok, 1=warning, 2=critical.`,
 			if err != nil {
 				return err
 			}
-			if err := renderOutput(format, func() error {
+			if err := renderOutput(format, fmts, func() error {
 				fmt.Print(alert.FormatText(rpt))
 				return nil
 			}, nil, rpt); err != nil {
@@ -217,7 +217,7 @@ already applies.`,
 			if err != nil {
 				return err
 			}
-			if err := renderOutput(format, func() error {
+			if err := renderOutput(format, fmts, func() error {
 				fmt.Print(slo.FormatText(rpt))
 				return nil
 			}, nil, rpt); err != nil {
@@ -308,7 +308,7 @@ Exit codes: 0 = healthy, 1 = warning (burning/ticket/watch), 2 = critical (criti
 
 			budget.SortByUrgency(rpt.Reports)
 
-			if err := renderOutput(format, func() error {
+			if err := renderOutput(format, fmts, func() error {
 				fmt.Print(budget.FormatTerminal(rpt))
 				return nil
 			}, func() error {
@@ -415,7 +415,7 @@ Use --strict for critical services (lower thresholds, blocks on warnings).`,
 				return err
 			}
 
-			if err := renderOutput(format, func() error {
+			if err := renderOutput(format, fmts, func() error {
 				fmt.Print(guard.FormatTerminal(rpt))
 				return nil
 			}, func() error {

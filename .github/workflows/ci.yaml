@@ -33,4 +33,9 @@ jobs:
           go-version: "1.24"
       - uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          # Pinned to the final v1.x release: action v6 only supports the
+          # v1 golangci-lint CLI/config schema (matching .golangci.yml
+          # here), and a future bump of golangci-lint-action to v7+ would
+          # start resolving "latest" to a v2 binary that rejects this
+          # config. Pinning makes the v1-action/v1-config pairing explicit.
+          version: v1.64.8

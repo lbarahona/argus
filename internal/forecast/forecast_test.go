@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lbarahona/argus/pkg/types"
 )
@@ -494,5 +495,39 @@ func TestRenderMarkdown_WithWarnings(t *testing.T) {
 	}
 	if !strings.Contains(out, "failing-service") {
 		t.Error("expected 'failing-service' in output")
+	}
+}
+
+func TestTruncate_MultibyteServiceName_RuneSafe(t *testing.T) {
+	// Multibyte (3-byte-per-rune) service name well over the byte-index
+	// truncation point but under the rune-index one; a byte-slice truncate
+	// would split a rune mid-sequence and produce invalid UTF-8.
+	name := strings.Repeat("服", 40) // 40 runes, 120 bytes
+	n := 28
+
+	got := truncate(name, n)
+
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncate produced invalid UTF-8: %q", got)
+	}
+	if count := utf8.RuneCountInString(got); count > n {
+		t.Errorf("truncated rune count = %d, want <= %d", count, n)
+	}
+	want := string([]rune(name)[:n-1]) + "…"
+	if got != want {
+		t.Errorf("truncate(%q, %d) = %q, want %q", name, n, got, want)
+	}
+}
+
+func TestTruncate_ShortStringUnchanged(t *testing.T) {
+	if got := truncate("api-service", 28); got != "api-service" {
+		t.Errorf(`truncate("api-service", 28) = %q, want "api-service"`, got)
+	}
+}
+
+func TestTruncate_ExactLengthUnchanged(t *testing.T) {
+	s := strings.Repeat("a", 28)
+	if got := truncate(s, 28); got != s {
+		t.Errorf("truncate at exact length should be unchanged, got %q", got)
 	}
 }

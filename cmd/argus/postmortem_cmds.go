@@ -143,7 +143,7 @@ func postmortemGenerateCmd() *cobra.Command {
 			fmt.Println()
 
 			// Display based on format
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				pmlib.RenderTerminal(pm)
 				return nil
 			}, func() error {
@@ -210,7 +210,7 @@ func postmortemShowCmd() *cobra.Command {
 				return fmt.Errorf("postmortem %q not found", args[0])
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				pmlib.RenderTerminal(pm)
 				return nil
 			}, func() error {

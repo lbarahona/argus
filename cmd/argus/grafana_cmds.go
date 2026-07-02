@@ -59,6 +59,9 @@ func grafanaDashboardsCmd() *cobra.Command {
 		Use:   "dashboards",
 		Short: "List all dashboards",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getGrafanaClient()
 			if err != nil {
 				return err
@@ -71,7 +74,7 @@ func grafanaDashboardsCmd() *cobra.Command {
 				return fmt.Errorf("fetching dashboards: %w", err)
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(grafanalib.FormatDashboards(dashboards))
 				return nil
 			}, nil, dashboards)
@@ -90,6 +93,9 @@ func grafanaDashboardGetCmd() *cobra.Command {
 		Short: "Get dashboard details by UID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getGrafanaClient()
 			if err != nil {
 				return err
@@ -102,7 +108,7 @@ func grafanaDashboardGetCmd() *cobra.Command {
 				return fmt.Errorf("fetching dashboard: %w", err)
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(grafanalib.FormatDashboardDetail(dm))
 				return nil
 			}, nil, dm)
@@ -124,6 +130,9 @@ func grafanaSearchCmd() *cobra.Command {
 		Use:   "search [query]",
 		Short: "Search dashboards and folders",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getGrafanaClient()
 			if err != nil {
 				return err
@@ -141,7 +150,7 @@ func grafanaSearchCmd() *cobra.Command {
 				return fmt.Errorf("searching: %w", err)
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(grafanalib.FormatDashboards(results))
 				return nil
 			}, nil, results)
@@ -162,6 +171,9 @@ func grafanaDatasourcesCmd() *cobra.Command {
 		Short:   "List configured data sources",
 		Aliases: []string{"ds"},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getGrafanaClient()
 			if err != nil {
 				return err
@@ -174,7 +186,7 @@ func grafanaDatasourcesCmd() *cobra.Command {
 				return fmt.Errorf("fetching data sources: %w", err)
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(grafanalib.FormatDatasources(ds))
 				return nil
 			}, nil, ds)
@@ -192,6 +204,9 @@ func grafanaFoldersCmd() *cobra.Command {
 		Use:   "folders",
 		Short: "List folders",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getGrafanaClient()
 			if err != nil {
 				return err
@@ -204,7 +219,7 @@ func grafanaFoldersCmd() *cobra.Command {
 				return fmt.Errorf("fetching folders: %w", err)
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(grafanalib.FormatFolders(folders))
 				return nil
 			}, nil, folders)
@@ -222,6 +237,9 @@ func grafanaAlertsCmd() *cobra.Command {
 		Use:   "alerts",
 		Short: "List alert rules",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getGrafanaClient()
 			if err != nil {
 				return err
@@ -234,7 +252,7 @@ func grafanaAlertsCmd() *cobra.Command {
 				return fmt.Errorf("fetching alert rules: %w", err)
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(grafanalib.FormatAlertRules(rules))
 				return nil
 			}, nil, rules)
@@ -252,6 +270,9 @@ func grafanaAlertInstancesCmd() *cobra.Command {
 		Use:   "firing",
 		Short: "List firing alert instances",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getGrafanaClient()
 			if err != nil {
 				return err
@@ -264,7 +285,7 @@ func grafanaAlertInstancesCmd() *cobra.Command {
 				return fmt.Errorf("fetching alert instances: %w", err)
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(grafanalib.FormatAlertInstances(instances))
 				return nil
 			}, nil, instances)
@@ -282,6 +303,9 @@ func grafanaStatusCmd() *cobra.Command {
 		Use:   "status",
 		Short: "Show Grafana health and version",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getGrafanaClient()
 			if err != nil {
 				return err
@@ -301,7 +325,7 @@ func grafanaStatusCmd() *cobra.Command {
 				data["org"] = org
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(grafanalib.FormatStatus(health, org))
 				return nil
 			}, nil, data)
@@ -319,6 +343,9 @@ func grafanaSummaryCmd() *cobra.Command {
 		Use:   "summary",
 		Short: "Quick overview of Grafana instance",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getGrafanaClient()
 			if err != nil {
 				return err
@@ -331,7 +358,7 @@ func grafanaSummaryCmd() *cobra.Command {
 				return fmt.Errorf("building summary: %w", err)
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(grafanalib.FormatSummary(summary))
 				return nil
 			}, nil, summary)

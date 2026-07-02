@@ -94,7 +94,7 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 				incidents = store.ActiveIncidents()
 				title = "🚨 Active Incidents"
 			}
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				incident.RenderList(incidents, title)
 				return nil
 			}, nil, incidents)

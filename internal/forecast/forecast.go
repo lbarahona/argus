@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/output"
@@ -419,6 +420,18 @@ func generateAISummary(r *Report, provider ai.Provider) (string, error) {
 	return analyzer.AnalyzeSync(sb.String())
 }
 
+// truncate shortens s to at most n runes for the fixed-width SERVICE table
+// column, appending "…" without exceeding the width. Rune-safe: truncation
+// happens on rune boundaries (via RuneCount/[]rune) so multibyte service
+// names are never split into invalid UTF-8, mirroring internal/diff's
+// truncate().
+func truncate(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	return string([]rune(s)[:n-1]) + "…"
+}
+
 // RenderTerminal outputs the forecast to the terminal.
 func (r *Report) RenderTerminal(w io.Writer) {
 	fmt.Fprintf(w, "\n%s\n\n", output.TitleStyle.Render("🔮 Service Forecast"))
@@ -466,10 +479,7 @@ func (r *Report) RenderTerminal(w io.Writer) {
 			trendArrow = "↓"
 		}
 
-		name := f.Name
-		if len(name) > 28 {
-			name = name[:28] + "…"
-		}
+		name := truncate(f.Name, 28)
 
 		fmt.Fprintf(w, "  %-30s %s%3.0f %7d %7s %7.1f%% %7.1f%% %5.2f\n",
 			name,

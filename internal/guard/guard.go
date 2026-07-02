@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/output"
@@ -788,11 +789,15 @@ func serviceStatusIcon(status string) string {
 	}
 }
 
+// truncate shortens s to at most max runes for fixed-width table columns,
+// appending "…" without exceeding the width. Rune-safe: truncation happens
+// on rune boundaries (via RuneCount/[]rune) so multibyte characters are
+// never split into invalid UTF-8, mirroring internal/diff's truncate().
 func truncate(s string, max int) string {
-	if len(s) <= max {
+	if utf8.RuneCountInString(s) <= max {
 		return s
 	}
-	return s[:max-1] + "…"
+	return string([]rune(s)[:max-1]) + "…"
 }
 
 func formatNumber(n int) string {
@@ -827,10 +832,7 @@ func topNPatterns(patterns map[string]int, n int) string {
 		if i >= n {
 			break
 		}
-		label := kv.k
-		if len(label) > 40 {
-			label = label[:40] + "…"
-		}
+		label := truncate(kv.k, 40)
 		parts = append(parts, fmt.Sprintf("%q (%dx)", label, kv.v))
 	}
 	return strings.Join(parts, ", ")

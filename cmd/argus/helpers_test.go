@@ -87,10 +87,11 @@ func captureStdout(t *testing.T, fn func()) string {
 }
 
 func TestRenderOutput_TerminalSynonymsDispatchToTerminal(t *testing.T) {
+	fs := formatSet{Markdown: true, JSON: true}
 	for _, format := range []string{"", "terminal", "text", "table"} {
 		t.Run(format, func(t *testing.T) {
 			called := false
-			err := renderOutput(format, func() error {
+			err := renderOutput(format, fs, func() error {
 				called = true
 				return nil
 			}, func() error {
@@ -104,10 +105,11 @@ func TestRenderOutput_TerminalSynonymsDispatchToTerminal(t *testing.T) {
 }
 
 func TestRenderOutput_MarkdownSynonymsDispatchToMarkdown(t *testing.T) {
+	fs := formatSet{Markdown: true}
 	for _, format := range []string{"markdown", "md"} {
 		t.Run(format, func(t *testing.T) {
 			called := false
-			err := renderOutput(format, func() error {
+			err := renderOutput(format, fs, func() error {
 				t.Fatal("terminal renderer should not be called")
 				return nil
 			}, func() error {
@@ -124,7 +126,7 @@ func TestRenderOutput_JSONMarshalsAndPrintsValue(t *testing.T) {
 	value := map[string]string{"hello": "world"}
 
 	out := captureStdout(t, func() {
-		err := renderOutput("json", func() error {
+		err := renderOutput("json", formatSet{JSON: true}, func() error {
 			t.Fatal("terminal renderer should not be called")
 			return nil
 		}, nil, value)
@@ -145,7 +147,7 @@ func TestRenderOutput_JSONRawMessagePrintsVerbatim(t *testing.T) {
 	raw := json.RawMessage("{\n    \"pass\": 3,\n    \"custom_field\": \"kept\"\n}")
 
 	out := captureStdout(t, func() {
-		err := renderOutput("json", nil, nil, raw)
+		err := renderOutput("json", formatSet{JSON: true}, nil, nil, raw)
 		require.NoError(t, err)
 	})
 
@@ -153,33 +155,55 @@ func TestRenderOutput_JSONRawMessagePrintsVerbatim(t *testing.T) {
 }
 
 func TestRenderOutput_NilTerminalRendererErrors(t *testing.T) {
-	err := renderOutput("terminal", nil, nil, nil)
+	err := renderOutput("terminal", formatSet{}, nil, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "terminal output not supported here")
 }
 
 func TestRenderOutput_NilMarkdownRendererErrors(t *testing.T) {
-	err := renderOutput("markdown", func() error { return nil }, nil, nil)
+	// fs claims markdown support but the caller passed a nil renderer — the
+	// nil check is the defensive backstop for exactly this fs/renderer
+	// mismatch, since fs.validate alone would let "markdown" through.
+	err := renderOutput("markdown", formatSet{Markdown: true}, func() error { return nil }, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "markdown output is not supported by this command")
 }
 
 func TestRenderOutput_NilJSONValueErrors(t *testing.T) {
-	err := renderOutput("json", func() error { return nil }, nil, nil)
+	err := renderOutput("json", formatSet{JSON: true}, func() error { return nil }, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "json output is not supported by this command")
 }
 
 func TestRenderOutput_UnknownFormatErrors(t *testing.T) {
-	err := renderOutput("bogus", func() error { return nil }, func() error { return nil }, "value")
+	err := renderOutput("bogus", formatSet{Markdown: true, JSON: true}, func() error { return nil }, func() error { return nil }, "value")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `unknown format "bogus"`)
 	assert.Contains(t, err.Error(), "valid: terminal, markdown, json")
 }
 
+// TestRenderOutput_UnsupportedFormatNamesOnlyCommandSet is the "eager gate"
+// regression test for Fix 1: a command whose formatSet is narrower than the
+// generic terminal/markdown/json trio (e.g. incident list, which only ever
+// supported terminal+json) must reject an out-of-set format by naming just
+// its own supported formats — not the full generic list, and not silently
+// accept it.
+func TestRenderOutput_UnsupportedFormatNamesOnlyCommandSet(t *testing.T) {
+	fs := formatSet{JSON: true} // no markdown support
+	err := renderOutput("markdown", fs, func() error { return nil }, func() error { return nil }, "value")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `format "markdown" is not supported by this command (valid: terminal, json)`)
+	assert.NotContains(t, err.Error(), "unknown format")
+
+	err = renderOutput("bogus", fs, func() error { return nil }, nil, "value")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown format "bogus" (valid: terminal, json)`)
+	assert.NotContains(t, err.Error(), "markdown")
+}
+
 func TestRenderOutput_TerminalRendererErrorPropagates(t *testing.T) {
 	sentinel := errors.New("boom")
-	err := renderOutput("terminal", func() error {
+	err := renderOutput("terminal", formatSet{}, func() error {
 		return sentinel
 	}, nil, nil)
 	require.ErrorIs(t, err, sentinel)
@@ -187,7 +211,7 @@ func TestRenderOutput_TerminalRendererErrorPropagates(t *testing.T) {
 
 func TestRenderOutput_MarkdownRendererErrorPropagates(t *testing.T) {
 	sentinel := errors.New("boom")
-	err := renderOutput("markdown", nil, func() error {
+	err := renderOutput("markdown", formatSet{Markdown: true}, nil, func() error {
 		return sentinel
 	}, nil)
 	require.ErrorIs(t, err, sentinel)
@@ -196,7 +220,7 @@ func TestRenderOutput_MarkdownRendererErrorPropagates(t *testing.T) {
 func TestRenderOutput_JSONMarshalErrorPropagates(t *testing.T) {
 	// Functions cannot be marshaled to JSON, so this exercises the
 	// jsonMarshal error path.
-	err := renderOutput("json", nil, nil, func() {})
+	err := renderOutput("json", formatSet{JSON: true}, nil, nil, func() {})
 	require.Error(t, err)
 }
 

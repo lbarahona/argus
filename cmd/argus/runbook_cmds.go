@@ -85,7 +85,7 @@ across teams via version control.`,
 				rbs = filtered
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				runbook.PrintList(os.Stdout, rbs)
 				return nil
 			}, nil, rbs)

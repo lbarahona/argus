@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/lbarahona/argus/pkg/types"
 )
@@ -535,6 +536,61 @@ func TestTopNPatterns(t *testing.T) {
 	}
 	if strings.Contains(result, "disk full") {
 		t.Error("should not contain fourth pattern")
+	}
+}
+
+func TestTopNPatterns_MultibyteLabelRuneSafe(t *testing.T) {
+	// A multibyte (3-byte-per-rune) pattern label well over the byte-index
+	// truncation point but under the rune-index one; a byte-slice truncate
+	// would split a rune mid-sequence and produce invalid UTF-8.
+	label := strings.Repeat("错", 60) // 60 runes, 180 bytes
+	patterns := map[string]int{label: 3}
+
+	result := topNPatterns(patterns, 1)
+	if !utf8.ValidString(result) {
+		t.Fatalf("topNPatterns produced invalid UTF-8: %q", result)
+	}
+	want := string([]rune(label)[:39]) + "…"
+	if !strings.Contains(result, want) {
+		t.Errorf("topNPatterns(...) = %q, want it to contain truncated label %q", result, want)
+	}
+}
+
+// ──────────────────────────────────────────────
+// Tests: truncate
+// ──────────────────────────────────────────────
+
+func TestTruncate_MultibyteServiceName_RuneSafe(t *testing.T) {
+	// Multibyte (3-byte-per-rune) service name well over the byte-index
+	// truncation point but under the rune-index one; a byte-slice truncate
+	// would split a rune mid-sequence and produce invalid UTF-8.
+	name := strings.Repeat("服", 30) // 30 runes, 90 bytes
+	n := 23
+
+	got := truncate(name, n)
+
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncate produced invalid UTF-8: %q", got)
+	}
+	if count := utf8.RuneCountInString(got); count > n {
+		t.Errorf("truncated rune count = %d, want <= %d", count, n)
+	}
+	want := string([]rune(name)[:n-1]) + "…"
+	if got != want {
+		t.Errorf("truncate(%q, %d) = %q, want %q", name, n, got, want)
+	}
+}
+
+func TestTruncate_ShortStringUnchanged(t *testing.T) {
+	if got := truncate("api-service", 23); got != "api-service" {
+		t.Errorf(`truncate("api-service", 23) = %q, want "api-service"`, got)
+	}
+}
+
+func TestTruncate_ExactLengthUnchanged(t *testing.T) {
+	s := strings.Repeat("a", 23)
+	if got := truncate(s, 23); got != s {
+		t.Errorf("truncate at exact length should be unchanged, got %q", got)
 	}
 }
 

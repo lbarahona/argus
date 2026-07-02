@@ -65,6 +65,9 @@ func amAlertsCmd() *cobra.Command {
 		Use:   "alerts",
 		Short: "List firing alerts",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getAMClient()
 			if err != nil {
 				return err
@@ -87,7 +90,7 @@ func amAlertsCmd() *cobra.Command {
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(amlib.FormatAlerts(alerts, showAll))
 				return nil
 			}, nil, alerts)
@@ -112,6 +115,9 @@ func amSilencesCmd() *cobra.Command {
 		Use:   "silences",
 		Short: "List silences",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getAMClient()
 			if err != nil {
 				return err
@@ -125,7 +131,7 @@ func amSilencesCmd() *cobra.Command {
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(amlib.FormatSilences(silences, showExpired))
 				return nil
 			}, nil, silences)
@@ -202,7 +208,7 @@ func amSilenceCreateCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&duration, "duration", "d", "1h", "Silence duration (e.g. 30m, 2h, 1d)")
+	cmd.Flags().StringVarP(&duration, "duration", "d", "1h", "Silence duration (e.g. 30m, 2h, 72h)")
 	cmd.Flags().StringVarP(&comment, "comment", "c", "Silenced via argus", "Silence comment")
 	cmd.Flags().StringVar(&createdBy, "created-by", "argus", "Creator name")
 	cmd.Flags().StringArrayVarP(&matchers, "matcher", "m", nil, "Label matcher (name=value, name!=value, name=~regex)")
@@ -244,6 +250,9 @@ func amStatusCmd() *cobra.Command {
 		Use:   "status",
 		Short: "Check Alertmanager health and version",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getAMClient()
 			if err != nil {
 				return err
@@ -258,7 +267,7 @@ func amStatusCmd() *cobra.Command {
 				return fmt.Errorf("alertmanager unreachable: %w", err)
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(amlib.FormatStatus(status, healthy, latency))
 				return nil
 			}, nil, status)
@@ -277,6 +286,9 @@ func amSummaryCmd() *cobra.Command {
 		Use:   "summary",
 		Short: "Quick alert summary — counts by severity and name",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getAMClient()
 			if err != nil {
 				return err
@@ -292,7 +304,7 @@ func amSummaryCmd() *cobra.Command {
 
 			summary := amlib.BuildSummary(alerts)
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Printf("\n🔔 Alert Summary: %d total (%d active, %d suppressed)\n\n",
 					summary.TotalAlerts, summary.ActiveAlerts, summary.SuppressedAlerts)
 

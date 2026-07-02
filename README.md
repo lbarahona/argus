@@ -881,7 +881,7 @@ Set `model: auto` (or omit it) to use the best default model for each provider:
 | OpenAI | `gpt-4o` |
 | Bedrock | `anthropic.claude-3-5-sonnet-20241022-v2:0` |
 
-Or specify any model explicitly: `model: claude-3-haiku-20240307`
+Or specify any model explicitly: `model: claude-haiku-4-5`
 
 ### API Version
 

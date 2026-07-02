@@ -73,6 +73,9 @@ Examples:
   argus loki query '{app="api"} |~ "5[0-9]{2}"' --limit 50`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getLokiClient()
 			if err != nil {
 				return err
@@ -91,7 +94,7 @@ Examples:
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				if result.Data.ResultType != "" && result.Data.ResultType != "streams" {
 					fmt.Print(lokilib.FormatMetricSeries(result.Data))
 				} else {
@@ -123,6 +126,9 @@ func lokiLabelsCmd() *cobra.Command {
 		Use:   "labels",
 		Short: "List all label names",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getLokiClient()
 			if err != nil {
 				return err
@@ -139,7 +145,7 @@ func lokiLabelsCmd() *cobra.Command {
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(lokilib.FormatLabels(labelNames))
 				return nil
 			}, nil, labelNames)
@@ -167,6 +173,9 @@ func lokiLabelValuesCmd() *cobra.Command {
 		Example: `  argus loki label-values app
   argus loki label-values namespace --duration 120`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getLokiClient()
 			if err != nil {
 				return err
@@ -183,7 +192,7 @@ func lokiLabelValuesCmd() *cobra.Command {
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(lokilib.FormatLabelValues(args[0], values))
 				return nil
 			}, nil, values)
@@ -212,6 +221,9 @@ func lokiSeriesCmd() *cobra.Command {
   argus loki series '{namespace="production"}' '{job="varlogs"}'`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getLokiClient()
 			if err != nil {
 				return err
@@ -228,7 +240,7 @@ func lokiSeriesCmd() *cobra.Command {
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(lokilib.FormatSeries(series))
 				return nil
 			}, nil, series)
@@ -255,6 +267,9 @@ func lokiStatsCmd() *cobra.Command {
 		Short: "Show ingestion statistics",
 		Long:  "Display index statistics including stream count, chunk count, entry count, and bytes ingested.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getLokiClient()
 			if err != nil {
 				return err
@@ -283,7 +298,7 @@ func lokiStatsCmd() *cobra.Command {
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(lokilib.FormatStats(stats))
 				return nil
 			}, nil, stats)
@@ -305,6 +320,9 @@ func lokiStatusCmd() *cobra.Command {
 		Use:   "status",
 		Short: "Check Loki health and version",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getLokiClient()
 			if err != nil {
 				return err
@@ -324,7 +342,7 @@ func lokiStatusCmd() *cobra.Command {
 				data["build_info"] = info
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(lokilib.FormatStatus(healthy, latency, info))
 				return nil
 			}, nil, data)
@@ -343,6 +361,9 @@ func lokiSummaryCmd() *cobra.Command {
 		Use:   "summary",
 		Short: "Quick overview of Loki instance",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getLokiClient()
 			if err != nil {
 				return err
@@ -356,7 +377,7 @@ func lokiSummaryCmd() *cobra.Command {
 				return fmt.Errorf("building summary: %w", err)
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(lokilib.FormatSummary(summary))
 				return nil
 			}, nil, summary)

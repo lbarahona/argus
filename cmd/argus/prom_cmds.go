@@ -61,6 +61,9 @@ func promRulesCmd() *cobra.Command {
 		Use:   "rules",
 		Short: "List alerting and recording rules",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getPromClient()
 			if err != nil {
 				return err
@@ -73,7 +76,7 @@ func promRulesCmd() *cobra.Command {
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(promlib.FormatRules(data, ruleType))
 				return nil
 			}, nil, data)
@@ -93,6 +96,9 @@ func promTargetsCmd() *cobra.Command {
 		Use:   "targets",
 		Short: "Show scrape targets and their health",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getPromClient()
 			if err != nil {
 				return err
@@ -105,7 +111,7 @@ func promTargetsCmd() *cobra.Command {
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(promlib.FormatTargets(data))
 				return nil
 			}, nil, data)
@@ -124,6 +130,9 @@ func promAlertsCmd() *cobra.Command {
 		Use:   "alerts",
 		Short: "Show firing and pending alerts from Prometheus",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getPromClient()
 			if err != nil {
 				return err
@@ -136,7 +145,7 @@ func promAlertsCmd() *cobra.Command {
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(promlib.FormatAlerts(data))
 				return nil
 			}, nil, data)
@@ -157,6 +166,9 @@ func promQueryCmd() *cobra.Command {
 		Long:  "Run a PromQL query against Prometheus and display the results.\n\nExamples:\n  argus prom query 'up'\n  argus prom query 'rate(http_requests_total[5m])'",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getPromClient()
 			if err != nil {
 				return err
@@ -169,7 +181,7 @@ func promQueryCmd() *cobra.Command {
 				return err
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(promlib.FormatQuery(result))
 				return nil
 			}, nil, result)
@@ -188,6 +200,9 @@ func promStatusCmd() *cobra.Command {
 		Use:   "status",
 		Short: "Show Prometheus version, health, and runtime info",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := fmts.validate(format); err != nil {
+				return err
+			}
 			client, err := getPromClient()
 			if err != nil {
 				return err
@@ -209,7 +224,7 @@ func promStatusCmd() *cobra.Command {
 				"build":   build,
 			}
 
-			return renderOutput(format, func() error {
+			return renderOutput(format, fmts, func() error {
 				fmt.Print(promlib.FormatStatus(runtime, build, healthy))
 				return nil
 			}, nil, data)

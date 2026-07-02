@@ -123,7 +123,7 @@ func doctorCmd() *cobra.Command {
 				return err
 			}
 
-			if err := renderOutput(format, func() error {
+			if err := renderOutput(format, fmts, func() error {
 				fmt.Print(doctor.FormatTerminal(report, verbose))
 				return nil
 			}, func() error {

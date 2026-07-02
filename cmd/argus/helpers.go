@@ -45,10 +45,18 @@ func newSignozContext(instanceFlag string) (*signozContext, error) {
 	}, nil
 }
 
-// renderOutput validates format and dispatches to the matching renderer.
-// Pass nil for a renderer the command does not support; requesting an
-// unsupported/unknown format is an error (not a silent default).
-func renderOutput(format string, terminal func() error, markdown func() error, jsonValue any) error {
+// renderOutput validates format against the command's supported set (fs —
+// the same formatSet passed to addFormatFlag) and dispatches to the matching
+// renderer. fs.validate is the single source of truth for the error message:
+// it names only the formats this command actually supports, rather than the
+// generic terminal/markdown/json list. The nil-renderer and RawMessage
+// checks below are internal invariants (a renderer that fs claims to
+// support must be non-nil), not the primary validation path — fs.validate
+// has already rejected anything fs doesn't advertise.
+func renderOutput(format string, fs formatSet, terminal func() error, markdown func() error, jsonValue any) error {
+	if err := fs.validate(format); err != nil {
+		return err
+	}
 	switch format {
 	case "", "terminal", "text", "table":
 		if terminal == nil {
@@ -78,7 +86,9 @@ func renderOutput(format string, terminal func() error, markdown func() error, j
 		fmt.Println(string(data))
 		return nil
 	default:
-		return fmt.Errorf("unknown format %q (valid: terminal, markdown, json)", format)
+		// Unreachable: fs.validate already rejected any format not handled
+		// by one of the cases above.
+		return fmt.Errorf("unknown format %q (valid: %s)", format, strings.Join(fs.list(), ", "))
 	}
 }
 
