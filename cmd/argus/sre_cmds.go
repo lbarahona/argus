@@ -79,6 +79,9 @@ Exit code reflects highest severity: 0=ok, 1=warning, 2=critical.`,
   argus rules check -i production
   argus rules check --format json | jq '.summary'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateFormat(format); err != nil {
+				return err
+			}
 			alertCfg, err := alert.LoadAlerts()
 			if err != nil {
 				return err
@@ -192,6 +195,9 @@ already applies.`,
   argus slo check --fail-on-no-data
   argus slo check --format json | jq '.results[] | select(.status != "ok")'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateFormat(format); err != nil {
+				return err
+			}
 			sloCfg, err := slo.LoadSLOs()
 			if err != nil {
 				return err

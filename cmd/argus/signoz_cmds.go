@@ -207,7 +207,7 @@ func servicesCmd() *cobra.Command {
 
 	addInstanceFlag(cmd, &instance)
 	cmd.Flags().StringVar(&sortBy, "sort", "name", "Sort by: errors, rate, calls, name")
-	cmd.Flags().IntVarP(&limit, "limit", "l", 0, "Maximum number of services to show (0 = all)")
+	cmd.Flags().IntVarP(&limit, "limit", "l", 0, "Maximum services to show (0 = all when sorted by name; sorted views default to top 20)")
 	addDurationFlag(cmd, &duration, 60, "Duration in minutes for recent error lookup when sorted (e.g. 90, 90m, 2h)")
 
 	_ = cmd.RegisterFlagCompletionFunc("sort", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
