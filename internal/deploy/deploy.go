@@ -104,6 +104,11 @@ type Result struct {
 // older buckets are undercounted.
 const deployFetchLimit = 1000
 
+// deployTraceFetchLimit is the max number of traces fetched per query for
+// latency change-point detection. Fetches are newest-N, so hitting this
+// limit means older latency buckets are undercounted (or empty).
+const deployTraceFetchLimit = 500
+
 // Summary provides a high-level overview.
 type Summary struct {
 	TotalChanges   int     `json:"total_changes"`
@@ -189,7 +194,7 @@ func Detect(ctx context.Context, client signoz.SignozQuerier, instKey string, op
 	}
 
 	// Fetch traces for latency analysis
-	allTraces, err := client.QueryTraces(ctx, opts.Service, opts.Duration, 500)
+	allTraces, err := client.QueryTraces(ctx, opts.Service, opts.Duration, deployTraceFetchLimit)
 	if err != nil {
 		// Traces are optional — don't fail
 		allTraces = &types.QueryResult{}
@@ -203,9 +208,18 @@ func Detect(ctx context.Context, client signoz.SignozQuerier, instKey string, op
 		GeneratedAt: now,
 	}
 
-	if len(allLogs.Logs) >= deployFetchLimit {
+	logsTruncated := len(allLogs.Logs) >= deployFetchLimit
+	tracesTruncated := len(allTraces.Traces) >= deployTraceFetchLimit
+	if logsTruncated || tracesTruncated {
 		result.Truncated = true
-		result.DataCaveat = fmt.Sprintf("Log fetch hit the %d-entry limit; older buckets undercount and trends may be skewed toward 'rising'.", deployFetchLimit)
+		switch {
+		case logsTruncated && tracesTruncated:
+			result.DataCaveat = fmt.Sprintf("Log fetch hit the %d-entry limit and trace fetch hit the %d-entry limit; older buckets undercount and trends may be skewed toward 'rising'.", deployFetchLimit, deployTraceFetchLimit)
+		case logsTruncated:
+			result.DataCaveat = fmt.Sprintf("Log fetch hit the %d-entry limit; older buckets undercount and trends may be skewed toward 'rising'.", deployFetchLimit)
+		default:
+			result.DataCaveat = fmt.Sprintf("Trace fetch hit the %d-entry limit; older latency buckets undercount and latency trends may be skewed toward 'rising'.", deployTraceFetchLimit)
+		}
 	}
 
 	bucketSize := time.Duration(opts.Duration/opts.Buckets) * time.Minute
@@ -283,7 +297,7 @@ func analyzeService(svc types.Service, logs *types.QueryResult, traces *types.Qu
 	}
 
 	// 2. Latency change point detection
-	if cp := detectChangePoint(latencyBuckets, svc.Name, "p99_latency_ms", thresh.latencyChange, thresh.minConfidence); cp != nil {
+	if cp := detectLatencyChangePoint(latencyBuckets, svc.Name, thresh.latencyChange, thresh.minConfidence); cp != nil {
 		if cp.Magnitude > 0 {
 			cp.Type = ChangeLatencySpike
 			cp.Description = fmt.Sprintf("P99 latency increased %.0f%% (%.1fms → %.1fms)", cp.Magnitude, cp.BeforeValue, cp.AfterValue)
@@ -421,6 +435,20 @@ func detectChangePoint(buckets []DataPoint, service, metric string, thresholdPct
 		Magnitude:   pctChange,
 		Confidence:  confidence,
 	}
+}
+
+// detectLatencyChangePoint runs change-point detection over only the buckets
+// that actually contain latency samples. Empty buckets (Value == 0) mean "no
+// traces observed", not "0ms" — including them fabricates shifts whenever the
+// newest-N trace fetch doesn't reach the oldest buckets.
+func detectLatencyChangePoint(buckets []DataPoint, service string, thresholdPct, minConfidence float64) *ChangePoint {
+	nonEmpty := make([]DataPoint, 0, len(buckets))
+	for _, b := range buckets {
+		if b.Value > 0 {
+			nonEmpty = append(nonEmpty, b)
+		}
+	}
+	return detectChangePoint(nonEmpty, service, "p99_latency_ms", thresholdPct, minConfidence)
 }
 
 // detectNewErrorPatterns finds error messages that only appear in the second half of the window.

@@ -337,6 +337,61 @@ func TestDetect_ServiceFilter(t *testing.T) {
 	}
 }
 
+func TestLatencyChangeDetectionIgnoresEmptyBuckets(t *testing.T) {
+	// 12 buckets: first 9 empty (no traces — older than the newest-N fetch),
+	// last 3 steady at ~200ms. No real change occurred.
+	buckets := make([]DataPoint, 12)
+	base := time.Now().Add(-6 * time.Hour)
+	for i := range buckets {
+		buckets[i].Timestamp = base.Add(time.Duration(i) * 30 * time.Minute)
+	}
+	buckets[9].Value, buckets[10].Value, buckets[11].Value = 200, 205, 198
+
+	cp := detectLatencyChangePoint(buckets, "api", 50, 0.5)
+	if cp != nil {
+		t.Errorf("steady latency with empty older buckets must not yield a change point, got %+v", cp)
+	}
+}
+
+func TestLatencyChangeDetectionStillFindsRealShifts(t *testing.T) {
+	buckets := make([]DataPoint, 12)
+	base := time.Now().Add(-6 * time.Hour)
+	for i := range buckets {
+		buckets[i].Timestamp = base.Add(time.Duration(i) * 30 * time.Minute)
+		if i < 6 {
+			buckets[i].Value = 100
+		} else {
+			buckets[i].Value = 400 // real 4x latency shift
+		}
+	}
+
+	cp := detectLatencyChangePoint(buckets, "api", 50, 0.5)
+	if cp == nil {
+		t.Fatal("real 4x latency shift must be detected")
+	}
+}
+
+func TestDetect_TraceTruncationCaveat(t *testing.T) {
+	now := time.Now()
+	traces := make([]types.TraceEntry, deployTraceFetchLimit) // == the fetch limit
+	for i := range traces {
+		traces[i] = types.TraceEntry{ServiceName: "api", Timestamp: now.Add(-time.Duration(i) * time.Second)}
+	}
+	mock := &mockQuerier{
+		services: []types.Service{{Name: "api"}},
+		logs:     &types.QueryResult{},
+		traces:   &types.QueryResult{Traces: traces},
+	}
+
+	result, err := Detect(context.Background(), mock, "test", Options{Duration: 60, Buckets: 6})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Truncated || result.DataCaveat == "" {
+		t.Errorf("trace fetch at limit must set Truncated + DataCaveat, got %+v / %q", result.Truncated, result.DataCaveat)
+	}
+}
+
 func TestDetect_TruncationCaveat(t *testing.T) {
 	now := time.Now()
 	logs := make([]types.LogEntry, deployFetchLimit) // == the fetch limit
