@@ -482,10 +482,9 @@ func statusIcon(status string) string {
 	}
 }
 
-// statusPriority ranks a status for sorting worst-first. "no_data" sits at
-// the same low priority as "ok" — it is not a violation to escalate on, but
-// it must render distinctly (see statusIcon/formatValue) since it means the
-// SLO could not actually be evaluated.
+// statusPriority ranks a status for sorting worst-first. "no_data" ranks
+// below "ok": it is rendered distinctly (see statusIcon/formatValue) but
+// never outranks a real health signal in the worst-first sort.
 func statusPriority(status string) int {
 	switch status {
 	case "exhausted":
