@@ -503,9 +503,7 @@ func detectTrend(values []float64) float64 {
 
 // normalizeLogBody simplifies a log message for pattern matching.
 func normalizeLogBody(body string) string {
-	if len(body) > 200 {
-		body = body[:200]
-	}
+	body = textutil.Truncate(body, 200)
 	// Simple normalization: remove numbers, UUIDs, timestamps
 	var result strings.Builder
 	for _, ch := range body {

@@ -117,7 +117,7 @@ func getAIProvider(cfg *types.Config) (ai.Provider, error) {
 func requireAI(cfg *types.Config) (ai.Provider, error) {
 	provider, err := getAIProvider(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("AI is not configured: %w — set ANTHROPIC_API_KEY or configure an ai provider in ~/.argus/config.yaml", err)
+		return nil, fmt.Errorf("AI is not configured (%w)", err)
 	}
 	return provider, nil
 }

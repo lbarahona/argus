@@ -127,6 +127,9 @@ func diffCmd() *cobra.Command {
 		Use:   "diff",
 		Short: "Compare error rates between two time windows",
 		Long:  "Compare the current time window against the previous window to detect anomalies. Shows which services are degrading, improving, or stable.",
+		Example: `  argus analyze diff
+  argus analyze diff --duration 30
+  argus analyze diff -i production --duration 15`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sctx, err := newSignozContext(instance)
 			if err != nil {
@@ -297,6 +300,10 @@ func anomalyCmd() *cobra.Command {
 		Use:   "anomalies",
 		Short: "Detect anomalies across services",
 		Long:  "Automatically detect anomalies in error rates, log patterns, and latency using statistical analysis (z-score, percentiles) with optional AI root cause analysis.",
+		Example: `  argus analyze anomalies
+  argus analyze anomalies --duration 120 --sensitivity 1.5
+  argus analyze anomalies --service api-service --ai
+  argus analyze anomalies --quiet`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sctx, err := newSignozContext(instance)
 			if err != nil {

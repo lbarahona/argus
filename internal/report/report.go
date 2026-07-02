@@ -10,6 +10,7 @@ import (
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/signoz"
+	"github.com/lbarahona/argus/internal/textutil"
 	"github.com/lbarahona/argus/pkg/types"
 )
 
@@ -132,11 +133,7 @@ func detectPatterns(logs []types.LogEntry) []ErrorPattern {
 	// Group by first 80 chars of body (rough dedup)
 	groups := make(map[string]*ErrorPattern)
 	for _, log := range logs {
-		key := log.Body
-		if len(key) > 80 {
-			key = key[:80]
-		}
-		key = strings.TrimSpace(key)
+		key := strings.TrimSpace(textutil.Truncate(log.Body, 80))
 		if key == "" {
 			continue
 		}

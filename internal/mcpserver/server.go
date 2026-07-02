@@ -21,6 +21,7 @@ import (
 	"github.com/lbarahona/argus/internal/report"
 	"github.com/lbarahona/argus/internal/signoz"
 	"github.com/lbarahona/argus/internal/slo"
+	"github.com/lbarahona/argus/internal/textutil"
 	topkg "github.com/lbarahona/argus/internal/top"
 	"github.com/lbarahona/argus/pkg/types"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -431,10 +432,7 @@ func registerTools(server *mcp.Server) {
 			if result, err := client.QueryLogs(ctx, "", 30, 20, "ERROR"); err == nil && len(result.Logs) > 0 {
 				contextInfo += "\nRecent errors:\n"
 				for _, log := range result.Logs {
-					body := log.Body
-					if len(body) > 200 {
-						body = body[:200]
-					}
+					body := textutil.Truncate(log.Body, 200)
 					contextInfo += fmt.Sprintf("- [%s] %s: %s\n",
 						log.Timestamp.Format("15:04:05"), log.ServiceName, body)
 				}

@@ -198,6 +198,9 @@ func (m *minutesValue) Set(s string) error {
 	if d < 0 {
 		return fmt.Errorf("duration must be positive")
 	}
+	if d > 0 && d < time.Minute {
+		return fmt.Errorf("duration %q is less than a minute", s)
+	}
 	*m = minutesValue(int(d.Minutes()))
 	return nil
 }

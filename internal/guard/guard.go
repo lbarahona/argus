@@ -11,6 +11,7 @@ import (
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/output"
+	"github.com/lbarahona/argus/internal/textutil"
 	"github.com/lbarahona/argus/pkg/types"
 )
 
@@ -398,11 +399,7 @@ func (a *Analyzer) checkErrorSpikes(ctx context.Context, services []types.Servic
 	// Count unique error patterns
 	patterns := make(map[string]int)
 	for _, log := range result.Logs {
-		body := log.Body
-		if len(body) > 80 {
-			body = body[:80]
-		}
-		patterns[body]++
+		patterns[textutil.Truncate(log.Body, 80)]++
 	}
 
 	if errorCount > 50 {

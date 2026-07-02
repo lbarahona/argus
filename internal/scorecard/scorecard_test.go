@@ -148,7 +148,9 @@ func TestGroupErrors_LongMessages(t *testing.T) {
 	longMsg := strings.Repeat("x", 200)
 	logs := []types.LogEntry{{Body: longMsg}}
 	groups := groupErrors(logs, 5)
-	if len(groups) != 1 || len(groups[0].Message) > 100 {
+	// textutil.Truncate caps at 100 runes then appends "...", so the
+	// truncated message is up to 103 chars, not exactly 100.
+	if len(groups) != 1 || len(groups[0].Message) > 103 {
 		t.Errorf("long message not truncated: len=%d", len(groups[0].Message))
 	}
 }

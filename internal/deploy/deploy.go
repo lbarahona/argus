@@ -10,6 +10,7 @@ import (
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/signoz"
+	"github.com/lbarahona/argus/internal/textutil"
 	"github.com/lbarahona/argus/pkg/types"
 )
 
@@ -489,10 +490,7 @@ func normalizePattern(body string) string {
 		return ""
 	}
 	// Truncate for grouping
-	if len(body) > 80 {
-		body = body[:80]
-	}
-	return strings.TrimSpace(body)
+	return strings.TrimSpace(textutil.Truncate(body, 80))
 }
 
 // bucketLogs counts error logs per time bucket for a given service.

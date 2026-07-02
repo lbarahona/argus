@@ -12,6 +12,7 @@ import (
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/output"
 	"github.com/lbarahona/argus/internal/signoz"
+	"github.com/lbarahona/argus/internal/textutil"
 	"github.com/lbarahona/argus/pkg/types"
 )
 
@@ -295,11 +296,7 @@ func percentile(sorted []float64, p int) float64 {
 func groupErrors(logs []types.LogEntry, limit int) []ErrorGroup {
 	counts := make(map[string]int)
 	for _, l := range logs {
-		body := l.Body
-		if len(body) > 100 {
-			body = body[:100]
-		}
-		counts[body]++
+		counts[textutil.Truncate(l.Body, 100)]++
 	}
 
 	groups := make([]ErrorGroup, 0, len(counts))

@@ -10,6 +10,7 @@ import (
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/signoz"
+	"github.com/lbarahona/argus/internal/textutil"
 	"github.com/lbarahona/argus/pkg/types"
 )
 
@@ -556,10 +557,7 @@ func (tl *Timeline) RenderMarkdown(w io.Writer) {
 
 func normalizeError(body string) string {
 	// Simple normalization: remove numbers, UUIDs, timestamps
-	if len(body) > 100 {
-		body = body[:100]
-	}
-	return strings.TrimSpace(body)
+	return strings.TrimSpace(textutil.Truncate(body, 100))
 }
 
 func truncateStr(s string, n int) string {

@@ -286,9 +286,9 @@ func TestDetectPatterns_LongBody(t *testing.T) {
 	if len(patterns) != 1 {
 		t.Fatalf("expected 1 pattern, got %d", len(patterns))
 	}
-	// Pattern key is truncated to 80 chars
-	if len(patterns[0].Pattern) > 80 {
-		t.Error("pattern should be truncated to 80 chars")
+	// Pattern key is truncated to 80 runes, plus an ellipsis marker.
+	if len(patterns[0].Pattern) > 83 {
+		t.Error("pattern should be truncated to at most 80 chars plus an ellipsis")
 	}
 }
 

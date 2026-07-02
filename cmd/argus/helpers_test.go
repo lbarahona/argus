@@ -214,6 +214,11 @@ func TestMinutesValue_Set(t *testing.T) {
 		{name: "junk", input: "junk", wantErr: true},
 		{name: "negative bare", input: "-5", wantErr: true},
 		{name: "negative duration", input: "-5m", wantErr: true},
+		{name: "zero bare stays allowed", input: "0", want: 0},
+		{name: "zero duration stays allowed", input: "0m", want: 0},
+		{name: "sub-minute seconds rejected", input: "30s", wantErr: true},
+		{name: "sub-minute milliseconds rejected", input: "500ms", wantErr: true},
+		{name: "exactly one minute allowed", input: "60s", want: 1},
 	}
 
 	for _, tt := range tests {
@@ -231,6 +236,14 @@ func TestMinutesValue_Set(t *testing.T) {
 			assert.Equal(t, strconv.Itoa(tt.want), mv.String())
 		})
 	}
+}
+
+func TestMinutesValue_SubMinuteDurationErrorMessage(t *testing.T) {
+	var target int
+	mv := newMinutesValue(0, &target)
+	err := mv.Set("30s")
+	require.Error(t, err)
+	assert.Equal(t, `duration "30s" is less than a minute`, err.Error())
 }
 
 func TestNewMinutesValue_DefaultPreservedWhenUnset(t *testing.T) {

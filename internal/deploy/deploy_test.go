@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -507,8 +508,13 @@ func TestNormalizePattern(t *testing.T) {
 
 	long := "this is a very long error message that definitely exceeds the eighty character limit for pattern normalization purposes"
 	got = normalizePattern(long)
-	if len(got) > 80 {
-		t.Errorf("expected truncation to 80 chars, got %d", len(got))
+	// textutil.Truncate caps at 80 runes then appends "..." to signal
+	// truncation, so the result is up to 83 chars, not exactly 80.
+	if len(got) > 83 {
+		t.Errorf("expected truncation to at most 83 chars (80 + ellipsis), got %d", len(got))
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Errorf("expected truncated pattern to end with an ellipsis, got %q", got)
 	}
 }
 

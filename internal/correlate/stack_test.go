@@ -165,13 +165,30 @@ func TestRunStackReturnsSourceErrors(t *testing.T) {
 }
 
 func TestGroupSignalsByServiceAndAlertName(t *testing.T) {
+	// groupSignals builds its result from a map, so slice order is not
+	// guaranteed here (RunStack sorts afterward via sortGroups; this test
+	// exercises groupSignals directly, before that sort runs). Assert by
+	// service key instead of slice index to avoid flaking on map-iteration
+	// order.
 	groups := groupSignals([]CorrelatedSignal{
 		{Source: "alertmanager", Service: "checkout", Name: "HighErrorRate", Severity: "warning"},
 		{Source: "prometheus", Service: "checkout", Name: "HighErrorRate", Severity: "critical"},
 		{Source: "grafana", Service: "billing", Name: "HighErrorRate", Severity: "warning"},
 	})
 	require.Len(t, groups, 2)
-	assert.Equal(t, "critical", groups[0].Severity)
+
+	byService := make(map[string]CorrelatedGroup, len(groups))
+	for _, g := range groups {
+		byService[g.Service] = g
+	}
+
+	checkout, ok := byService["checkout"]
+	require.True(t, ok, "expected a checkout group")
+	assert.Equal(t, "critical", checkout.Severity)
+
+	billing, ok := byService["billing"]
+	require.True(t, ok, "expected a billing group")
+	assert.Equal(t, "warning", billing.Severity)
 }
 
 func TestRunStackWithoutLokiStillWorks(t *testing.T) {
