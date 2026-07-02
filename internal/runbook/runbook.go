@@ -99,7 +99,7 @@ func (s *Store) Save(rb *Runbook) error {
 	}
 
 	path := filepath.Join(s.dir, rb.ID+".yaml")
-	return os.WriteFile(path, data, 0644)
+	return fsutil.WriteFileAtomic(path, data, 0o644)
 }
 
 // resolve maps an exact or partial runbook ID to the file path that matches

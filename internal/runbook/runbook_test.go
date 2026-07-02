@@ -3,6 +3,7 @@ package runbook
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -55,6 +56,36 @@ func TestSaveAndLoad(t *testing.T) {
 	}
 	if loaded.Steps[1].Manual != true {
 		t.Error("Step 2 should be manual")
+	}
+}
+
+func TestSaveIsAtomicAndLeavesNoTempFiles(t *testing.T) {
+	s := tempStore(t)
+	rb := sampleRunbook()
+
+	if err := s.Save(rb); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".tmp-") {
+			t.Errorf("temp file left behind: %s", e.Name())
+		}
+	}
+
+	loaded, err := s.Load(rb.ID)
+	if err != nil {
+		t.Fatalf("Load after Save: %v", err)
+	}
+	if loaded.Name != rb.Name {
+		t.Errorf("Name after reload = %q, want %q", loaded.Name, rb.Name)
+	}
+	if len(loaded.Steps) != len(rb.Steps) {
+		t.Errorf("Steps after reload = %d, want %d", len(loaded.Steps), len(rb.Steps))
 	}
 }
 
