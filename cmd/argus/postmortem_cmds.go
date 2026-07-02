@@ -13,6 +13,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// postmortemIDs lists all known postmortem IDs, for shell completion.
+func postmortemIDs() ([]string, error) {
+	store, err := pmlib.Load()
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(store.Postmortems))
+	for _, pm := range store.Postmortems {
+		ids = append(ids, pm.ID)
+	}
+	return ids, nil
+}
+
 func postmortemCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "postmortem",
@@ -142,6 +155,7 @@ func postmortemGenerateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&useAI, "ai", false, "Enable AI-powered root cause analysis and action items")
 	addFormatFlag(cmd, &format, "terminal")
 	addInstanceFlag(cmd, &instance)
+	cmd.ValidArgsFunction = completeIDs(incidentIDs)
 
 	return cmd
 }
@@ -205,6 +219,7 @@ func postmortemShowCmd() *cobra.Command {
 	}
 
 	addFormatFlag(cmd, &format, "terminal")
+	cmd.ValidArgsFunction = completeIDs(postmortemIDs)
 
 	return cmd
 }
@@ -246,12 +261,13 @@ func postmortemExportCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "Output file path (default: postmortem-<incident-id>.md)")
+	cmd.ValidArgsFunction = completeIDs(postmortemIDs)
 
 	return cmd
 }
 
 func postmortemDeleteCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "delete <postmortem-id>",
 		Short: "Delete a postmortem",
 		Args:  cobra.ExactArgs(1),
@@ -284,4 +300,6 @@ func postmortemDeleteCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.ValidArgsFunction = completeIDs(postmortemIDs)
+	return cmd
 }

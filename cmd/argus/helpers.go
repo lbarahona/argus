@@ -100,6 +100,24 @@ func addInstanceFlag(cmd *cobra.Command, target *string) {
 	})
 }
 
+// completeIDs builds a ValidArgsFunction that offers the IDs returned by load
+// as completions for a command's first positional argument. It degrades
+// gracefully: a load failure yields no completions (never an error to the
+// shell), and once args[0] is already present there is nothing left to
+// complete.
+func completeIDs(load func() ([]string, error)) func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		ids, err := load()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return ids, cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
 // validFormats matches renderOutput's accepted values.
 var validFormats = []string{"terminal", "markdown", "json"}
 

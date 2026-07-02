@@ -9,6 +9,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// runbookIDs lists all known runbook IDs, for shell completion.
+func runbookIDs() ([]string, error) {
+	store := runbook.NewStore()
+	rbs, err := store.List()
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(rbs))
+	for _, rb := range rbs {
+		ids = append(ids, rb.ID)
+	}
+	return ids, nil
+}
+
 func runbookCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "runbook",
@@ -81,7 +95,7 @@ across teams via version control.`,
 	cmd.AddCommand(listCmd)
 
 	// show
-	cmd.AddCommand(&cobra.Command{
+	showCmd := &cobra.Command{
 		Use:   "show <id>",
 		Short: "Show runbook details",
 		Args:  cobra.ExactArgs(1),
@@ -94,7 +108,9 @@ across teams via version control.`,
 			runbook.PrintShow(os.Stdout, rb)
 			return nil
 		},
-	})
+	}
+	showCmd.ValidArgsFunction = completeIDs(runbookIDs)
+	cmd.AddCommand(showCmd)
 
 	// search
 	cmd.AddCommand(&cobra.Command{
@@ -118,7 +134,7 @@ across teams via version control.`,
 	})
 
 	// delete
-	cmd.AddCommand(&cobra.Command{
+	deleteCmd := &cobra.Command{
 		Use:     "delete <id>",
 		Short:   "Delete a runbook",
 		Aliases: []string{"rm"},
@@ -142,10 +158,12 @@ across teams via version control.`,
 			fmt.Printf("✅ Deleted: %s\n", rb.Name)
 			return nil
 		},
-	})
+	}
+	deleteCmd.ValidArgsFunction = completeIDs(runbookIDs)
+	cmd.AddCommand(deleteCmd)
 
 	// validate
-	cmd.AddCommand(&cobra.Command{
+	validateCmd := &cobra.Command{
 		Use:   "validate <id>",
 		Short: "Validate a runbook's structure",
 		Args:  cobra.ExactArgs(1),
@@ -168,7 +186,9 @@ across teams via version control.`,
 			}
 			return nil
 		},
-	})
+	}
+	validateCmd.ValidArgsFunction = completeIDs(runbookIDs)
+	cmd.AddCommand(validateCmd)
 
 	// run (dry-run by default; --execute runs command/check steps with confirmation)
 	var execute bool
@@ -216,6 +236,7 @@ and a run log saved under ~/.argus/runbooks/runs/.`,
 		},
 	}
 	runCmd.Flags().BoolVar(&execute, "execute", false, "Actually execute command/check steps (with per-step confirmation)")
+	runCmd.ValidArgsFunction = completeIDs(runbookIDs)
 	cmd.AddCommand(runCmd)
 
 	return cmd

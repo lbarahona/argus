@@ -9,6 +9,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// incidentIDs lists all known incident IDs, for shell completion.
+func incidentIDs() ([]string, error) {
+	store, err := incident.Load()
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(store.Incidents))
+	for _, inc := range store.Incidents {
+		ids = append(ids, inc.ID)
+	}
+	return ids, nil
+}
+
 func incidentCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "incident",
@@ -128,6 +141,7 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 	updateCmd.Flags().StringVar(&updateStatus, "status", "", "New status: investigating, identified, monitoring, resolved")
 	updateCmd.Flags().StringVarP(&message, "message", "m", "", "Timeline message")
 	updateCmd.Flags().StringVar(&author, "author", "", "Author of the update")
+	updateCmd.ValidArgsFunction = completeIDs(incidentIDs)
 	cmd.AddCommand(updateCmd)
 
 	// resolve (shortcut for update --status resolved)
@@ -161,6 +175,7 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 		},
 	}
 	resolveCmd.Flags().StringVarP(&resolveMsg, "message", "m", "", "Resolution message")
+	resolveCmd.ValidArgsFunction = completeIDs(incidentIDs)
 	cmd.AddCommand(resolveCmd)
 
 	// timeline
@@ -182,6 +197,7 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 			return nil
 		},
 	}
+	timelineCmd.ValidArgsFunction = completeIDs(incidentIDs)
 	cmd.AddCommand(timelineCmd)
 
 	return cmd
