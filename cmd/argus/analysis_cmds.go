@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"time"
 
 	"github.com/lbarahona/argus/internal/ai"
@@ -20,7 +19,6 @@ import (
 	"github.com/lbarahona/argus/internal/report"
 	"github.com/lbarahona/argus/internal/scorecard"
 	"github.com/lbarahona/argus/internal/timeline"
-	topkg "github.com/lbarahona/argus/internal/top"
 	"github.com/lbarahona/argus/internal/watch"
 	"github.com/spf13/cobra"
 )
@@ -77,61 +75,6 @@ func reportCmd() *cobra.Command {
 	addDurationFlag(cmd, &duration, 60, "Duration in minutes to cover (e.g. 90, 90m, 2h)")
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-generated summary (uses Anthropic API)")
 	addFormatFlag(cmd, &format, "terminal")
-
-	return cmd
-}
-
-func topCmd() *cobra.Command {
-	var instance string
-	var limit int
-	var sortBy string
-	var duration int
-
-	cmd := &cobra.Command{
-		Use:   "top",
-		Short: "Show top services by errors, like htop for your services",
-		Long:  "Display a ranked view of services sorted by errors, error rate, or call volume. Quick triage tool for on-call SREs.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			var sf topkg.SortField
-			switch strings.ToLower(sortBy) {
-			case "errors":
-				sf = topkg.SortByErrors
-			case "rate":
-				sf = topkg.SortByErrorRate
-			case "calls":
-				sf = topkg.SortByCalls
-			case "name":
-				sf = topkg.SortByName
-			default:
-				sf = topkg.SortByErrors
-			}
-
-			sctx, err := newSignozContext(instance)
-			if err != nil {
-				return err
-			}
-
-			ctx := context.Background()
-			fmt.Printf("%s Fetching service data...\n", output.MutedStyle.Render("⏳"))
-
-			result, err := topkg.Run(ctx, sctx.client, sctx.instKey, topkg.Options{
-				Limit:    limit,
-				SortBy:   sf,
-				Duration: duration,
-			})
-			if err != nil {
-				return err
-			}
-
-			result.RenderTerminal(os.Stdout)
-			return nil
-		},
-	}
-
-	addInstanceFlag(cmd, &instance)
-	cmd.Flags().IntVarP(&limit, "limit", "l", 20, "Number of services to show")
-	cmd.Flags().StringVarP(&sortBy, "sort", "s", "errors", "Sort by: errors, rate, calls, name")
-	addDurationFlag(cmd, &duration, 60, "Duration in minutes for recent error lookup (e.g. 90, 90m, 2h)")
 
 	return cmd
 }

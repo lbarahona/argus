@@ -11,6 +11,7 @@ import (
 	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/output"
 	"github.com/lbarahona/argus/internal/signoz"
+	topkg "github.com/lbarahona/argus/internal/top"
 	"github.com/lbarahona/argus/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -136,11 +137,14 @@ func logsCmd() *cobra.Command {
 
 func servicesCmd() *cobra.Command {
 	var instance string
+	var sortBy string
+	var limit int
+	var duration int
 
 	cmd := &cobra.Command{
 		Use:   "services",
 		Short: "List services from Signoz",
-		Long:  "List all services discovered by Signoz with call counts and error rates.",
+		Long:  "List all services discovered by Signoz with call counts and error rates. Use --sort to rank by errors, error rate, or call volume, like htop for your services.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sctx, err := newSignozContext(instance)
 			if err != nil {
@@ -149,11 +153,43 @@ func servicesCmd() *cobra.Command {
 
 			ctx := context.Background()
 
+			if strings.ToLower(sortBy) != "name" {
+				var sf topkg.SortField
+				switch strings.ToLower(sortBy) {
+				case "errors":
+					sf = topkg.SortByErrors
+				case "rate":
+					sf = topkg.SortByErrorRate
+				case "calls":
+					sf = topkg.SortByCalls
+				default:
+					return fmt.Errorf("unknown sort %q (valid: errors, rate, calls, name)", sortBy)
+				}
+
+				fmt.Printf("%s Fetching service data...\n", output.MutedStyle.Render("⏳"))
+
+				result, err := topkg.Run(ctx, sctx.client, sctx.instKey, topkg.Options{
+					Limit:    limit,
+					SortBy:   sf,
+					Duration: duration,
+				})
+				if err != nil {
+					return err
+				}
+
+				result.RenderTerminal(os.Stdout)
+				return nil
+			}
+
 			fmt.Printf("%s Fetching services from %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(sctx.instKey))
 
 			services, err := sctx.client.ListServices(ctx)
 			if err != nil {
 				return fmt.Errorf("listing services: %w", err)
+			}
+
+			if limit > 0 && limit < len(services) {
+				services = services[:limit]
 			}
 
 			output.PrintServices(services)
@@ -162,6 +198,13 @@ func servicesCmd() *cobra.Command {
 	}
 
 	addInstanceFlag(cmd, &instance)
+	cmd.Flags().StringVar(&sortBy, "sort", "name", "Sort by: errors, rate, calls, name")
+	cmd.Flags().IntVarP(&limit, "limit", "l", 0, "Maximum number of services to show (0 = all)")
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes for recent error lookup when sorted (e.g. 90, 90m, 2h)")
+
+	_ = cmd.RegisterFlagCompletionFunc("sort", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"errors", "rate", "calls", "name"}, cobra.ShellCompDirectiveNoFileComp
+	})
 
 	return cmd
 }

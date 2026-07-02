@@ -62,7 +62,6 @@ func main() {
 		metricsCmd(),
 		dashboardCmd(),
 		reportCmd(),
-		topCmd(),
 		diffCmd(),
 		watchCmd(),
 		alertCmd(),
