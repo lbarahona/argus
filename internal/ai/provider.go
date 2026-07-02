@@ -85,7 +85,7 @@ type BedrockConfig struct {
 // These defaults can be overridden via the ai.model config key.
 var DefaultModels = map[string]string{
 	"anthropic": "claude-sonnet-5",
-	"openai":    "gpt-4o",     // can be overridden by ai.model config key
+	"openai":    "gpt-4o",                                    // can be overridden by ai.model config key
 	"bedrock":   "anthropic.claude-3-5-sonnet-20241022-v2:0", // can be overridden by ai.model config key
 }
 
