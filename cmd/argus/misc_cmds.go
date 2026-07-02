@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -114,13 +115,22 @@ func doctorCmd() *cobra.Command {
 			ctx := cmd.Context()
 			report := doctor.Run(ctx, version, verbose)
 
+			// doctor.FormatJSON produces a hand-mapped schema (lowercase
+			// fields, string statuses, pass/warn/fail counts) that the MCP
+			// server also emits — pass it pre-serialized so renderOutput
+			// doesn't re-marshal the raw Report struct.
+			jsonData, err := doctor.FormatJSON(report)
+			if err != nil {
+				return err
+			}
+
 			if err := renderOutput(format, func() error {
 				fmt.Print(doctor.FormatTerminal(report, verbose))
 				return nil
 			}, func() error {
 				fmt.Print(doctor.FormatMarkdown(report))
 				return nil
-			}, report); err != nil {
+			}, json.RawMessage(jsonData)); err != nil {
 				return err
 			}
 

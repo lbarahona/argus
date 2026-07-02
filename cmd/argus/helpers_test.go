@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -131,6 +132,22 @@ func TestRenderOutput_JSONMarshalsAndPrintsValue(t *testing.T) {
 	expected, err := jsonMarshal(value)
 	require.NoError(t, err)
 	assert.Equal(t, string(expected)+"\n", out)
+}
+
+func TestRenderOutput_JSONRawMessagePrintsVerbatim(t *testing.T) {
+	// Pre-serialized JSON (e.g. a package's hand-mapped FormatJSON schema,
+	// like internal/doctor's) must pass through byte-for-byte — NOT be
+	// re-marshaled, which would rewrite the formatting/schema. The 4-space
+	// indentation here is deliberately different from jsonMarshal's 2-space
+	// indent so a re-marshal path fails this test.
+	raw := json.RawMessage("{\n    \"pass\": 3,\n    \"custom_field\": \"kept\"\n}")
+
+	out := captureStdout(t, func() {
+		err := renderOutput("json", nil, nil, raw)
+		require.NoError(t, err)
+	})
+
+	assert.Equal(t, "{\n    \"pass\": 3,\n    \"custom_field\": \"kept\"\n}\n", out)
 }
 
 func TestRenderOutput_NilTerminalRendererErrors(t *testing.T) {

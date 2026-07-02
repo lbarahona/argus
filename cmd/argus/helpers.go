@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/signoz"
@@ -55,6 +57,13 @@ func renderOutput(format string, terminal func() error, markdown func() error, j
 		}
 		return markdown()
 	case "json":
+		// Pre-serialized JSON (a package's hand-mapped FormatJSON schema,
+		// e.g. internal/doctor's) passes through verbatim rather than being
+		// re-marshaled, which would rewrite the schema.
+		if raw, ok := jsonValue.(json.RawMessage); ok {
+			fmt.Println(strings.TrimSpace(string(raw)))
+			return nil
+		}
 		if jsonValue == nil {
 			return fmt.Errorf("json output is not supported by this command")
 		}
