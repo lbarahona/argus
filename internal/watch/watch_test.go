@@ -15,6 +15,7 @@ import (
 
 type mockSignozClient struct {
 	listServicesFunc func(ctx context.Context) ([]types.Service, error)
+	queryTracesFunc  func(ctx context.Context, service string, durationMinutes, limit int) (*types.QueryResult, error)
 }
 
 func (m *mockSignozClient) Health(ctx context.Context) (bool, time.Duration, error) {
@@ -33,6 +34,9 @@ func (m *mockSignozClient) QueryLogs(ctx context.Context, service string, durati
 }
 
 func (m *mockSignozClient) QueryTraces(ctx context.Context, service string, durationMinutes, limit int) (*types.QueryResult, error) {
+	if m.queryTracesFunc != nil {
+		return m.queryTracesFunc(ctx, service, durationMinutes, limit)
+	}
 	return &types.QueryResult{}, nil
 }
 
@@ -303,6 +307,42 @@ func TestSummaryWithAlerts(t *testing.T) {
 	summary := w.Summary()
 	if summary == "No alerts during watch session." {
 		t.Error("expected alerts in summary")
+	}
+}
+
+func TestEnrichWithLatencySetsP99FromTraces(t *testing.T) {
+	traces := make([]types.TraceEntry, 100)
+	for i := range traces {
+		traces[i] = types.TraceEntry{ServiceName: "api", DurationNano: int64(i+1) * 1_000_000} // 1..100ms
+	}
+	mock := &mockSignozClient{
+		queryTracesFunc: func(ctx context.Context, service string, durationMinutes, limit int) (*types.QueryResult, error) {
+			if service != "" {
+				t.Errorf("enrichWithLatency must query unfiltered, got service %q", service)
+			}
+			return &types.QueryResult{Traces: traces}, nil
+		},
+	}
+	w := New(mock, "test", 30*time.Second, DefaultThresholds(), &bytes.Buffer{})
+
+	snapshots := []ServiceSnapshot{{Name: "api", Calls: 100}}
+	w.enrichWithLatency(context.Background(), snapshots)
+
+	if snapshots[0].P99 < 98 || snapshots[0].P99 > 100 {
+		t.Errorf("P99 of 1..100ms = %v, want ~99", snapshots[0].P99)
+	}
+}
+
+func TestPercentile(t *testing.T) {
+	vals := []float64{10, 20, 30, 40, 50, 60, 70, 80, 90, 100}
+	if got := percentile(vals, 0.99); got != 100 {
+		t.Errorf("p99 of 10..100 = %v, want 100", got)
+	}
+	if got := percentile(vals, 0.5); got != 50 {
+		t.Errorf("p50 of 10..100 = %v, want 50", got)
+	}
+	if got := percentile([]float64{42}, 0.99); got != 42 {
+		t.Errorf("p99 of single value = %v, want 42", got)
 	}
 }
 

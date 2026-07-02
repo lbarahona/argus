@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -160,6 +161,7 @@ func (w *Watcher) tick(ctx context.Context) {
 	}
 
 	snapshots := w.buildSnapshots(services)
+	w.enrichWithLatency(ctx, snapshots)
 	alerts := w.analyze(snapshots)
 
 	// Print service summary
@@ -234,6 +236,46 @@ func (w *Watcher) buildSnapshots(services []types.Service) []ServiceSnapshot {
 		return snapshots[i].ErrorRate > snapshots[j].ErrorRate
 	})
 	return snapshots
+}
+
+// latencyWindowMinutes is the lookback for per-tick latency sampling; kept
+// short so P99 reflects current behavior, not the whole 6h service window.
+const latencyWindowMinutes = 15
+
+// enrichWithLatency fills per-service P99 from one unfiltered trace query.
+// ListServices carries no latency data, so without this every P99 threshold
+// is dead. Errors are ignored: latency alerts degrade, error alerts keep
+// working.
+func (w *Watcher) enrichWithLatency(ctx context.Context, snapshots []ServiceSnapshot) {
+	result, err := w.client.QueryTraces(ctx, "", latencyWindowMinutes, 1000)
+	if err != nil || result == nil {
+		return
+	}
+	byService := make(map[string][]float64)
+	for _, t := range result.Traces {
+		if t.ServiceName != "" {
+			byService[t.ServiceName] = append(byService[t.ServiceName], t.DurationMs())
+		}
+	}
+	for i := range snapshots {
+		if ds := byService[snapshots[i].Name]; len(ds) > 0 {
+			snapshots[i].P99 = percentile(ds, 0.99)
+		}
+	}
+}
+
+// percentile returns the p-th percentile (0 < p <= 1) using the
+// nearest-rank method. vals is sorted in place.
+func percentile(vals []float64, p float64) float64 {
+	sort.Float64s(vals)
+	idx := int(math.Ceil(p*float64(len(vals)))) - 1
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(vals) {
+		idx = len(vals) - 1
+	}
+	return vals[idx]
 }
 
 func (w *Watcher) analyze(snapshots []ServiceSnapshot) []Alert {
