@@ -449,6 +449,14 @@ func TestParseAIResponseMarkdownHeaders(t *testing.T) {
 	}
 }
 
+func TestParseAIResponseBoldInlineContentExact(t *testing.T) {
+	pm := &Postmortem{}
+	parseAIResponse(pm, "**ROOT CAUSE:** The pool was exhausted.\n\n**LESSONS LEARNED:**\n- Size pools")
+	if pm.RootCause != "The pool was exhausted." {
+		t.Errorf("bold inline header content must have no stray markers, got %q", pm.RootCause)
+	}
+}
+
 func TestParseAIResponseNoHeadersKeepsRawAnalysis(t *testing.T) {
 	pm := &Postmortem{}
 	parseAIResponse(pm, "The incident was caused by a cache stampede after the deploy.")

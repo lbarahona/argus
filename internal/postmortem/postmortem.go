@@ -605,6 +605,10 @@ func parseAIResponse(pm *Postmortem, response string) {
 					if strings.HasPrefix(upper, h.prefix) {
 						if len(line) >= len(h.prefix) {
 							line = strings.TrimSpace(line[len(h.prefix):])
+							// "**LABEL:** content" leaves the closing bold
+							// marker mid-string after the prefix is sliced
+							// off; strip it from the remainder.
+							line = strings.TrimSpace(strings.TrimPrefix(line, "**"))
 						}
 					} else {
 						// Matched without trailing colon (e.g. "## ROOT CAUSE"): nothing to strip.
