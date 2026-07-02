@@ -70,17 +70,10 @@ across teams via version control.`,
 				rbs = filtered
 			}
 
-			if format == "json" {
-				out, err := runbook.FormatJSON(rbs)
-				if err != nil {
-					return err
-				}
-				fmt.Println(out)
+			return renderOutput(format, func() error {
+				runbook.PrintList(os.Stdout, rbs)
 				return nil
-			}
-
-			runbook.PrintList(os.Stdout, rbs)
-			return nil
+			}, nil, rbs)
 		},
 	}
 	listCmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: text or json")

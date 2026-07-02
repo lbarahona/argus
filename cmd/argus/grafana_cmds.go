@@ -70,12 +70,10 @@ func grafanaDashboardsCmd() *cobra.Command {
 				return fmt.Errorf("fetching dashboards: %w", err)
 			}
 
-			if format == "json" {
-				fmt.Println(grafanalib.FormatJSON(dashboards))
-			} else {
+			return renderOutput(format, func() error {
 				fmt.Print(grafanalib.FormatDashboards(dashboards))
-			}
-			return nil
+				return nil
+			}, nil, dashboards)
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
@@ -102,12 +100,10 @@ func grafanaDashboardGetCmd() *cobra.Command {
 				return fmt.Errorf("fetching dashboard: %w", err)
 			}
 
-			if format == "json" {
-				fmt.Println(grafanalib.FormatJSON(dm))
-			} else {
+			return renderOutput(format, func() error {
 				fmt.Print(grafanalib.FormatDashboardDetail(dm))
-			}
-			return nil
+				return nil
+			}, nil, dm)
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
@@ -142,12 +138,10 @@ func grafanaSearchCmd() *cobra.Command {
 				return fmt.Errorf("searching: %w", err)
 			}
 
-			if format == "json" {
-				fmt.Println(grafanalib.FormatJSON(results))
-			} else {
+			return renderOutput(format, func() error {
 				fmt.Print(grafanalib.FormatDashboards(results))
-			}
-			return nil
+				return nil
+			}, nil, results)
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
@@ -176,12 +170,10 @@ func grafanaDatasourcesCmd() *cobra.Command {
 				return fmt.Errorf("fetching data sources: %w", err)
 			}
 
-			if format == "json" {
-				fmt.Println(grafanalib.FormatJSON(ds))
-			} else {
+			return renderOutput(format, func() error {
 				fmt.Print(grafanalib.FormatDatasources(ds))
-			}
-			return nil
+				return nil
+			}, nil, ds)
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
@@ -207,12 +199,10 @@ func grafanaFoldersCmd() *cobra.Command {
 				return fmt.Errorf("fetching folders: %w", err)
 			}
 
-			if format == "json" {
-				fmt.Println(grafanalib.FormatJSON(folders))
-			} else {
+			return renderOutput(format, func() error {
 				fmt.Print(grafanalib.FormatFolders(folders))
-			}
-			return nil
+				return nil
+			}, nil, folders)
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
@@ -238,12 +228,10 @@ func grafanaAlertsCmd() *cobra.Command {
 				return fmt.Errorf("fetching alert rules: %w", err)
 			}
 
-			if format == "json" {
-				fmt.Println(grafanalib.FormatJSON(rules))
-			} else {
+			return renderOutput(format, func() error {
 				fmt.Print(grafanalib.FormatAlertRules(rules))
-			}
-			return nil
+				return nil
+			}, nil, rules)
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
@@ -269,12 +257,10 @@ func grafanaAlertInstancesCmd() *cobra.Command {
 				return fmt.Errorf("fetching alert instances: %w", err)
 			}
 
-			if format == "json" {
-				fmt.Println(grafanalib.FormatJSON(instances))
-			} else {
+			return renderOutput(format, func() error {
 				fmt.Print(grafanalib.FormatAlertInstances(instances))
-			}
-			return nil
+				return nil
+			}, nil, instances)
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
@@ -302,16 +288,15 @@ func grafanaStatusCmd() *cobra.Command {
 
 			org, _ := client.Org(ctx) // org might fail without auth
 
-			if format == "json" {
-				data := map[string]interface{}{"health": health}
-				if org != nil {
-					data["org"] = org
-				}
-				fmt.Println(grafanalib.FormatJSON(data))
-			} else {
-				fmt.Print(grafanalib.FormatStatus(health, org))
+			data := map[string]interface{}{"health": health}
+			if org != nil {
+				data["org"] = org
 			}
-			return nil
+
+			return renderOutput(format, func() error {
+				fmt.Print(grafanalib.FormatStatus(health, org))
+				return nil
+			}, nil, data)
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
@@ -337,12 +322,10 @@ func grafanaSummaryCmd() *cobra.Command {
 				return fmt.Errorf("building summary: %w", err)
 			}
 
-			if format == "json" {
-				fmt.Println(grafanalib.FormatJSON(summary))
-			} else {
+			return renderOutput(format, func() error {
 				fmt.Print(grafanalib.FormatSummary(summary))
-			}
-			return nil
+				return nil
+			}, nil, summary)
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")

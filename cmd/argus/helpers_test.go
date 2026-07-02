@@ -1,6 +1,9 @@
 package main
 
 import (
+	"errors"
+	"io"
+	"os"
 	"testing"
 
 	"github.com/lbarahona/argus/pkg/types"
@@ -58,4 +61,122 @@ func TestNewSignozContext_NoConfigFileErrors(t *testing.T) {
 	sctx, err := newSignozContext("")
 	require.Error(t, err)
 	assert.Nil(t, sctx)
+}
+
+// captureStdout runs fn with os.Stdout redirected to a pipe and returns
+// everything written to it.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+
+	fn()
+
+	require.NoError(t, w.Close())
+	os.Stdout = orig
+
+	out, err := io.ReadAll(r)
+	require.NoError(t, err)
+	return string(out)
+}
+
+func TestRenderOutput_TerminalSynonymsDispatchToTerminal(t *testing.T) {
+	for _, format := range []string{"", "terminal", "text", "table"} {
+		t.Run(format, func(t *testing.T) {
+			called := false
+			err := renderOutput(format, func() error {
+				called = true
+				return nil
+			}, func() error {
+				t.Fatal("markdown renderer should not be called")
+				return nil
+			}, nil)
+			require.NoError(t, err)
+			assert.True(t, called)
+		})
+	}
+}
+
+func TestRenderOutput_MarkdownSynonymsDispatchToMarkdown(t *testing.T) {
+	for _, format := range []string{"markdown", "md"} {
+		t.Run(format, func(t *testing.T) {
+			called := false
+			err := renderOutput(format, func() error {
+				t.Fatal("terminal renderer should not be called")
+				return nil
+			}, func() error {
+				called = true
+				return nil
+			}, nil)
+			require.NoError(t, err)
+			assert.True(t, called)
+		})
+	}
+}
+
+func TestRenderOutput_JSONMarshalsAndPrintsValue(t *testing.T) {
+	value := map[string]string{"hello": "world"}
+
+	out := captureStdout(t, func() {
+		err := renderOutput("json", func() error {
+			t.Fatal("terminal renderer should not be called")
+			return nil
+		}, nil, value)
+		require.NoError(t, err)
+	})
+
+	expected, err := jsonMarshal(value)
+	require.NoError(t, err)
+	assert.Equal(t, string(expected)+"\n", out)
+}
+
+func TestRenderOutput_NilTerminalRendererErrors(t *testing.T) {
+	err := renderOutput("terminal", nil, nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "terminal output not supported here")
+}
+
+func TestRenderOutput_NilMarkdownRendererErrors(t *testing.T) {
+	err := renderOutput("markdown", func() error { return nil }, nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "markdown output is not supported by this command")
+}
+
+func TestRenderOutput_NilJSONValueErrors(t *testing.T) {
+	err := renderOutput("json", func() error { return nil }, nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "json output is not supported by this command")
+}
+
+func TestRenderOutput_UnknownFormatErrors(t *testing.T) {
+	err := renderOutput("bogus", func() error { return nil }, func() error { return nil }, "value")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown format "bogus"`)
+	assert.Contains(t, err.Error(), "valid: terminal, markdown, json")
+}
+
+func TestRenderOutput_TerminalRendererErrorPropagates(t *testing.T) {
+	sentinel := errors.New("boom")
+	err := renderOutput("terminal", func() error {
+		return sentinel
+	}, nil, nil)
+	require.ErrorIs(t, err, sentinel)
+}
+
+func TestRenderOutput_MarkdownRendererErrorPropagates(t *testing.T) {
+	sentinel := errors.New("boom")
+	err := renderOutput("markdown", nil, func() error {
+		return sentinel
+	}, nil)
+	require.ErrorIs(t, err, sentinel)
+}
+
+func TestRenderOutput_JSONMarshalErrorPropagates(t *testing.T) {
+	// Functions cannot be marshaled to JSON, so this exercises the
+	// jsonMarshal error path.
+	err := renderOutput("json", nil, nil, func() {})
+	require.Error(t, err)
 }

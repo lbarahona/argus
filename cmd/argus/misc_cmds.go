@@ -114,17 +114,14 @@ func doctorCmd() *cobra.Command {
 			ctx := cmd.Context()
 			report := doctor.Run(ctx, version, verbose)
 
-			switch format {
-			case "json":
-				data, err := doctor.FormatJSON(report)
-				if err != nil {
-					return err
-				}
-				fmt.Println(string(data))
-			case "markdown", "md":
-				fmt.Print(doctor.FormatMarkdown(report))
-			default:
+			if err := renderOutput(format, func() error {
 				fmt.Print(doctor.FormatTerminal(report, verbose))
+				return nil
+			}, func() error {
+				fmt.Print(doctor.FormatMarkdown(report))
+				return nil
+			}, report); err != nil {
+				return err
 			}
 
 			if report.FailCount() > 0 {

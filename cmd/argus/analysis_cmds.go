@@ -56,12 +56,13 @@ func reportCmd() *cobra.Command {
 				return err
 			}
 
-			if format == "markdown" {
-				r.RenderMarkdown(os.Stdout)
-			} else {
+			return renderOutput(format, func() error {
 				r.RenderTerminal(os.Stdout)
-			}
-			return nil
+				return nil
+			}, func() error {
+				r.RenderMarkdown(os.Stdout)
+				return nil
+			}, nil)
 		},
 	}
 
@@ -428,14 +429,13 @@ Use --ai to generate an AI-powered incident narrative.`,
 				return err
 			}
 
-			switch format {
-			case "markdown":
-				tl.RenderMarkdown(os.Stdout)
-			default:
+			return renderOutput(format, func() error {
 				tl.RenderTerminal(os.Stdout)
-			}
-
-			return nil
+				return nil
+			}, func() error {
+				tl.RenderMarkdown(os.Stdout)
+				return nil
+			}, nil)
 		},
 	}
 
@@ -455,7 +455,7 @@ func correlateCmd() *cobra.Command {
 	var bucketSize int
 	var minEvents int
 	var useAI bool
-	var markdown bool
+	var format string
 
 	cmd := &cobra.Command{
 		Use:   "correlate",
@@ -470,7 +470,7 @@ the root cause in a cascade.`,
   argus correlate --service api-gateway
   argus correlate --duration 30 --ai
   argus correlate --bucket 30 --min-events 5
-  argus correlate --markdown
+  argus correlate --format markdown
   argus correlate stack --duration 30`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sctx, err := newSignozContext(instance)
@@ -506,12 +506,13 @@ the root cause in a cascade.`,
 				return err
 			}
 
-			if markdown {
-				fmt.Print(correlate.RenderMarkdown(result))
-			} else {
+			return renderOutput(format, func() error {
 				correlate.Render(result)
-			}
-			return nil
+				return nil
+			}, func() error {
+				fmt.Print(correlate.RenderMarkdown(result))
+				return nil
+			}, nil)
 		},
 	}
 
@@ -521,7 +522,7 @@ the root cause in a cascade.`,
 	cmd.Flags().IntVar(&bucketSize, "bucket", 60, "Time bucket size in seconds for clustering")
 	cmd.Flags().IntVar(&minEvents, "min-events", 3, "Minimum events to form a cluster")
 	cmd.Flags().BoolVar(&useAI, "ai", false, "Include AI-powered correlation analysis")
-	cmd.Flags().BoolVar(&markdown, "markdown", false, "Output as markdown")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, markdown")
 	cmd.AddCommand(correlateStackCmd())
 
 	return cmd
@@ -571,17 +572,10 @@ blast radius.`,
 				return err
 			}
 
-			switch format {
-			case "json":
-				out, err := jsonMarshal(result)
-				if err != nil {
-					return err
-				}
-				fmt.Println(string(out))
-			default:
+			return renderOutput(format, func() error {
 				fmt.Print(correlate.RenderStack(result))
-			}
-			return nil
+				return nil
+			}, nil, result)
 		},
 	}
 
@@ -624,12 +618,13 @@ func scorecardCmd() *cobra.Command {
 				return err
 			}
 
-			if format == "markdown" {
-				scorecard.RenderMarkdown(os.Stdout, sc)
-			} else {
+			return renderOutput(format, func() error {
 				scorecard.RenderTerminal(os.Stdout, sc)
-			}
-			return nil
+				return nil
+			}, func() error {
+				scorecard.RenderMarkdown(os.Stdout, sc)
+				return nil
+			}, nil)
 		},
 	}
 
@@ -689,12 +684,13 @@ Risk levels:
 				return err
 			}
 
-			if format == "markdown" {
-				r.RenderMarkdown(os.Stdout)
-			} else {
+			return renderOutput(format, func() error {
 				r.RenderTerminal(os.Stdout)
-			}
-			return nil
+				return nil
+			}, func() error {
+				r.RenderMarkdown(os.Stdout)
+				return nil
+			}, nil)
 		},
 	}
 
@@ -743,12 +739,13 @@ func depsCmd() *cobra.Command {
 				return err
 			}
 
-			if format == "markdown" {
-				deps.RenderMarkdown(os.Stdout, dm)
-			} else {
+			return renderOutput(format, func() error {
 				deps.RenderTable(os.Stdout, dm)
-			}
-			return nil
+				return nil
+			}, func() error {
+				deps.RenderMarkdown(os.Stdout, dm)
+				return nil
+			}, nil)
 		},
 	}
 
@@ -819,12 +816,13 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
 				return err
 			}
 
-			if format == "markdown" {
-				r.RenderMarkdown(os.Stdout)
-			} else {
+			return renderOutput(format, func() error {
 				r.RenderTerminal(os.Stdout)
-			}
-			return nil
+				return nil
+			}, func() error {
+				r.RenderMarkdown(os.Stdout)
+				return nil
+			}, nil)
 		},
 	}
 

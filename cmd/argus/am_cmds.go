@@ -86,17 +86,10 @@ func amAlertsCmd() *cobra.Command {
 				return err
 			}
 
-			switch format {
-			case "json":
-				out, err := amlib.FormatJSON(alerts)
-				if err != nil {
-					return err
-				}
-				fmt.Println(out)
-			default:
+			return renderOutput(format, func() error {
 				fmt.Print(amlib.FormatAlerts(alerts, showAll))
-			}
-			return nil
+				return nil
+			}, nil, alerts)
 		},
 	}
 
@@ -130,17 +123,10 @@ func amSilencesCmd() *cobra.Command {
 				return err
 			}
 
-			switch format {
-			case "json":
-				out, err := amlib.FormatSilencesJSON(silences)
-				if err != nil {
-					return err
-				}
-				fmt.Println(out)
-			default:
+			return renderOutput(format, func() error {
 				fmt.Print(amlib.FormatSilences(silences, showExpired))
-			}
-			return nil
+				return nil
+			}, nil, silences)
 		},
 	}
 
@@ -269,17 +255,10 @@ func amStatusCmd() *cobra.Command {
 				return fmt.Errorf("alertmanager unreachable: %w", err)
 			}
 
-			switch format {
-			case "json":
-				data, err := jsonMarshal(status)
-				if err != nil {
-					return err
-				}
-				fmt.Println(string(data))
-			default:
+			return renderOutput(format, func() error {
 				fmt.Print(amlib.FormatStatus(status, healthy, latency))
-			}
-			return nil
+				return nil
+			}, nil, status)
 		},
 	}
 
@@ -309,14 +288,7 @@ func amSummaryCmd() *cobra.Command {
 
 			summary := amlib.BuildSummary(alerts)
 
-			switch format {
-			case "json":
-				data, err := jsonMarshal(summary)
-				if err != nil {
-					return err
-				}
-				fmt.Println(string(data))
-			default:
+			return renderOutput(format, func() error {
 				fmt.Printf("\n🔔 Alert Summary: %d total (%d active, %d suppressed)\n\n",
 					summary.TotalAlerts, summary.ActiveAlerts, summary.SuppressedAlerts)
 
@@ -335,8 +307,8 @@ func amSummaryCmd() *cobra.Command {
 					}
 				}
 				fmt.Println()
-			}
-			return nil
+				return nil
+			}, nil, summary)
 		},
 	}
 

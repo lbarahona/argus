@@ -72,12 +72,10 @@ func promRulesCmd() *cobra.Command {
 				return err
 			}
 
-			if format == "json" {
-				fmt.Println(promlib.FormatJSON(data))
-			} else {
+			return renderOutput(format, func() error {
 				fmt.Print(promlib.FormatRules(data, ruleType))
-			}
-			return nil
+				return nil
+			}, nil, data)
 		},
 	}
 
@@ -105,12 +103,10 @@ func promTargetsCmd() *cobra.Command {
 				return err
 			}
 
-			if format == "json" {
-				fmt.Println(promlib.FormatJSON(data))
-			} else {
+			return renderOutput(format, func() error {
 				fmt.Print(promlib.FormatTargets(data))
-			}
-			return nil
+				return nil
+			}, nil, data)
 		},
 	}
 
@@ -137,12 +133,10 @@ func promAlertsCmd() *cobra.Command {
 				return err
 			}
 
-			if format == "json" {
-				fmt.Println(promlib.FormatJSON(data))
-			} else {
+			return renderOutput(format, func() error {
 				fmt.Print(promlib.FormatAlerts(data))
-			}
-			return nil
+				return nil
+			}, nil, data)
 		},
 	}
 
@@ -171,12 +165,10 @@ func promQueryCmd() *cobra.Command {
 				return err
 			}
 
-			if format == "json" {
-				fmt.Println(promlib.FormatJSON(result))
-			} else {
+			return renderOutput(format, func() error {
 				fmt.Print(promlib.FormatQuery(result))
-			}
-			return nil
+				return nil
+			}, nil, result)
 		},
 	}
 
@@ -206,17 +198,16 @@ func promStatusCmd() *cobra.Command {
 				return fmt.Errorf("failed to fetch status: %v / %v", runtimeErr, buildErr)
 			}
 
-			if format == "json" {
-				data := map[string]interface{}{
-					"healthy": healthy,
-					"runtime": runtime,
-					"build":   build,
-				}
-				fmt.Println(promlib.FormatJSON(data))
-			} else {
-				fmt.Print(promlib.FormatStatus(runtime, build, healthy))
+			data := map[string]interface{}{
+				"healthy": healthy,
+				"runtime": runtime,
+				"build":   build,
 			}
-			return nil
+
+			return renderOutput(format, func() error {
+				fmt.Print(promlib.FormatStatus(runtime, build, healthy))
+				return nil
+			}, nil, data)
 		},
 	}
 

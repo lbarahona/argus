@@ -117,20 +117,13 @@ func postmortemGenerateCmd() *cobra.Command {
 			fmt.Println()
 
 			// Display based on format
-			switch format {
-			case "markdown", "md":
-				fmt.Println(pmlib.RenderMarkdown(pm))
-			case "json":
-				out, err := pmlib.FormatJSON(pm)
-				if err != nil {
-					return err
-				}
-				fmt.Println(out)
-			default:
+			return renderOutput(format, func() error {
 				pmlib.RenderTerminal(pm)
-			}
-
-			return nil
+				return nil
+			}, func() error {
+				fmt.Println(pmlib.RenderMarkdown(pm))
+				return nil
+			}, pm)
 		},
 	}
 
@@ -186,20 +179,13 @@ func postmortemShowCmd() *cobra.Command {
 				return fmt.Errorf("postmortem %q not found", args[0])
 			}
 
-			switch format {
-			case "markdown", "md":
-				fmt.Println(pmlib.RenderMarkdown(pm))
-			case "json":
-				out, err := pmlib.FormatJSON(pm)
-				if err != nil {
-					return err
-				}
-				fmt.Println(out)
-			default:
+			return renderOutput(format, func() error {
 				pmlib.RenderTerminal(pm)
-			}
-
-			return nil
+				return nil
+			}, func() error {
+				fmt.Println(pmlib.RenderMarkdown(pm))
+				return nil
+			}, pm)
 		},
 	}
 

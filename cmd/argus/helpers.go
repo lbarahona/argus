@@ -38,3 +38,33 @@ func newSignozContext(instanceFlag string) (*signozContext, error) {
 		inst:    inst,
 	}, nil
 }
+
+// renderOutput validates format and dispatches to the matching renderer.
+// Pass nil for a renderer the command does not support; requesting an
+// unsupported/unknown format is an error (not a silent default).
+func renderOutput(format string, terminal func() error, markdown func() error, jsonValue any) error {
+	switch format {
+	case "", "terminal", "text", "table":
+		if terminal == nil {
+			return fmt.Errorf("terminal output not supported here")
+		}
+		return terminal()
+	case "markdown", "md":
+		if markdown == nil {
+			return fmt.Errorf("markdown output is not supported by this command")
+		}
+		return markdown()
+	case "json":
+		if jsonValue == nil {
+			return fmt.Errorf("json output is not supported by this command")
+		}
+		data, err := jsonMarshal(jsonValue)
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(data))
+		return nil
+	default:
+		return fmt.Errorf("unknown format %q (valid: terminal, markdown, json)", format)
+	}
+}

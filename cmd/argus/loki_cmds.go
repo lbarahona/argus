@@ -90,18 +90,15 @@ Examples:
 				return err
 			}
 
-			switch format {
-			case "json":
-				fmt.Println(lokilib.FormatJSON(result))
-			default:
+			return renderOutput(format, func() error {
 				if result.Data.ResultType != "" && result.Data.ResultType != "streams" {
 					fmt.Print(lokilib.FormatMetricSeries(result.Data))
 				} else {
 					entries := lokilib.ParseEntries(result)
 					fmt.Print(lokilib.FormatLogEntries(entries, labels))
 				}
-			}
-			return nil
+				return nil
+			}, nil, result)
 		},
 	}
 
@@ -139,13 +136,10 @@ func lokiLabelsCmd() *cobra.Command {
 				return err
 			}
 
-			switch format {
-			case "json":
-				fmt.Println(lokilib.FormatJSON(labelNames))
-			default:
+			return renderOutput(format, func() error {
 				fmt.Print(lokilib.FormatLabels(labelNames))
-			}
-			return nil
+				return nil
+			}, nil, labelNames)
 		},
 	}
 
@@ -184,13 +178,10 @@ func lokiLabelValuesCmd() *cobra.Command {
 				return err
 			}
 
-			switch format {
-			case "json":
-				fmt.Println(lokilib.FormatJSON(values))
-			default:
+			return renderOutput(format, func() error {
 				fmt.Print(lokilib.FormatLabelValues(args[0], values))
-			}
-			return nil
+				return nil
+			}, nil, values)
 		},
 	}
 
@@ -230,13 +221,10 @@ func lokiSeriesCmd() *cobra.Command {
 				return err
 			}
 
-			switch format {
-			case "json":
-				fmt.Println(lokilib.FormatJSON(series))
-			default:
+			return renderOutput(format, func() error {
 				fmt.Print(lokilib.FormatSeries(series))
-			}
-			return nil
+				return nil
+			}, nil, series)
 		},
 	}
 
@@ -286,13 +274,10 @@ func lokiStatsCmd() *cobra.Command {
 				return err
 			}
 
-			switch format {
-			case "json":
-				fmt.Println(lokilib.FormatJSON(stats))
-			default:
+			return renderOutput(format, func() error {
 				fmt.Print(lokilib.FormatStats(stats))
-			}
-			return nil
+				return nil
+			}, nil, stats)
 		},
 	}
 
@@ -321,20 +306,18 @@ func lokiStatusCmd() *cobra.Command {
 			healthy, latency, _ := client.Healthy(ctx)
 			info, _ := client.BuildInfo(ctx)
 
-			switch format {
-			case "json":
-				data := map[string]interface{}{
-					"healthy": healthy,
-					"latency": latency.String(),
-				}
-				if info != nil {
-					data["build_info"] = info
-				}
-				fmt.Println(lokilib.FormatJSON(data))
-			default:
-				fmt.Print(lokilib.FormatStatus(healthy, latency, info))
+			data := map[string]interface{}{
+				"healthy": healthy,
+				"latency": latency.String(),
 			}
-			return nil
+			if info != nil {
+				data["build_info"] = info
+			}
+
+			return renderOutput(format, func() error {
+				fmt.Print(lokilib.FormatStatus(healthy, latency, info))
+				return nil
+			}, nil, data)
 		},
 	}
 
@@ -362,13 +345,10 @@ func lokiSummaryCmd() *cobra.Command {
 				return fmt.Errorf("building summary: %w", err)
 			}
 
-			switch format {
-			case "json":
-				fmt.Println(lokilib.FormatJSON(summary))
-			default:
+			return renderOutput(format, func() error {
 				fmt.Print(lokilib.FormatSummary(summary))
-			}
-			return nil
+				return nil
+			}, nil, summary)
 		},
 	}
 

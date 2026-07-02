@@ -97,14 +97,11 @@ Exit code reflects highest severity: 0=ok, 1=warning, 2=critical.`,
 			if err != nil {
 				return err
 			}
-			if format == "json" {
-				out, err := alert.FormatJSON(rpt)
-				if err != nil {
-					return err
-				}
-				fmt.Println(out)
-			} else {
+			if err := renderOutput(format, func() error {
 				fmt.Print(alert.FormatText(rpt))
+				return nil
+			}, nil, rpt); err != nil {
+				return err
 			}
 			os.Exit(rpt.ExitCode())
 			return nil
@@ -205,14 +202,11 @@ Exit code reflects worst SLO: 0=ok, 1=warning, 2=critical/exhausted.`,
 			if err != nil {
 				return err
 			}
-			if format == "json" {
-				out, err := slo.FormatJSON(rpt)
-				if err != nil {
-					return err
-				}
-				fmt.Println(out)
-			} else {
+			if err := renderOutput(format, func() error {
 				fmt.Print(slo.FormatText(rpt))
+				return nil
+			}, nil, rpt); err != nil {
+				return err
 			}
 			os.Exit(rpt.ExitCode())
 			return nil
@@ -292,17 +286,14 @@ Exit codes: 0 = healthy, 1 = critical, 2 = exhausted/page.`,
 
 			budget.SortByUrgency(rpt.Reports)
 
-			switch format {
-			case "json":
-				data, err := jsonMarshal(rpt)
-				if err != nil {
-					return err
-				}
-				fmt.Println(string(data))
-			case "markdown":
-				fmt.Print(budget.FormatMarkdown(rpt))
-			default:
+			if err := renderOutput(format, func() error {
 				fmt.Print(budget.FormatTerminal(rpt))
+				return nil
+			}, func() error {
+				fmt.Print(budget.FormatMarkdown(rpt))
+				return nil
+			}, rpt); err != nil {
+				return err
 			}
 
 			os.Exit(rpt.ExitCode())
@@ -394,17 +385,14 @@ Use --strict for critical services (lower thresholds, blocks on warnings).`,
 				return err
 			}
 
-			switch format {
-			case "json":
-				out, err := guard.FormatJSON(rpt)
-				if err != nil {
-					return err
-				}
-				fmt.Println(out)
-			case "markdown":
-				fmt.Print(guard.FormatMarkdown(rpt))
-			default:
+			if err := renderOutput(format, func() error {
 				fmt.Print(guard.FormatTerminal(rpt))
+				return nil
+			}, func() error {
+				fmt.Print(guard.FormatMarkdown(rpt))
+				return nil
+			}, rpt); err != nil {
+				return err
 			}
 
 			os.Exit(rpt.ExitCode())

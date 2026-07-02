@@ -80,16 +80,10 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 				incidents = store.ActiveIncidents()
 				title = "🚨 Active Incidents"
 			}
-			if format == "json" {
-				out, err := incident.FormatJSON(incidents)
-				if err != nil {
-					return err
-				}
-				fmt.Println(out)
+			return renderOutput(format, func() error {
+				incident.RenderList(incidents, title)
 				return nil
-			}
-			incident.RenderList(incidents, title)
-			return nil
+			}, nil, incidents)
 		},
 	}
 	listCmd.Flags().BoolVarP(&all, "all", "a", false, "Show all incidents (including resolved)")
