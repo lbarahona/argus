@@ -27,10 +27,10 @@ func TestQueryResult_JSON(t *testing.T) {
 	if result.Data.ResultType != "streams" {
 		t.Errorf("expected streams, got %s", result.Data.ResultType)
 	}
-	if len(result.Data.Result) != 1 {
-		t.Fatalf("expected 1 stream, got %d", len(result.Data.Result))
+	if len(result.Data.Streams) != 1 {
+		t.Fatalf("expected 1 stream, got %d", len(result.Data.Streams))
 	}
-	stream := result.Data.Result[0]
+	stream := result.Data.Streams[0]
 	if stream.Labels["app"] != "nginx" {
 		t.Errorf("expected app=nginx label")
 	}
@@ -100,6 +100,52 @@ func TestSeriesResponse_JSON(t *testing.T) {
 	}
 	if resp.Data[0]["app"] != "nginx" {
 		t.Errorf("expected app=nginx")
+	}
+}
+
+func TestResultDataDecodesMatrix(t *testing.T) {
+	payload := `{"status":"success","data":{"resultType":"matrix","result":[
+		{"metric":{"app":"nginx"},"values":[[1700000000,"42"],[1700000060,"43.5"]]}
+	]}}`
+	var qr QueryResult
+	if err := json.Unmarshal([]byte(payload), &qr); err != nil {
+		t.Fatalf("matrix result must decode: %v", err)
+	}
+	if qr.Data.ResultType != "matrix" || len(qr.Data.Series) != 1 {
+		t.Fatalf("unexpected decode: %+v", qr.Data)
+	}
+	s := qr.Data.Series[0]
+	if s.Metric["app"] != "nginx" || len(s.Values) != 2 || s.Values[0].Value != 42 {
+		t.Errorf("series decoded wrong: %+v", s)
+	}
+	if s.Values[0].Timestamp.Unix() != 1700000000 {
+		t.Errorf("timestamp = %v, want 1700000000s", s.Values[0].Timestamp.Unix())
+	}
+}
+
+func TestResultDataDecodesVector(t *testing.T) {
+	payload := `{"status":"success","data":{"resultType":"vector","result":[
+		{"metric":{"app":"nginx"},"value":[1700000000,"7"]}
+	]}}`
+	var qr QueryResult
+	if err := json.Unmarshal([]byte(payload), &qr); err != nil {
+		t.Fatalf("vector result must decode: %v", err)
+	}
+	if len(qr.Data.Series) != 1 || len(qr.Data.Series[0].Values) != 1 || qr.Data.Series[0].Values[0].Value != 7 {
+		t.Errorf("vector decoded wrong: %+v", qr.Data)
+	}
+}
+
+func TestResultDataStreamsStillDecode(t *testing.T) {
+	payload := `{"status":"success","data":{"resultType":"streams","result":[
+		{"stream":{"app":"nginx"},"values":[["1700000000000000000","hello"]]}
+	]}}`
+	var qr QueryResult
+	if err := json.Unmarshal([]byte(payload), &qr); err != nil {
+		t.Fatalf("streams must still decode: %v", err)
+	}
+	if len(qr.Data.Streams) != 1 || qr.Data.Streams[0].Values[0][1] != "hello" {
+		t.Errorf("streams decoded wrong: %+v", qr.Data)
 	}
 }
 

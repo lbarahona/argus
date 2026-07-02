@@ -1,6 +1,11 @@
 package loki
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"time"
+)
 
 // LokiConfig holds user config for connecting to a Loki instance.
 type LokiConfig struct {
@@ -26,10 +31,109 @@ type QueryResult struct {
 	Data   ResultData `json:"data"`
 }
 
-// ResultData holds the typed result from a Loki query.
+// ResultData holds the typed result from a Loki query. Loki returns three
+// shapes keyed by resultType: log streams, and Prometheus-style matrix or
+// vector samples for metric LogQL (rate, count_over_time, ...).
+// JSON tags matter only for marshaling (Go's default field-name encoding
+// since ResultData has no MarshalJSON) — decoding always goes through
+// UnmarshalJSON below, which parses the raw "resultType"/"result" keys
+// itself regardless of these tags.
 type ResultData struct {
-	ResultType string   `json:"resultType"` // "streams", "matrix", "vector"
-	Result     []Stream `json:"result"`
+	ResultType string         `json:"resultType"`
+	Streams    []Stream       `json:"result,omitempty"`
+	Series     []MetricSeries `json:"series,omitempty"`
+}
+
+// MetricSeries is one matrix/vector series.
+type MetricSeries struct {
+	Metric map[string]string
+	Values []SamplePoint
+}
+
+// SamplePoint is one sample of a metric series.
+type SamplePoint struct {
+	Timestamp time.Time
+	Value     float64
+}
+
+func (d *ResultData) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		ResultType string          `json:"resultType"`
+		Result     json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	d.ResultType = raw.ResultType
+	if len(raw.Result) == 0 {
+		return nil
+	}
+
+	switch raw.ResultType {
+	case "matrix":
+		var rows []struct {
+			Metric map[string]string    `json:"metric"`
+			Values [][2]json.RawMessage `json:"values"`
+		}
+		if err := json.Unmarshal(raw.Result, &rows); err != nil {
+			return fmt.Errorf("decoding matrix result: %w", err)
+		}
+		for _, r := range rows {
+			s := MetricSeries{Metric: r.Metric}
+			for _, v := range r.Values {
+				if p, ok := samplePoint(v); ok {
+					s.Values = append(s.Values, p)
+				}
+			}
+			d.Series = append(d.Series, s)
+		}
+	case "vector":
+		var rows []struct {
+			Metric map[string]string  `json:"metric"`
+			Value  [2]json.RawMessage `json:"value"`
+		}
+		if err := json.Unmarshal(raw.Result, &rows); err != nil {
+			return fmt.Errorf("decoding vector result: %w", err)
+		}
+		for _, r := range rows {
+			s := MetricSeries{Metric: r.Metric}
+			if p, ok := samplePoint(r.Value); ok {
+				s.Values = append(s.Values, p)
+			}
+			d.Series = append(d.Series, s)
+		}
+	default: // "streams" and unknown types that carry stream-shaped results
+		if err := json.Unmarshal(raw.Result, &d.Streams); err != nil {
+			return fmt.Errorf("decoding streams result: %w", err)
+		}
+	}
+	return nil
+}
+
+// samplePoint converts a [unix_seconds, "value"] pair. Loki emits the
+// timestamp as a bare float number and the value as a quoted string, so each
+// element is parsed from its raw JSON form.
+func samplePoint(pair [2]json.RawMessage) (SamplePoint, bool) {
+	var ts float64
+	if err := json.Unmarshal(pair[0], &ts); err != nil {
+		return SamplePoint{}, false
+	}
+	var valStr string
+	if err := json.Unmarshal(pair[1], &valStr); err != nil {
+		// tolerate a bare-number value as well
+		var valNum float64
+		if err2 := json.Unmarshal(pair[1], &valNum); err2 != nil {
+			return SamplePoint{}, false
+		}
+		sec := int64(ts)
+		return SamplePoint{Timestamp: time.Unix(sec, int64((ts-float64(sec))*1e9)), Value: valNum}, true
+	}
+	val, err := strconv.ParseFloat(valStr, 64)
+	if err != nil {
+		return SamplePoint{}, false
+	}
+	sec := int64(ts)
+	return SamplePoint{Timestamp: time.Unix(sec, int64((ts-float64(sec))*1e9)), Value: val}, true
 }
 
 // Stream represents a single log stream (a label set + entries).

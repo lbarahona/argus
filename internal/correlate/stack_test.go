@@ -66,7 +66,7 @@ func TestRunStackCorrelatesAcrossTools(t *testing.T) {
 				Status: "success",
 				Data: lokilib.ResultData{
 					ResultType: "streams",
-					Result: []lokilib.Stream{{
+					Streams: []lokilib.Stream{{
 						Labels: map[string]string{"service_name": "payments"},
 						Values: [][]string{{fmt.Sprintf("%d", now.Add(-time.Minute).UnixNano()), "timeout talking to postgres"}},
 					}},
@@ -120,7 +120,7 @@ func TestRunStackFallsBackAcrossLokiLabelKeys(t *testing.T) {
 				Status: "success",
 				Data: lokilib.ResultData{
 					ResultType: "streams",
-					Result: []lokilib.Stream{{
+					Streams: []lokilib.Stream{{
 						Labels: map[string]string{"service": "api"},
 						Values: [][]string{{fmt.Sprintf("%d", baseTime().UnixNano()), "panic: bad things happened"}},
 					}},

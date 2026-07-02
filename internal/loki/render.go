@@ -106,6 +106,26 @@ func FormatLogEntries(entries []LogEntry, showLabels bool) string {
 	return b.String()
 }
 
+// FormatMetricSeries renders matrix/vector results as a compact table:
+// one row per series with its labels and latest value (+ sample count).
+func FormatMetricSeries(data ResultData) string {
+	if len(data.Series) == 0 {
+		return "No metric samples found.\n"
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("%d series (%s)\n\n", len(data.Series), data.ResultType))
+	for _, s := range data.Series {
+		if len(s.Values) == 0 {
+			continue
+		}
+		latest := s.Values[len(s.Values)-1]
+		b.WriteString(fmt.Sprintf("  %s\n    latest: %.4g at %s (%d samples)\n",
+			formatLabelSet(s.Metric), latest.Value,
+			latest.Timestamp.Format("15:04:05"), len(s.Values)))
+	}
+	return b.String()
+}
+
 // FormatSeries renders series data.
 func FormatSeries(series []map[string]string) string {
 	if len(series) == 0 {

@@ -137,6 +137,82 @@ func TestFormatLogEntries_TruncateLong(t *testing.T) {
 	}
 }
 
+func TestFormatMetricSeries_Empty(t *testing.T) {
+	result := FormatMetricSeries(ResultData{ResultType: "matrix"})
+	if !strings.Contains(result, "No metric samples found") {
+		t.Errorf("expected 'No metric samples found', got %s", result)
+	}
+}
+
+func TestFormatMetricSeries_Matrix(t *testing.T) {
+	data := ResultData{
+		ResultType: "matrix",
+		Series: []MetricSeries{
+			{
+				Metric: map[string]string{"app": "nginx"},
+				Values: []SamplePoint{
+					{Timestamp: time.Unix(1700000000, 0), Value: 42},
+					{Timestamp: time.Unix(1700000060, 0), Value: 43.5},
+				},
+			},
+		},
+	}
+	result := FormatMetricSeries(data)
+	if !strings.Contains(result, "1 series (matrix)") {
+		t.Errorf("expected series count header, got %s", result)
+	}
+	if !strings.Contains(result, "nginx") {
+		t.Error("expected app label in output")
+	}
+	if !strings.Contains(result, "43.5") {
+		t.Error("expected latest value 43.5 in output")
+	}
+	if !strings.Contains(result, "2 samples") {
+		t.Error("expected sample count in output")
+	}
+}
+
+func TestFormatMetricSeries_Vector(t *testing.T) {
+	data := ResultData{
+		ResultType: "vector",
+		Series: []MetricSeries{
+			{
+				Metric: map[string]string{"app": "nginx"},
+				Values: []SamplePoint{
+					{Timestamp: time.Unix(1700000000, 0), Value: 7},
+				},
+			},
+		},
+	}
+	result := FormatMetricSeries(data)
+	if !strings.Contains(result, "1 series (vector)") {
+		t.Errorf("expected series count header, got %s", result)
+	}
+	if !strings.Contains(result, "1 samples") {
+		t.Error("expected sample count in output")
+	}
+}
+
+func TestFormatMetricSeries_SkipsEmptySeries(t *testing.T) {
+	data := ResultData{
+		ResultType: "matrix",
+		Series: []MetricSeries{
+			{Metric: map[string]string{"app": "empty"}, Values: nil},
+			{
+				Metric: map[string]string{"app": "nginx"},
+				Values: []SamplePoint{{Timestamp: time.Unix(1700000000, 0), Value: 1}},
+			},
+		},
+	}
+	result := FormatMetricSeries(data)
+	if strings.Contains(result, "empty") {
+		t.Errorf("expected empty series to be skipped, got %s", result)
+	}
+	if !strings.Contains(result, "nginx") {
+		t.Error("expected non-empty series to be rendered")
+	}
+}
+
 func TestFormatSeries_Empty(t *testing.T) {
 	result := FormatSeries(nil)
 	if !strings.Contains(result, "no matching series") {

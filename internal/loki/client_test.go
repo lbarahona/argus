@@ -150,7 +150,7 @@ func TestQuery(t *testing.T) {
 			Status: "success",
 			Data: ResultData{
 				ResultType: "streams",
-				Result: []Stream{
+				Streams: []Stream{
 					{
 						Labels: map[string]string{"app": "test"},
 						Values: [][]string{
@@ -171,11 +171,11 @@ func TestQuery(t *testing.T) {
 	if result.Status != "success" {
 		t.Errorf("expected success status, got %s", result.Status)
 	}
-	if len(result.Data.Result) != 1 {
-		t.Fatalf("expected 1 stream, got %d", len(result.Data.Result))
+	if len(result.Data.Streams) != 1 {
+		t.Fatalf("expected 1 stream, got %d", len(result.Data.Streams))
 	}
-	if len(result.Data.Result[0].Values) != 2 {
-		t.Errorf("expected 2 entries, got %d", len(result.Data.Result[0].Values))
+	if len(result.Data.Streams[0].Values) != 2 {
+		t.Errorf("expected 2 entries, got %d", len(result.Data.Streams[0].Values))
 	}
 }
 
@@ -234,7 +234,7 @@ func TestQueryRange(t *testing.T) {
 			Status: "success",
 			Data: ResultData{
 				ResultType: "streams",
-				Result: []Stream{
+				Streams: []Stream{
 					{
 						Labels: map[string]string{"job": "varlogs"},
 						Values: [][]string{{"1700000000000000000", "test line"}},
@@ -518,7 +518,7 @@ func TestParseEntries(t *testing.T) {
 	result := &QueryResult{
 		Data: ResultData{
 			ResultType: "streams",
-			Result: []Stream{
+			Streams: []Stream{
 				{
 					Labels: map[string]string{"app": "test"},
 					Values: [][]string{
@@ -562,7 +562,7 @@ func TestParseEntries_Nil(t *testing.T) {
 func TestParseEntries_InvalidTimestamp(t *testing.T) {
 	result := &QueryResult{
 		Data: ResultData{
-			Result: []Stream{
+			Streams: []Stream{
 				{
 					Labels: map[string]string{},
 					Values: [][]string{
@@ -586,7 +586,7 @@ func TestParseEntries_InvalidTimestamp(t *testing.T) {
 func TestParseEntries_ShortValues(t *testing.T) {
 	result := &QueryResult{
 		Data: ResultData{
-			Result: []Stream{
+			Streams: []Stream{
 				{
 					Labels: map[string]string{},
 					Values: [][]string{

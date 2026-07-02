@@ -285,7 +285,7 @@ func ParseEntries(result *QueryResult) []LogEntry {
 		return nil
 	}
 	var entries []LogEntry
-	for _, stream := range result.Data.Result {
+	for _, stream := range result.Data.Streams {
 		for _, v := range stream.Values {
 			if len(v) < 2 {
 				continue

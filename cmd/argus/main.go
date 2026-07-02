@@ -2899,13 +2899,16 @@ Examples:
 				return err
 			}
 
-			entries := lokilib.ParseEntries(result)
-
 			switch format {
 			case "json":
 				fmt.Println(lokilib.FormatJSON(result))
 			default:
-				fmt.Print(lokilib.FormatLogEntries(entries, labels))
+				if result.Data.ResultType != "" && result.Data.ResultType != "streams" {
+					fmt.Print(lokilib.FormatMetricSeries(result.Data))
+				} else {
+					entries := lokilib.ParseEntries(result)
+					fmt.Print(lokilib.FormatLogEntries(entries, labels))
+				}
 			}
 			return nil
 		},
