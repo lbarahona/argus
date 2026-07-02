@@ -7,10 +7,9 @@ import (
 )
 
 // WriteFileAtomic writes data to path via a temp file in the same directory
-// followed by a rename, so a process crash mid-write never leaves a
-// truncated file behind and readers never observe a partial write. The
-// rename is atomic on POSIX filesystems. Note: the temp file is not fsynced
-// before the rename, so durability across power loss is not guaranteed.
+// followed by a rename, so readers never observe a partial write and a crash
+// mid-write never leaves a truncated file behind. The temp file is fsynced
+// before the rename. The rename is atomic on POSIX filesystems.
 func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
@@ -24,6 +23,10 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	if err := tmp.Chmod(perm); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
 		tmp.Close()
 		return err
 	}

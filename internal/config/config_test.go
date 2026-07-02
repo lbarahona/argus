@@ -463,7 +463,7 @@ func TestRunInit(t *testing.T) {
 func TestRunInitPersistsFile(t *testing.T) {
 	withTempHome(t)
 	replaceStdin(t, []string{
-		"",                              // provider choice (default)
+		"", // provider choice (default)
 		"sk-persist-check",
 		"persistinst",
 		"Persist Instance",
@@ -561,5 +561,43 @@ func TestAddInstanceDuplicateKey(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("error should mention 'already exists', got: %q", err.Error())
+	}
+}
+
+// TestSaveLeavesNoTempFiles verifies that Save uses atomic writes (temp file
+// + rename) and leaves no temp files behind, even though the final config
+// must roundtrip correctly and be readable with proper 0600 permissions.
+func TestSaveLeavesNoTempFiles(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	cfg := &types.Config{DefaultInstance: "prod", Instances: map[string]types.Instance{
+		"prod": {URL: "https://signoz.example.com"},
+	}}
+	if err := Save(cfg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	entries, err := os.ReadDir(Dir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".tmp-") {
+			t.Errorf("temp file left behind: %s", e.Name())
+		}
+	}
+
+	loaded, err := Load()
+	if err != nil {
+		t.Fatalf("Load after Save: %v", err)
+	}
+	if loaded.DefaultInstance != "prod" {
+		t.Errorf("roundtrip lost data: %+v", loaded)
+	}
+
+	info, _ := os.Stat(Path())
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("config perm = %v, want 0600 (contains API keys)", info.Mode().Perm())
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lbarahona/argus/internal/fsutil"
 	"github.com/lbarahona/argus/pkg/types"
 	"gopkg.in/yaml.v3"
 )
@@ -62,7 +63,7 @@ func Save(cfg *types.Config) error {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
 
-	if err := os.WriteFile(Path(), data, 0600); err != nil {
+	if err := fsutil.WriteFileAtomic(Path(), data, 0o600); err != nil {
 		return fmt.Errorf("writing config: %w", err)
 	}
 	return nil
