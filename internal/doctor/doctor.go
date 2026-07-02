@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -128,7 +129,13 @@ func Run(ctx context.Context, version string, verbose bool) *Report {
 	// Instance checks
 	cfg, err := config.Load()
 	if err == nil && len(cfg.Instances) > 0 {
-		for key, inst := range cfg.Instances {
+		keys := make([]string, 0, len(cfg.Instances))
+		for k := range cfg.Instances {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			inst := cfg.Instances[key]
 			report.Checks = append(report.Checks, checkInstanceURL(key, inst))
 			report.Checks = append(report.Checks, checkInstanceDNS(ctx, key, inst))
 			report.Checks = append(report.Checks, checkInstanceHealth(ctx, key, inst))

@@ -3,6 +3,8 @@ package doctor
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -79,6 +81,47 @@ func TestRun(t *testing.T) {
 	assert.NotEmpty(t, report.Arch)
 	assert.True(t, len(report.Checks) > 0, "should have at least some checks")
 	assert.True(t, report.Duration > 0, "duration should be positive")
+}
+
+// TestRun_InstanceChecksLexicalOrder pins the ordering of per-instance
+// checks: regardless of Go's randomized map iteration order, instance
+// checks must always be emitted in lexical order by instance key so that
+// `argus doctor` output is deterministic across runs.
+func TestRun_InstanceChecksLexicalOrder(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	cfgDir := filepath.Join(tmpDir, ".argus")
+	require.NoError(t, os.MkdirAll(cfgDir, 0700))
+
+	// Empty URLs make every per-instance check short-circuit to Skip
+	// without touching the network, keeping this test fast and hermetic.
+	cfgYAML := "instances:\n" +
+		"  zebra:\n" +
+		"    url: \"\"\n" +
+		"  alpha:\n" +
+		"    url: \"\"\n" +
+		"  mike:\n" +
+		"    url: \"\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(cfgYAML), 0600))
+
+	ctx := context.Background()
+	report := Run(ctx, "test-version", false)
+
+	var order []string
+	for _, c := range report.Checks {
+		if !strings.HasPrefix(c.Name, "Instance '") {
+			continue
+		}
+		parts := strings.SplitN(c.Name, "'", 3)
+		require.Len(t, parts, 3, "unexpected check name format: %s", c.Name)
+		key := parts[1]
+		if len(order) == 0 || order[len(order)-1] != key {
+			order = append(order, key)
+		}
+	}
+
+	assert.Equal(t, []string{"alpha", "mike", "zebra"}, order, "instance checks should be emitted in lexical key order")
 }
 
 func TestFormatTerminal(t *testing.T) {

@@ -231,6 +231,35 @@ func TestSeverityRank(t *testing.T) {
 	assert.True(t, severityRank(SeverityInfo) > severityRank(""))
 }
 
+// TestDetect_EqualSeverityAnomaliesSortByService pins the tiebreaker used
+// when sorting anomalies of equal severity: they must be ordered by
+// service name so output is stable across runs, not left in whatever
+// order the (non-deterministic) detection passes happened to append them.
+func TestDetect_EqualSeverityAnomaliesSortByService(t *testing.T) {
+	q := &mockQuerier{
+		services: []types.Service{
+			{Name: "zebra", NumCalls: 100, NumErrors: 15, ErrorRate: 15.0},
+			{Name: "alpha", NumCalls: 100, NumErrors: 15, ErrorRate: 15.0},
+			{Name: "mike", NumCalls: 100, NumErrors: 15, ErrorRate: 15.0},
+		},
+		logs:   &types.QueryResult{},
+		traces: &types.QueryResult{},
+	}
+	result, err := Detect(context.Background(), q, "test", Options{Duration: 60})
+	require.NoError(t, err)
+	require.Len(t, result.Anomalies, 3)
+
+	for _, a := range result.Anomalies {
+		assert.Equal(t, SeverityCritical, a.Severity, "all anomalies in this fixture should be critical")
+	}
+
+	var services []string
+	for _, a := range result.Anomalies {
+		services = append(services, a.Service)
+	}
+	assert.Equal(t, []string{"alpha", "mike", "zebra"}, services, "equal-severity anomalies should be sorted by service name")
+}
+
 func TestHighestSeverity(t *testing.T) {
 	anomalies := []Anomaly{
 		{Service: "api", Severity: SeverityInfo},

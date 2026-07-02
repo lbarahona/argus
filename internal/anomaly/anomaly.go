@@ -148,9 +148,15 @@ func Detect(ctx context.Context, client signoz.SignozQuerier, instKey string, op
 		result.Services = append(result.Services, scan)
 	}
 
-	// Sort anomalies by severity (critical first)
-	sort.Slice(result.Anomalies, func(i, j int) bool {
-		return severityRank(result.Anomalies[i].Severity) > severityRank(result.Anomalies[j].Severity)
+	// Sort anomalies by severity (critical first), breaking ties by service
+	// name so equal-severity anomalies have a deterministic, stable order
+	// across runs.
+	sort.SliceStable(result.Anomalies, func(i, j int) bool {
+		a, b := result.Anomalies[i], result.Anomalies[j]
+		if a.Severity != b.Severity {
+			return severityRank(a.Severity) > severityRank(b.Severity)
+		}
+		return a.Service < b.Service
 	})
 
 	// AI summary

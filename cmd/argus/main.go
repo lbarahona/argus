@@ -5,6 +5,7 @@ import (
 	jsonPkg "encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/lbarahona/argus/internal/ai"
@@ -280,7 +281,13 @@ func statusCmd() *cobra.Command {
 			ctx := context.Background()
 			var statuses []types.HealthStatus
 
-			for key, inst := range cfg.Instances {
+			keys := make([]string, 0, len(cfg.Instances))
+			for k := range cfg.Instances {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				inst := cfg.Instances[key]
 				client := signoz.New(inst)
 				healthy, latency, healthErr := client.Health(ctx)
 
@@ -557,7 +564,13 @@ func dashboardCmd() *cobra.Command {
 
 			// Collect health statuses from all instances
 			var statuses []types.HealthStatus
-			for key, inst := range cfg.Instances {
+			keys := make([]string, 0, len(cfg.Instances))
+			for k := range cfg.Instances {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				inst := cfg.Instances[key]
 				client := signoz.New(inst)
 				healthy, latency, healthErr := client.Health(ctx)
 				s := types.HealthStatus{
