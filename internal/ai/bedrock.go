@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -13,6 +12,10 @@ import (
 
 const (
 	defaultBedrockModel = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+	// bedrockAnthropicVersion is the body-level version Bedrock requires for
+	// Anthropic models — distinct from the direct API's anthropic-version header.
+	bedrockAnthropicVersion = "bedrock-2023-05-31"
 )
 
 // BedrockProvider implements Provider for Amazon Bedrock via bearer token auth.
@@ -52,7 +55,7 @@ func (p *BedrockProvider) Analyze(ctx context.Context, prompt string, w io.Write
 func (p *BedrockProvider) AnalyzeWithSystem(ctx context.Context, system string, messages []Message, w io.Writer) error {
 	// Bedrock with Anthropic models uses the Anthropic messages format
 	reqBody := bedrockRequest{
-		AnthropicVersion: anthropicVersion,
+		AnthropicVersion: bedrockAnthropicVersion,
 		MaxTokens:        4096,
 		System:           system,
 		Messages:         messages,
@@ -63,8 +66,10 @@ func (p *BedrockProvider) AnalyzeWithSystem(ctx context.Context, system string, 
 		return fmt.Errorf("marshaling request: %w", err)
 	}
 
-	// Bedrock invoke-with-response-stream endpoint
-	url := fmt.Sprintf("%s/model/%s/invoke-with-response-stream", p.endpoint, p.model)
+	// The invoke-with-response-stream endpoint returns binary AWS
+	// eventstream framing; the non-streaming invoke endpoint returns plain
+	// Anthropic-messages JSON we can parse without an AWS SDK.
+	url := fmt.Sprintf("%s/model/%s/invoke", p.endpoint, p.model)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
@@ -85,8 +90,32 @@ func (p *BedrockProvider) AnalyzeWithSystem(ctx context.Context, system string, 
 		return fmt.Errorf("Bedrock API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
-	// Bedrock with Anthropic models streams using the same SSE format as Anthropic
-	return streamBedrockResponse(resp.Body, w)
+	var out struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+		StopReason string `json:"stop_reason"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return fmt.Errorf("decoding Bedrock response: %w", err)
+	}
+
+	wrote := false
+	for _, c := range out.Content {
+		if c.Type == "text" && c.Text != "" {
+			fmt.Fprint(w, c.Text)
+			wrote = true
+		}
+	}
+	if !wrote {
+		return fmt.Errorf("Bedrock response contained no text content")
+	}
+	fmt.Fprintln(w)
+	if out.StopReason == "max_tokens" {
+		fmt.Fprintln(w, "[response truncated at max_tokens]")
+	}
+	return nil
 }
 
 func (p *BedrockProvider) AnalyzeSync(ctx context.Context, prompt string) (string, error) {
@@ -102,70 +131,4 @@ type bedrockRequest struct {
 	MaxTokens        int       `json:"max_tokens"`
 	System           string    `json:"system"`
 	Messages         []Message `json:"messages"`
-}
-
-// streamBedrockResponse parses the Bedrock SSE response stream.
-// When using Anthropic models via Bedrock, the SSE format matches Anthropic's format.
-func streamBedrockResponse(body io.Reader, w io.Writer) error {
-	scanner := bufio.NewScanner(body)
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if !strings.HasPrefix(line, "data: ") {
-			// Also check for Bedrock's bytes-based event format
-			if strings.HasPrefix(line, "{") {
-				// Direct JSON line (some Bedrock endpoints use newline-delimited JSON)
-				var event struct {
-					Type  string `json:"type"`
-					Delta struct {
-						Type string `json:"type"`
-						Text string `json:"text"`
-					} `json:"delta"`
-					// OpenAI-compatible format from some Bedrock models
-					Choices []struct {
-						Delta struct {
-							Content string `json:"content"`
-						} `json:"delta"`
-					} `json:"choices"`
-					// Direct output text
-					OutputText string `json:"outputText"`
-				}
-				if err := json.Unmarshal([]byte(line), &event); err == nil {
-					if event.Type == "content_block_delta" && event.Delta.Text != "" {
-						fmt.Fprint(w, event.Delta.Text)
-					} else if len(event.Choices) > 0 && event.Choices[0].Delta.Content != "" {
-						fmt.Fprint(w, event.Choices[0].Delta.Content)
-					} else if event.OutputText != "" {
-						fmt.Fprint(w, event.OutputText)
-					}
-				}
-				continue
-			}
-			continue
-		}
-
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "[DONE]" {
-			break
-		}
-
-		var event struct {
-			Type  string `json:"type"`
-			Delta struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"delta"`
-		}
-
-		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			continue
-		}
-
-		if event.Type == "content_block_delta" && event.Delta.Type == "text_delta" {
-			fmt.Fprint(w, event.Delta.Text)
-		}
-	}
-
-	fmt.Fprintln(w)
-	return scanner.Err()
 }
