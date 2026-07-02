@@ -2,7 +2,9 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -595,6 +597,33 @@ func TestAnthropicStreamLongLine(t *testing.T) {
 	}
 	if len(buf.String()) < 200*1024 {
 		t.Errorf("long delta truncated: got %d bytes", len(buf.String()))
+	}
+}
+
+// ---- Context propagation tests ----
+
+func TestAnalyzeContextIsCancellable(t *testing.T) {
+	started := make(chan struct{})
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		// Drain the request body first: net/http only starts watching for an
+		// early client disconnect (which cancels r.Context()) once the
+		// handler is done reading the body. Without this, httptest.Server's
+		// teardown hangs forever waiting for this connection to finish.
+		io.Copy(io.Discard, r.Body)
+		r.Body.Close()
+		close(started)
+		<-r.Context().Done() // hang until the client gives up
+	}
+	p := newTestAnthropicProvider(t, handler)
+	a := NewFromProvider(p)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { <-started; cancel() }()
+
+	var buf bytes.Buffer
+	err := a.AnalyzeContext(ctx, "q", &buf)
+	if err == nil || !errors.Is(err, context.Canceled) {
+		t.Errorf("cancelled context must abort the call, got %v", err)
 	}
 }
 

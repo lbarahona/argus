@@ -135,7 +135,7 @@ func (s *Session) Run(ctx context.Context) error {
 		multiWriter := io.MultiWriter(s.stdout, &responseBuf)
 
 		analyzer := ai.NewFromProvider(s.aiProvider)
-		if err := analyzer.AnalyzeWithHistory(tuiSystemPrompt, s.history, multiWriter); err != nil {
+		if err := analyzer.AnalyzeWithHistoryContext(ctx, tuiSystemPrompt, s.history, multiWriter); err != nil {
 			fmt.Fprintf(s.stdout, "\n%s %s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true).Render("Error:"), err)
 			// Remove the failed user message so the conversation stays clean
 			s.history = s.history[:len(s.history)-1]

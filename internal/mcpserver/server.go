@@ -329,7 +329,7 @@ func registerTools(server *mcp.Server) {
 			}
 			prompt := fmt.Sprintf("User query: %s\n\nObservability data from Signoz instance %q:\n%s", input.Query, instKey, dataCtx)
 			analyzer := ai.NewFromProvider(provider)
-			analysis, err := analyzer.AnalyzeSync(prompt)
+			analysis, err := analyzer.AnalyzeSyncContext(ctx, prompt)
 			if err != nil {
 				r, _ := errorResult(err)
 				return r, struct{}{}, nil
@@ -360,7 +360,7 @@ func registerTools(server *mcp.Server) {
 		if input.Query != "" && provErr == nil {
 			prompt := fmt.Sprintf("User query: %s\n\nTrace data from Signoz instance %q:\n%s", input.Query, instKey, result.Raw)
 			analyzer := ai.NewFromProvider(provider)
-			analysis, err := analyzer.AnalyzeSync(prompt)
+			analysis, err := analyzer.AnalyzeSyncContext(ctx, prompt)
 			if err != nil {
 				r, _ := errorResult(err)
 				return r, struct{}{}, nil
@@ -391,7 +391,7 @@ func registerTools(server *mcp.Server) {
 		if input.Query != "" && provErr == nil {
 			prompt := fmt.Sprintf("User query: %s\n\nMetric data from Signoz instance %q:\n%s", input.Query, instKey, result.Raw)
 			analyzer := ai.NewFromProvider(provider)
-			analysis, err := analyzer.AnalyzeSync(prompt)
+			analysis, err := analyzer.AnalyzeSyncContext(ctx, prompt)
 			if err != nil {
 				r, _ := errorResult(err)
 				return r, struct{}{}, nil
@@ -442,7 +442,7 @@ func registerTools(server *mcp.Server) {
 		}
 		prompt := input.Question + contextInfo
 		analyzer := ai.NewFromProvider(provider)
-		analysis, err := analyzer.AnalyzeSync(prompt)
+		analysis, err := analyzer.AnalyzeSyncContext(ctx, prompt)
 		if err != nil {
 			r, _ := errorResult(err)
 			return r, struct{}{}, nil
@@ -482,7 +482,7 @@ func registerTools(server *mcp.Server) {
 		}
 		prompt := explain.BuildPrompt(data)
 		analyzer := ai.NewFromProvider(provider)
-		analysis, err := analyzer.AnalyzeSync(prompt)
+		analysis, err := analyzer.AnalyzeSyncContext(ctx, prompt)
 		if err != nil {
 			r, _ := errorResult(err)
 			return r, struct{}{}, nil
