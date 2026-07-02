@@ -156,6 +156,63 @@ func TestOpenAI_StreamResponse_EmptyChoices(t *testing.T) {
 	}
 }
 
+// ---- Stream robustness tests (error events, finish_reason=length, long lines) ----
+
+func TestOpenAIStreamErrorEventFailsLoudly(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n")
+		fmt.Fprint(w, "data: {\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Rate limited\"}}\n\n")
+	}
+	p := newTestOpenAIProvider(t, handler)
+
+	var buf bytes.Buffer
+	err := p.Analyze(t.Context(), "q", &buf)
+	if err == nil {
+		t.Fatal("mid-stream error event must surface as an error, not silent truncation")
+	}
+	if !strings.Contains(err.Error(), "Rate limited") {
+		t.Errorf("error should carry the API message, got %v", err)
+	}
+}
+
+func TestOpenAIStreamFinishReasonLengthNoted(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"answer\"},\"finish_reason\":null}]}\n\n")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"length\"}]}\n\n")
+	}
+	p := newTestOpenAIProvider(t, handler)
+
+	var buf bytes.Buffer
+	if err := p.Analyze(t.Context(), "q", &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "truncated at max_tokens") {
+		t.Errorf("finish_reason=length must be noted in output, got %q", buf.String())
+	}
+}
+
+func TestOpenAIStreamLongLine(t *testing.T) {
+	long := strings.Repeat("x", 200*1024) // > default 64KB scanner cap
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":%q}}]}\n\n", long)
+	}
+	p := newTestOpenAIProvider(t, handler)
+
+	var buf bytes.Buffer
+	if err := p.Analyze(t.Context(), "q", &buf); err != nil {
+		t.Fatalf("200KB SSE line must not kill the stream: %v", err)
+	}
+	if len(buf.String()) < 200*1024 {
+		t.Errorf("long delta truncated: got %d bytes", len(buf.String()))
+	}
+}
+
 func TestOpenAI_Name(t *testing.T) {
 	p := NewOpenAIProvider("key", "")
 	if p.Name() != "openai" {

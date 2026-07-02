@@ -31,7 +31,7 @@ func NewOpenAIProvider(apiKey, model string) *OpenAIProvider {
 	return &OpenAIProvider{
 		apiKey: apiKey,
 		model:  model,
-		client: &http.Client{},
+		client: newHTTPClient(),
 	}
 }
 
@@ -106,6 +106,9 @@ type openaiRequest struct {
 
 func streamOpenAIResponse(body io.Reader, w io.Writer) error {
 	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	truncated := false
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -123,18 +126,36 @@ func streamOpenAIResponse(body io.Reader, w io.Writer) error {
 				Delta struct {
 					Content string `json:"content"`
 				} `json:"delta"`
+				FinishReason string `json:"finish_reason"`
 			} `json:"choices"`
+			Error struct {
+				Type    string `json:"type"`
+				Message string `json:"message"`
+			} `json:"error"`
 		}
 
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
 			continue
 		}
 
-		if len(event.Choices) > 0 && event.Choices[0].Delta.Content != "" {
-			fmt.Fprint(w, event.Choices[0].Delta.Content)
+		if event.Error.Message != "" {
+			fmt.Fprintln(w)
+			return fmt.Errorf("stream error from API: %s: %s", event.Error.Type, event.Error.Message)
+		}
+
+		if len(event.Choices) > 0 {
+			if event.Choices[0].Delta.Content != "" {
+				fmt.Fprint(w, event.Choices[0].Delta.Content)
+			}
+			if event.Choices[0].FinishReason == "length" {
+				truncated = true
+			}
 		}
 	}
 
 	fmt.Fprintln(w)
+	if truncated {
+		fmt.Fprintln(w, "[response truncated at max_tokens]")
+	}
 	return scanner.Err()
 }

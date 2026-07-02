@@ -41,7 +41,7 @@ func NewBedrockProvider(endpoint, token, model string) *BedrockProvider {
 		endpoint: endpoint,
 		token:    token,
 		model:    model,
-		client:   &http.Client{},
+		client:   newHTTPClient(),
 	}
 }
 

@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	anthropicAPI     = "https://api.anthropic.com/v1/messages"
-	anthropicVersion = "2023-06-01"
+	anthropicAPI          = "https://api.anthropic.com/v1/messages"
+	anthropicVersion      = "2023-06-01"
 	defaultAnthropicModel = "claude-sonnet-4-20250514"
 )
 
@@ -32,7 +32,7 @@ func NewAnthropicProvider(apiKey, model string) *AnthropicProvider {
 	return &AnthropicProvider{
 		apiKey: apiKey,
 		model:  model,
-		client: &http.Client{},
+		client: newHTTPClient(),
 	}
 }
 
@@ -98,6 +98,9 @@ type anthropicRequest struct {
 
 func streamAnthropicResponse(body io.Reader, w io.Writer) error {
 	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	truncated := false
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -113,20 +116,34 @@ func streamAnthropicResponse(body io.Reader, w io.Writer) error {
 		var event struct {
 			Type  string `json:"type"`
 			Delta struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
+				Type       string `json:"type"`
+				Text       string `json:"text"`
+				StopReason string `json:"stop_reason"`
 			} `json:"delta"`
+			Error struct {
+				Type    string `json:"type"`
+				Message string `json:"message"`
+			} `json:"error"`
 		}
 
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
 			continue
 		}
 
-		if event.Type == "content_block_delta" && event.Delta.Type == "text_delta" {
+		switch {
+		case event.Type == "error":
+			fmt.Fprintln(w)
+			return fmt.Errorf("stream error from API: %s: %s", event.Error.Type, event.Error.Message)
+		case event.Type == "content_block_delta" && event.Delta.Type == "text_delta":
 			fmt.Fprint(w, event.Delta.Text)
+		case event.Type == "message_delta" && event.Delta.StopReason == "max_tokens":
+			truncated = true
 		}
 	}
 
 	fmt.Fprintln(w)
+	if truncated {
+		fmt.Fprintln(w, "[response truncated at max_tokens]")
+	}
 	return scanner.Err()
 }

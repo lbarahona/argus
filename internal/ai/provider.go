@@ -4,8 +4,24 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
+	"time"
 )
+
+// newHTTPClient returns a client suitable for streaming: no overall timeout
+// (streams are long-lived) but bounded dial/TLS/first-byte phases so a hung
+// endpoint cannot block a CLI or MCP call forever.
+func newHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 60 * time.Second,
+		},
+	}
+}
 
 // Provider is the interface all AI providers implement.
 type Provider interface {
