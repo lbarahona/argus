@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lbarahona/argus/internal/fsutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -181,6 +182,21 @@ func (s *Store) Delete(id string) error {
 	}
 	path := filepath.Join(s.dir, rb.ID+".yaml")
 	return os.Remove(path)
+}
+
+// SaveRunLog persists an execution log under <dir>/runs/ and returns the path.
+func (s *Store) SaveRunLog(log *RunLog) (string, error) {
+	dir := filepath.Join(s.dir, "runs")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", err
+	}
+	name := fmt.Sprintf("%s-%s.yaml", log.RunbookID, log.StartedAt.Format("20060102-150405"))
+	path := filepath.Join(dir, name)
+	data, err := yaml.Marshal(log)
+	if err != nil {
+		return "", fmt.Errorf("marshaling run log: %w", err)
+	}
+	return path, fsutil.WriteFileAtomic(path, data, 0o644)
 }
 
 // Search finds runbooks matching a query (searches name, description, tags, category)

@@ -1924,16 +1924,15 @@ across teams via version control.`,
 		},
 	})
 
-	// run (dry-run mode — shows steps without executing)
-	var dryRun bool
+	// run (dry-run by default; --execute runs command/check steps with confirmation)
+	var execute bool
 	runCmd := &cobra.Command{
 		Use:   "run <id>",
-		Short: "Execute a runbook step-by-step (dry-run by default)",
-		Long: `Walk through a runbook step by step. By default runs in dry-run mode,
-showing each step's command without executing. Commands contain placeholders
-(like <POD>, <NS>) that should be filled in for your specific situation.
-
-Use --execute to actually run commands (use with caution).`,
+		Short: "Walk through a runbook step-by-step (dry-run by default)",
+		Long: `Walk through a runbook step by step. By default this is a dry run:
+each step is shown but nothing executes. With --execute, command and check
+steps run after a per-step confirmation, with timeouts, captured output,
+and a run log saved under ~/.argus/runbooks/runs/.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			store := runbook.NewStore()
@@ -1942,83 +1941,33 @@ Use --execute to actually run commands (use with caution).`,
 				return err
 			}
 
-			log := &runbook.RunLog{
-				RunbookID:   rb.ID,
-				RunbookName: rb.Name,
-				StartedAt:   time.Now(),
-				Status:      "running",
-			}
-
 			fmt.Printf("\n🚀 Running: %s", rb.Name)
-			if dryRun {
+			if !execute {
 				fmt.Print(" [DRY RUN]")
 			}
 			fmt.Printf("\n   %d steps\n\n", len(rb.Steps))
 
-			allPassed := true
-			for i, step := range rb.Steps {
-				result := runbook.StepResult{
-					StepName:  step.Name,
-					StartedAt: time.Now(),
-				}
-
-				prefix := fmt.Sprintf("[%d/%d]", i+1, len(rb.Steps))
-				if step.Manual {
-					fmt.Printf("  %s 🖐️  %s [MANUAL]\n", prefix, step.Name)
-				} else {
-					fmt.Printf("  %s ⚡ %s\n", prefix, step.Name)
-				}
-
-				if step.Command != "" {
-					fmt.Printf("       $ %s\n", step.Command)
-				}
-				if step.Notes != "" {
-					fmt.Printf("       💡 %s\n", step.Notes)
-				}
-
-				if dryRun {
-					result.Status = "skipped"
-					fmt.Printf("       %s\n\n", output.MutedStyle.Render("(dry-run: skipped)"))
-				} else if step.Manual {
-					fmt.Print("       Continue? (y/n/skip): ")
-					var answer string
-					fmt.Scanln(&answer)
-					switch strings.ToLower(answer) {
-					case "y", "yes":
-						result.Status = "passed"
-					case "skip", "s":
-						result.Status = "skipped"
-					default:
-						result.Status = "failed"
-						result.Error = "manual step rejected"
-						allPassed = false
-					}
-					fmt.Println()
-				} else {
-					result.Status = "passed"
-					fmt.Println()
-				}
-
-				log.StepResults = append(log.StepResults, result)
-
-				if !allPassed && rb.OnFailure == "escalate" {
-					fmt.Println("  ⚠️  Step failed — on_failure=escalate, stopping execution")
-					break
-				}
+			executor := &runbook.Executor{
+				Out:     os.Stdout,
+				In:      os.Stdin,
+				Execute: execute,
 			}
+			log := executor.Run(cmd.Context(), rb)
 
-			log.CompletedAt = time.Now()
-			if allPassed {
-				log.Status = "completed"
+			if path, err := store.SaveRunLog(log); err == nil {
+				fmt.Printf("   📝 run log: %s\n", path)
 			} else {
-				log.Status = "failed"
+				fmt.Printf("   ⚠️  could not save run log: %v\n", err)
 			}
 
 			runbook.PrintRunLog(os.Stdout, log)
+			if log.Status == "failed" {
+				os.Exit(1)
+			}
 			return nil
 		},
 	}
-	runCmd.Flags().BoolVar(&dryRun, "dry-run", true, "Show steps without executing (default: true)")
+	runCmd.Flags().BoolVar(&execute, "execute", false, "Actually execute command/check steps (with per-step confirmation)")
 	cmd.AddCommand(runCmd)
 
 	return cmd
