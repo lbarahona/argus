@@ -12,13 +12,37 @@ import (
 
 // newHTTPClient returns a client suitable for streaming: no overall timeout
 // (streams are long-lived) but bounded dial/TLS/first-byte phases so a hung
-// endpoint cannot block a CLI or MCP call forever.
+// endpoint cannot block a CLI or MCP call forever. Proxy and HTTP/2 are set
+// explicitly because a bare &http.Transport{} (unlike http.DefaultTransport)
+// does not pick up HTTPS_PROXY/HTTP_PROXY, and setting DialContext disables
+// Go's automatic HTTP/2 upgrade unless ForceAttemptHTTP2 is set.
 func newHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			ForceAttemptHTTP2:     true,
 			DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ResponseHeaderTimeout: 60 * time.Second,
+		},
+	}
+}
+
+// newBedrockHTTPClient returns a client for Bedrock's non-streaming
+// /model/{id}/invoke endpoint. Unlike newHTTPClient, it sets no
+// ResponseHeaderTimeout: response headers only arrive after the full
+// generation completes, which routinely exceeds 60s at MaxTokens 4096, so a
+// fixed header timeout would kill otherwise-healthy calls. An overall
+// Timeout still bounds the request since this is a single non-streaming
+// response rather than a long-lived stream.
+func newBedrockHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: 10 * time.Minute,
+		Transport: &http.Transport{
+			Proxy:               http.ProxyFromEnvironment,
+			ForceAttemptHTTP2:   true,
+			DialContext:         (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+			TLSHandshakeTimeout: 10 * time.Second,
 		},
 	}
 }

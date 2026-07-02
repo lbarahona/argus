@@ -138,7 +138,7 @@ func streamOpenAIResponse(body io.Reader, w io.Writer) error {
 			continue
 		}
 
-		if event.Error.Message != "" {
+		if event.Error.Type != "" || event.Error.Message != "" {
 			fmt.Fprintln(w)
 			return fmt.Errorf("stream error from API: %s: %s", event.Error.Type, event.Error.Message)
 		}

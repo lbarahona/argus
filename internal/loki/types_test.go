@@ -3,6 +3,7 @@ package loki
 import (
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestQueryResult_JSON(t *testing.T) {
@@ -147,6 +148,59 @@ func TestResultDataStreamsStillDecode(t *testing.T) {
 	if len(qr.Data.Streams) != 1 || qr.Data.Streams[0].Values[0][1] != "hello" {
 		t.Errorf("streams decoded wrong: %+v", qr.Data)
 	}
+}
+
+func TestMetricSeries_JSONTags_Lowercase(t *testing.T) {
+	s := MetricSeries{
+		Metric: map[string]string{"app": "nginx"},
+		Values: []SamplePoint{{Timestamp: time.Unix(1700000000, 0), Value: 42}},
+	}
+
+	data, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if _, ok := raw["metric"]; !ok {
+		t.Errorf("expected lowercase %q key in JSON output, got keys: %v", "metric", keysOf(raw))
+	}
+	if _, ok := raw["values"]; !ok {
+		t.Errorf("expected lowercase %q key in JSON output, got keys: %v", "values", keysOf(raw))
+	}
+	if _, ok := raw["Metric"]; ok {
+		t.Errorf("PascalCase %q key must not appear in JSON output", "Metric")
+	}
+	if _, ok := raw["Values"]; ok {
+		t.Errorf("PascalCase %q key must not appear in JSON output", "Values")
+	}
+
+	var rawSamples []map[string]json.RawMessage
+	if err := json.Unmarshal(data, &struct {
+		Values *[]map[string]json.RawMessage `json:"values"`
+	}{&rawSamples}); err != nil {
+		t.Fatalf("unmarshal values error: %v", err)
+	}
+	if len(rawSamples) != 1 {
+		t.Fatalf("expected 1 sample, got %d", len(rawSamples))
+	}
+	if _, ok := rawSamples[0]["timestamp"]; !ok {
+		t.Errorf("expected lowercase %q key on sample, got keys: %v", "timestamp", keysOf(rawSamples[0]))
+	}
+	if _, ok := rawSamples[0]["value"]; !ok {
+		t.Errorf("expected lowercase %q key on sample, got keys: %v", "value", keysOf(rawSamples[0]))
+	}
+}
+
+func keysOf(m map[string]json.RawMessage) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	return ks
 }
 
 func TestLokiConfig_Roundtrip(t *testing.T) {

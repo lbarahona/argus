@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lbarahona/argus/internal/signoz"
 	"github.com/lbarahona/argus/pkg/types"
@@ -281,8 +282,8 @@ func statusEmoji(status string) string {
 }
 
 func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n-1] + "…"
+	if utf8.RuneCountInString(s) <= n {
+		return s
 	}
-	return s
+	return string([]rune(s)[:n-1]) + "…"
 }

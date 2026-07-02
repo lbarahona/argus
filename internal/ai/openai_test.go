@@ -177,6 +177,25 @@ func TestOpenAIStreamErrorEventFailsLoudly(t *testing.T) {
 	}
 }
 
+func TestOpenAIStreamErrorEventTypeOnlyFailsLoudly(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n")
+		fmt.Fprint(w, "data: {\"error\":{\"type\":\"server_error\",\"message\":\"\"}}\n\n")
+	}
+	p := newTestOpenAIProvider(t, handler)
+
+	var buf bytes.Buffer
+	err := p.Analyze(t.Context(), "q", &buf)
+	if err == nil {
+		t.Fatal("type-only error event must surface as an error, not be silently skipped")
+	}
+	if !strings.Contains(err.Error(), "server_error") {
+		t.Errorf("error should carry the API error type, got %v", err)
+	}
+}
+
 func TestOpenAIStreamFinishReasonLengthNoted(t *testing.T) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

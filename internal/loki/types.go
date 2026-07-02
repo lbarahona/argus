@@ -46,14 +46,14 @@ type ResultData struct {
 
 // MetricSeries is one matrix/vector series.
 type MetricSeries struct {
-	Metric map[string]string
-	Values []SamplePoint
+	Metric map[string]string `json:"metric"`
+	Values []SamplePoint     `json:"values"`
 }
 
 // SamplePoint is one sample of a metric series.
 type SamplePoint struct {
-	Timestamp time.Time
-	Value     float64
+	Timestamp time.Time `json:"timestamp"`
+	Value     float64   `json:"value"`
 }
 
 func (d *ResultData) UnmarshalJSON(b []byte) error {

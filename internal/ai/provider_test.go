@@ -1,8 +1,44 @@
 package ai
 
 import (
+	"net/http"
 	"testing"
+	"time"
 )
+
+func TestNewHTTPClient_HonorsProxyAndHTTP2(t *testing.T) {
+	client := newHTTPClient()
+	tr, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport, got %T", client.Transport)
+	}
+	if tr.Proxy == nil {
+		t.Error("Transport.Proxy is nil; must be set (e.g. http.ProxyFromEnvironment) to honor HTTPS_PROXY/HTTP_PROXY")
+	}
+	if !tr.ForceAttemptHTTP2 {
+		t.Error("Transport.ForceAttemptHTTP2 must be true; setting DialContext without it disables automatic HTTP/2")
+	}
+}
+
+func TestNewBedrockHTTPClient_NoResponseHeaderTimeout(t *testing.T) {
+	client := newBedrockHTTPClient()
+	tr, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport, got %T", client.Transport)
+	}
+	if tr.ResponseHeaderTimeout != 0 {
+		t.Errorf("ResponseHeaderTimeout = %v, want 0 (Bedrock's non-streaming invoke endpoint only returns headers after full generation)", tr.ResponseHeaderTimeout)
+	}
+	if tr.Proxy == nil {
+		t.Error("Transport.Proxy is nil; must be set to honor HTTPS_PROXY/HTTP_PROXY")
+	}
+	if !tr.ForceAttemptHTTP2 {
+		t.Error("Transport.ForceAttemptHTTP2 must be true")
+	}
+	if client.Timeout != 10*time.Minute {
+		t.Errorf("client.Timeout = %v, want 10m as the overall safety bound", client.Timeout)
+	}
+}
 
 func TestNewProvider_Anthropic(t *testing.T) {
 	p, err := NewProvider(AIConfig{
