@@ -136,7 +136,7 @@ argus ask "why is latency high on the payments service?"
 | `argus loki query/labels/label-values/series/stats/status/summary` | Loki integration |
 | `argus completion bash\|zsh\|fish\|powershell` | Generate a shell completion script |
 
-Every duration flag (`-d`/`--duration`) accepts either bare minutes (`-d 90`) or a Go-style duration string (`-d 90m`, `-d 2h`, `-d 1h30m`).
+Duration flags (`-d`/`--duration`) accept bare minutes (`-d 90`) or a Go-style duration string (`-d 90m`, `-d 2h`, `-d 1h30m`). Exception: `am silence-create -d` takes a Go-style duration only (e.g. `2h` — a unit is required).
 
 ### Logs
 
@@ -817,7 +817,7 @@ anthropic_key: sk-ant-...  # legacy root-level key still works
 ai:
   provider: anthropic
   anthropic_key: sk-ant-...
-  model: auto  # defaults to claude-sonnet-4-20250514
+  model: auto  # defaults to claude-sonnet-5
 default_instance: production
 instances:
   production:
@@ -863,7 +863,7 @@ instances:
 
 ### Environment Variables
 
-All AI keys can be set via environment variables (they override config values):
+All AI keys can also be set via environment variables. Config values take precedence; the env var is used as a fallback when the corresponding config field is unset:
 
 | Variable | Provider | Description |
 |----------|----------|-------------|
@@ -877,7 +877,7 @@ Set `model: auto` (or omit it) to use the best default model for each provider:
 
 | Provider | Default Model |
 |----------|--------------|
-| Anthropic | `claude-sonnet-4-20250514` |
+| Anthropic | `claude-sonnet-5` |
 | OpenAI | `gpt-4o` |
 | Bedrock | `anthropic.claude-3-5-sonnet-20241022-v2:0` |
 
