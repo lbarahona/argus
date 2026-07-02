@@ -13,13 +13,17 @@ Argus connects to your observability stack and uses AI to analyze logs, metrics,
 - 🤖 **Natural language queries** — Ask questions about your infrastructure in plain English
 - 📡 **Multi-instance support** — Manage multiple Signoz environments (production, staging, etc.)
 - 📋 **Real log/trace/metric queries** — Direct integration with Signoz query_range API (v3 + v5)
-- 🔧 **Service discovery** — List services with call counts and error rates
-- 📊 **Dashboard view** — Combined overview of health, services, and recent errors
+- 🔧 **Service discovery** — List and rank services by errors, error rate, or call volume
+- 🔗 **Cross-signal correlation** — Find error propagation across services, plus a stack-wide view across Alertmanager, Prometheus, Grafana, and Loki
+- 📈 **Anomaly, change, and trend detection** — Z-score anomalies, deployment change-point detection, and linear-regression forecasts
+- 🛡️ **CI/CD deployment gates** — SHIP/CAUTION/HOLD verdicts for safe deploys
+- 🎯 **SLOs and error budgets** — Burn-rate alerting with Google SRE-style multi-window policy
+- 📓 **Runbooks, incidents, and postmortems** — Track and execute operational procedures end to end
+- 🔌 **Full observability stack** — Signoz + Alertmanager + Prometheus + Grafana + Loki
+- 🧩 **MCP server** — Expose Argus as tools for Claude Desktop, Cursor, and other MCP clients
 - ⚡ **Streaming AI responses** — Real-time analysis output as tokens arrive
 - 🎨 **Beautiful terminal UI** — Severity-colored logs, formatted traces, metric tables
-- 🔧 **Simple configuration** — YAML config, multiple profiles, easy setup
-- 🔌 **Full observability stack** — Signoz + Alertmanager + Prometheus + Grafana + Loki
-- 🛡️ **CI/CD deployment gates** — SHIP/CAUTION/HOLD verdicts for safe deploys
+- 🐚 **Shell completions** — bash, zsh, fish, and PowerShell, including instance/format/ID completion
 
 ## Installation
 
@@ -48,6 +52,24 @@ make build
 # Binary at ./bin/argus
 ```
 
+### Shell completions
+
+```bash
+# bash (requires bash-completion)
+argus completion bash > /etc/bash_completion.d/argus
+
+# zsh
+argus completion zsh > "${fpath[1]}/_argus"
+
+# fish
+argus completion fish > ~/.config/fish/completions/argus.fish
+
+# powershell
+argus completion powershell > argus.ps1
+```
+
+Completions cover more than command names — instance names (`-i`), output formats (`-f/--format`), `--sort` values, and incident/runbook/postmortem IDs all complete once you have data on disk.
+
 ## Quick Start
 
 ```bash
@@ -64,10 +86,10 @@ argus services
 argus logs auth-service --query "any errors in the last hour?"
 
 # 5. View traces
-argus traces frontend --duration 30
+argus traces frontend -d 30
 
-# 6. Quick dashboard
-argus dashboard
+# 6. Quick health report
+argus report
 
 # 7. Ask free-form questions
 argus ask "why is latency high on the payments service?"
@@ -80,57 +102,41 @@ argus ask "why is latency high on the payments service?"
 | `argus version` | Print version information |
 | `argus config init` | Interactive configuration setup |
 | `argus config add-instance` | Add a new Signoz instance |
-| `argus instances` | List configured instances |
+| `argus use [instance]` | Show or set the default Signoz instance |
 | `argus status` | Health check all instances |
-| `argus services` | List services with call counts and error rates |
+| `argus doctor` | Diagnose config, connectivity, and AI key issues |
+| `argus services` | List services, optionally ranked by `--sort` |
 | `argus logs [service]` | Query and analyze logs |
 | `argus traces [service]` | Query distributed traces |
 | `argus metrics [metric]` | Query metrics |
-| `argus incident create` | Create a new incident |
-| `argus incident list` | List active incidents |
-| `argus incident update` | Update incident status |
-| `argus incident resolve` | Resolve an incident |
-| `argus incident timeline` | Show incident timeline |
-| `argus dashboard` | Combined overview dashboard |
 | `argus ask [question]` | Free-form AI analysis |
-| `argus report` | Generate health report for shift handoffs |
-| `argus top` | Ranked service view (like htop for services) |
-| `argus diff` | Compare error rates between time windows |
+| `argus explain [service]` | AI root cause analysis for one service |
+| `argus report` | Health report for shift handoffs (`--grade` for a reliability scorecard) |
 | `argus watch` | Continuous monitoring with anomaly detection |
-| `argus alert` | Declarative alert rules with cron-friendly output |
-| `argus explain` | AI root cause analysis (correlates logs + traces) |
-| `argus deploy` | Detect deployments from behavioral changes and analyze impact |
-| `argus slo` | SLO tracking with error budgets and burn rates |
-| `argus budget check` | Error budget burndown with burn rate analysis |
+| `argus analyze anomalies` | Z-score anomaly detection across services |
+| `argus analyze timeline` | Chronological incident timeline reconstruction |
+| `argus analyze correlate` | Cross-signal correlation and error propagation |
+| `argus analyze correlate stack` | Correlate alerts across Alertmanager/Prometheus/Grafana/Loki |
+| `argus analyze changes` | Deployment/change-point detection and impact analysis |
+| `argus analyze diff` | Error-count comparison between two time windows |
+| `argus deps` | Map service dependencies from trace data |
+| `argus forecast` | Predict service health trends with linear regression |
 | `argus guard` | CI/CD deployment gate — SHIP/CAUTION/HOLD verdict |
-| `argus am alerts` | List firing alerts from Alertmanager |
-| `argus am silences` | List active silences |
-| `argus am silence-create` | Create a silence with label matchers |
-| `argus am silence-delete` | Expire a silence by ID |
-| `argus am status` | Check Alertmanager health and version |
-| `argus am summary` | Quick alert counts by severity and name |
-| `argus grafana dashboards` | List all Grafana dashboards by folder |
-| `argus grafana dashboard [uid]` | Get detailed dashboard info by UID |
-| `argus grafana search [query]` | Search dashboards and folders |
-| `argus grafana datasources` | List configured data sources |
-| `argus grafana folders` | List dashboard folders |
-| `argus grafana alerts` | List alert rules |
-| `argus grafana firing` | List firing alert instances |
-| `argus grafana status` | Check Grafana health and version |
-| `argus grafana summary` | Quick overview of Grafana instance |
-| `argus prom rules` | List alerting and recording rules |
-| `argus prom targets` | Show scrape targets and their health |
-| `argus prom alerts` | Show firing and pending alerts from Prometheus |
-| `argus prom query` | Execute an instant PromQL query |
-| `argus prom status` | Show Prometheus version, health, and runtime info |
-| `argus prom summary` | Quick overview of rules, alerts, and targets |
-| `argus loki query` | Query logs with LogQL |
-| `argus loki labels` | List all label names |
-| `argus loki label-values` | List values for a label |
-| `argus loki series` | Find matching log series |
-| `argus loki stats` | Show ingestion statistics |
-| `argus loki status` | Check Loki health and version |
-| `argus loki summary` | Quick overview of Loki instance |
+| `argus rules init/list/check` | Declarative alert rules evaluated against Signoz |
+| `argus slo init/list/check` | Evaluate SLOs — error budgets, burn rates, compliance |
+| `argus slo budget` | Multi-window burn-rate analysis and exhaustion prediction |
+| `argus runbook init/list/show/search/validate/run` | Manage and execute operational runbooks |
+| `argus incident create/list/update/resolve/timeline` | Track incidents with a timeline |
+| `argus postmortem generate/list/show/export/delete` | Generate postmortems from incidents |
+| `argus tui` | Interactive multi-turn AI troubleshooting session |
+| `argus mcp` | Start the MCP server (stdio) for AI agents |
+| `argus am alerts/silences/silence-create/silence-delete/status/summary` | Alertmanager integration |
+| `argus grafana dashboards/dashboard/search/datasources/folders/alerts/firing/status/summary` | Grafana integration |
+| `argus prom rules/targets/alerts/query/status/summary` | Prometheus integration |
+| `argus loki query/labels/label-values/series/stats/status/summary` | Loki integration |
+| `argus completion bash\|zsh\|fish\|powershell` | Generate a shell completion script |
+
+Every duration flag (`-d`/`--duration`) accepts either bare minutes (`-d 90`) or a Go-style duration string (`-d 90m`, `-d 2h`, `-d 1h30m`).
 
 ### Logs
 
@@ -142,10 +148,10 @@ argus logs my-service
 argus logs my-service --severity ERROR
 
 # With AI analysis
-argus logs my-service --query "find authentication failures"
+argus logs my-service -q "find authentication failures"
 
 # Specify instance, duration, and limit
-argus logs my-service -i staging -d 120 -l 50
+argus logs my-service -i staging -d 2h -l 50
 ```
 
 ### Services
@@ -153,6 +159,11 @@ argus logs my-service -i staging -d 120 -l 50
 ```bash
 # List all services with error rates
 argus services
+
+# Rank by errors, error rate, or call volume (like htop for services)
+argus services --sort errors
+argus services --sort rate -d 2h
+argus services --sort calls --limit 10
 
 # From a specific instance
 argus services -i production
@@ -165,10 +176,10 @@ argus services -i production
 argus traces frontend
 
 # With duration and limit
-argus traces api-gateway -d 30 -l 50
+argus traces api-gateway -d 2h --limit 50
 
 # With AI analysis
-argus traces frontend --query "find slow requests over 1s"
+argus traces frontend -q "why are these traces so slow?"
 ```
 
 ### Metrics
@@ -178,17 +189,7 @@ argus traces frontend --query "find slow requests over 1s"
 argus metrics cpu_usage
 
 # With AI analysis
-argus metrics http_request_duration --query "any anomalies?"
-```
-
-### Dashboard
-
-```bash
-# Quick overview of everything
-argus dashboard
-
-# Look back further for errors
-argus dashboard -d 120
+argus metrics http_request_duration -q "any anomalies?"
 ```
 
 ### Ask
@@ -199,71 +200,185 @@ argus ask "what services had the most errors today?"
 argus ask "is there a correlation between high CPU and slow responses?"
 ```
 
+### Explain
+
+```bash
+# AI root cause analysis — correlates logs, traces, and metrics
+argus explain api-service
+
+# Analyze last 30 minutes
+argus explain payment-service --duration 30
+
+# Against a specific instance
+argus explain auth-service -i production
+```
+
 ### Report
+
+`argus report` compiles a health report for shift handoffs. Pass `--grade` to
+instead generate a service reliability scorecard (A–F grades per service,
+weighted by call volume).
 
 ```bash
 # Generate a health report (terminal format)
 argus report
 
 # Include AI-generated summary
-argus report --ai
+argus report --ai -d 2h
 
 # Output as markdown (great for Slack/docs)
-argus report -f markdown
+argus report --format markdown
 
-# Cover last 4 hours
-argus report -d 240 --ai
+# Reliability scorecard instead of a health report
+argus report --grade
+
+# Scorecard for a single service
+argus report --grade --service api-gateway
 ```
 
-### Top
+### Watch
+
+Continuously polls a Signoz instance and alerts on error rate spikes, high
+latency, error-count spikes vs. a rolling baseline, and new errors on
+previously clean services.
 
 ```bash
-# Show top services ranked by errors (like htop for services)
-argus top
+# Poll every 30s with default thresholds
+argus watch
 
-# Sort by error rate instead
-argus top -s rate
+# Custom poll interval
+argus watch --interval 60
 
-# Sort by call volume
-argus top -s calls
+# Custom error rate thresholds (%)
+argus watch --error-rate-warn 3 --error-rate-crit 10
 
-# Limit and custom duration
-argus top -l 10 -d 120
+# Custom P99 latency thresholds (ms) against a specific instance
+argus watch -i production --p99-warn 1000 --p99-crit 5000
+
+# Error spike multiplier over the rolling baseline (default 3x)
+argus watch --spike 4
 ```
 
-### Diff
+### Analyze
+
+`argus analyze` groups the deeper investigation commands: anomaly detection,
+incident timelines, cross-signal correlation, deployment/change detection,
+and window-over-window diffing.
 
 ```bash
-# Compare last hour vs previous hour
-argus diff
+# Z-score anomaly detection across services
+argus analyze anomalies
+argus analyze anomalies --duration 120 --sensitivity 1.5
+argus analyze anomalies --service api-service --ai
+argus analyze anomalies --quiet   # only show anomalies, hide healthy services
 
-# Compare last 30 min vs previous 30 min
-argus diff -d 30
+# Chronological incident timeline
+argus analyze timeline
+argus analyze timeline --duration 120
+argus analyze timeline --service api-service --ai
+argus analyze timeline --format markdown > incident-report.md
 
-# Shows which services are degrading, improving, or stable
-argus diff -i production
+# Cross-signal correlation (logs + traces + metrics across all services)
+argus analyze correlate
+argus analyze correlate --service api-gateway
+argus analyze correlate --duration 30 --ai
+argus analyze correlate --bucket 30 --min-events 5
+
+# Correlate alerts across the whole stack (Alertmanager/Prometheus/Grafana/Loki)
+argus analyze correlate stack --duration 30
+
+# Deployment/change-point detection and impact analysis (-100 to +100)
+argus analyze changes
+argus analyze changes --duration 720 --sensitivity high
+argus analyze changes -s payment-api --ai
+argus analyze changes -f markdown > deploy-report.md
+
+# Compare the current window against the previous one
+argus analyze diff
+argus analyze diff --duration 30
+argus analyze diff -i production --duration 15
 ```
 
-### Alert
+### Deps
+
+```bash
+# ASCII dependency graph from trace spans
+argus deps
+
+# Filter to one service's upstream/downstream deps
+argus deps --service api-gateway
+
+# Longer lookback, markdown output, AI architecture analysis
+argus deps -d 2h --format markdown --ai
+```
+
+### Forecast
+
+```bash
+# Forecast error rates and traffic 60 minutes out (default)
+argus forecast
+
+# Longer history and horizon
+argus forecast --duration 240 --horizon 120
+
+# One service with an AI narrative
+argus forecast -s api-service --ai
+
+# Markdown output
+argus forecast -f markdown > forecast.md
+```
+
+Risk levels: `stable` (score < 30), `degrading` (30–59), `critical` (60+).
+
+### Guard (CI/CD Deployment Gate)
+
+```bash
+# Should we deploy? Get a SHIP/CAUTION/HOLD verdict
+argus guard
+
+# Strict mode for critical services (lower thresholds, blocks on warnings)
+argus guard --strict
+
+# Check specific service before deploying it
+argus guard --service api-gateway
+
+# JSON output for CI/CD pipelines
+argus guard --format json
+
+# Custom thresholds
+argus guard --max-error-rate 2.0 --max-p99 3000
+
+# Include an AI deployment advisory
+argus guard --ai
+
+# In CI/CD pipelines (exit code 0=ship, 1=caution, 2=hold)
+argus guard --strict --format json || exit 1
+
+# GitHub Actions example:
+# - name: Pre-deploy safety check
+#   run: argus guard --strict
+```
+
+### Rules (alerting)
 
 ```bash
 # Create sample alert rules
-argus alert init
+argus rules init
 
 # List configured rules
-argus alert list
+argus rules list
 
 # Check all rules (colored output)
-argus alert check
+argus rules check
 
 # JSON output for cron/automation
-argus alert check --format json
+argus rules check --format json
 
 # Exit codes: 0=ok, 1=warnings, 2=critical
-argus alert check && echo "All clear" || echo "Alerts fired!"
+argus rules check && echo "All clear" || echo "Alerts fired!"
 ```
 
-Alert rules are defined in `~/.argus/alerts.yaml`:
+Rules are defined in `~/.argus/alerts.yaml`:
 
 ```yaml
 rules:
@@ -282,6 +397,20 @@ rules:
     operator: gt
     warning: 2.0
     critical: 10.0
+
+  - name: log-errors
+    type: log_errors
+    operator: gt
+    warning: 10
+    critical: 50
+    duration: 15m
+
+  - name: service-health
+    type: service_down
+    operator: lt
+    warning: 1
+    critical: 1
+    duration: 10m
 ```
 
 ### SLO
@@ -298,6 +427,10 @@ argus slo check
 
 # JSON output for dashboards/automation
 argus slo check --format json
+
+# Fail (exit 1) if any SLO has no data — useful in CI gates so a broken
+# data pipeline doesn't silently report clean
+argus slo check --fail-on-no-data
 
 # Exit codes: 0=ok, 1=warning, 2=critical/exhausted
 argus slo check && echo "Within budget" || echo "Budget alert!"
@@ -329,67 +462,175 @@ Output includes error budget bars, burn rates, and compliance status:
 - 🔴 Critical — >80% budget consumed
 - 💀 Exhausted — budget blown
 
-### Explain
+#### SLO Budget (burn-rate analysis)
 
-```bash
-# AI root cause analysis — correlates logs, traces, and metrics
-argus explain api-service
+`argus slo budget` requires SLOs to already be configured (`argus slo init`).
+It implements Google SRE-style multi-window burn rate alerting:
 
-# Analyze last 30 minutes
-argus explain payment-service --duration 30
-
-# Against a specific instance
-argus explain auth-service -i production
-```
-
-### Budget
+- **Fast burn**: 1h burn rate >14x AND 6h >6x → PAGE immediately
+- **Slow burn**: 6h burn rate >6x → create TICKET
+- **Elevated**: 1h burn rate >6x → WATCH closely
 
 ```bash
 # Error budget burndown analysis
-argus budget check
+argus slo budget
 
 # Check specific service
-argus budget check --service api-gateway
+argus slo budget --service api-gateway
 
-# JSON output for automation
-argus budget check --format json
+# JSON or markdown output for automation
+argus slo budget --format json
+argus slo budget --format markdown
 
 # With AI recommendations
-argus budget check --ai
+argus slo budget --ai
 
-# Different analysis windows
-argus budget check --window 24h
+# Different analysis window (default 6h)
+argus slo budget --window 24h
 ```
 
-### Guard (CI/CD Deployment Gate)
+Exit codes: 0 = healthy, 1 = warning (burning/ticket/watch), 2 = critical
+(critical/exhausted/page).
+
+### Runbooks
+
+Runbooks are stored as YAML in `~/.argus/runbooks/` and can be shared across
+teams via version control. Steps can be automated (command), check-based, or
+manual.
 
 ```bash
-# Should we deploy? Get a SHIP/CAUTION/HOLD verdict
-argus guard
+# Create sample runbooks to get started
+argus runbook init
 
-# Strict mode for critical services (lower thresholds)
-argus guard --strict
+# List all runbooks
+argus runbook list
+argus runbook list --category incident-response
 
-# Check specific service before deploying it
-argus guard --service api-gateway
+# Search by name, description, tags, or category
+argus runbook search "database"
 
-# JSON output for CI/CD pipelines
-argus guard --format json
+# Show full runbook details
+argus runbook show <id>
 
-# Custom thresholds
-argus guard --max-error-rate 2.0 --max-p99 3000
+# Validate a runbook's structure
+argus runbook validate <id>
 
-# In CI/CD pipelines (exit code 0=ship, 1=caution, 2=hold)
-argus guard --strict --format json || exit 1
+# Dry run — walk through steps without executing anything (default)
+argus runbook run <id>
 
-# GitHub Actions example:
-# - name: Pre-deploy safety check
-#   run: argus guard --strict
+# Actually execute command/check steps, with per-step confirmation,
+# timeouts, captured output, and a run log under ~/.argus/runbooks/runs/
+argus runbook run <id> --execute
+
+# Delete a runbook
+argus runbook delete <id>
+```
+
+### Incidents
+
+Incidents are stored locally in `~/.argus/incidents.yaml`, entirely
+CLI-managed — no external ticketing system required.
+
+```bash
+# Create an incident
+argus incident create "API returning 500s" --severity critical --services api-service
+
+# List active incidents (or --all for everything)
+argus incident list
+argus incident list --all --limit 5
+
+# Add a timeline entry as the incident progresses
+argus incident update INC-20260222-001 --status identified --message "root cause: bad deploy"
+
+# Resolve
+argus incident resolve INC-20260222-001 --message "deployed fix in v2.3.1"
+
+# Show the full timeline
+argus incident timeline INC-20260222-001
+```
+
+### Postmortems
+
+Auto-collects an incident's timeline, Signoz service metrics, and error
+logs, then optionally runs AI root cause analysis to produce a structured,
+blameless postmortem. Stored in `~/.argus/postmortems.yaml`. `argus
+postmortem` also accepts the alias `argus pm`.
+
+```bash
+# Generate a postmortem from an existing incident
+argus postmortem generate INC-20260222-001
+
+# With AI-powered root cause analysis and action items
+argus postmortem generate INC-20260222-001 --ai
+
+# List, show, export
+argus postmortem list
+argus postmortem show <postmortem-id>
+argus postmortem export <postmortem-id> -o postmortem.md
+
+# Delete
+argus postmortem delete <postmortem-id>
+```
+
+### TUI (interactive session)
+
+```bash
+# Start an interactive multi-turn AI troubleshooting session
+argus tui
+
+# Against a specific instance
+argus tui -i production
+
+# Retain more conversation history (default 20 messages)
+argus tui --max-history 40
+```
+
+Each question automatically gathers live Signoz context (services + recent
+error logs) before asking the AI. Supports `/clear`, `/help`, and `/history`
+inside the session.
+
+### MCP server
+
+```bash
+# Start the MCP server over stdio
+argus mcp
+```
+
+Configure it in Claude Desktop, Cursor, or any MCP client:
+
+```json
+{
+  "mcpServers": {
+    "argus": {
+      "command": "argus",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Exposes status, services, logs, traces, metrics, the analysis commands, and
+the Alertmanager/Prometheus/Grafana/Loki integrations as tools.
+
+### Doctor
+
+```bash
+# Diagnose config, instance connectivity, AI keys, and network reachability
+argus doctor
+
+# Verbose — show detail for every check, not just failures
+argus doctor --verbose
+
+# Markdown or JSON output (e.g. for a status page or CI step)
+argus doctor --format markdown
+argus doctor --format json
 ```
 
 ### Alertmanager
 
-Argus integrates with Prometheus Alertmanager to query firing alerts, manage silences, and check cluster status.
+Argus integrates with Prometheus Alertmanager to query firing alerts, manage
+silences, and check cluster status. `argus am` also accepts the alias
+`argus alertmanager`.
 
 ```yaml
 # Add to ~/.argus/config.yaml
@@ -431,13 +672,15 @@ argus am silence-delete <silence-id>
 # Check Alertmanager health
 argus am status
 
-# JSON output (all subcommands support --format json)
+# JSON output — alerts, silences, status, and summary support --format json;
+# silence-create and silence-delete do not (they only print a confirmation)
 argus am alerts -f json
 ```
 
 ### Grafana
 
-Connect to your Grafana instance to browse dashboards, data sources, and alert rules:
+Connect to your Grafana instance to browse dashboards, data sources, and
+alert rules. `argus grafana` also accepts the alias `argus graf`.
 
 ```yaml
 # ~/.argus/config.yaml
@@ -450,8 +693,9 @@ grafana:
 # List all dashboards grouped by folder
 argus grafana dashboards
 
-# Search dashboards
+# Search dashboards or folders
 argus grafana search "kubernetes"
+argus grafana search "kubernetes" --type dash-db
 
 # Get dashboard details by UID
 argus grafana dashboard abc123
@@ -474,13 +718,14 @@ argus grafana summary
 # Health and version
 argus grafana status
 
-# JSON output (all subcommands support --format json)
+# JSON output (all grafana subcommands support --format json)
 argus grafana dashboards --format json
 ```
 
 ### Prometheus
 
-Query Prometheus directly for rules, targets, alerts, and instant PromQL queries.
+Query Prometheus directly for rules, targets, alerts, and instant PromQL
+queries. `argus prom` also accepts the alias `argus prometheus`.
 
 ```bash
 # Configure Prometheus URL in ~/.argus/config.yaml:
@@ -500,7 +745,7 @@ argus prom rules --type record
 # Show scrape targets and their health
 argus prom targets
 
-# Show firing alerts from Prometheus
+# Show firing and pending alerts from Prometheus
 argus prom alerts
 
 # Run instant PromQL queries
@@ -513,7 +758,8 @@ argus prom summary
 # Check Prometheus version and health
 argus prom status
 
-# JSON output (all subcommands support --format json)
+# JSON output — rules, targets, alerts, query, and status support
+# --format json; summary is terminal-only (no --format flag)
 argus prom rules --format json
 ```
 
@@ -536,10 +782,10 @@ loki:
 argus loki query '{app="api-gateway"}'
 argus loki query '{namespace="production"} |= "error"' --limit 50
 
-# Discover labels and values
+# Discover labels and values (label-values takes -d/--duration, not --start)
 argus loki labels
 argus loki label-values app
-argus loki label-values namespace --start 1h
+argus loki label-values namespace -d 2h
 
 # Find matching log series
 argus loki series '{app="api-gateway"}'
@@ -553,13 +799,16 @@ argus loki status
 # Quick overview
 argus loki summary
 
-# JSON output (all subcommands support --format json)
+# JSON output (all loki subcommands support --format json)
 argus loki query '{app="api"}' --format json
 ```
 
 ## Configuration
 
-Config is stored at `~/.argus/config.yaml`. Run `argus config init` for interactive setup.
+Config is stored at `~/.argus/config.yaml`. Run `argus config init` for
+interactive setup, or `argus config add-instance` to add another Signoz
+instance to an existing config. Use `argus use [instance]` to list configured
+instances or switch the default (like `kubectl config get-contexts`).
 
 ### Anthropic (default)
 
