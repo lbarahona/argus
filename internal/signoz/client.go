@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/lbarahona/argus/pkg/types"
@@ -353,8 +354,8 @@ func (c *Client) QueryLogs(ctx context.Context, service string, durationMinutes,
 	if severityFilter != "" {
 		filters = append(filters, FilterItem{
 			Key:   FilterKey{Key: "severity_text", DataType: "string", Type: "tag", IsColumn: false},
-			Op:    "=",
-			Value: severityFilter,
+			Op:    "in",
+			Value: severityCasings(severityFilter),
 		})
 	}
 
@@ -382,6 +383,27 @@ func (c *Client) QueryLogs(ctx context.Context, service string, durationMinutes,
 		Logs: logs,
 		Raw:  string(respBody),
 	}, nil
+}
+
+// severityCasings returns the casing variants of a severity level commonly
+// stored in severity_text (e.g. ERROR, error, Error). The backend filter is
+// an exact match, and deployments differ in how they case their levels, so
+// QueryLogs matches all variants via an "in" filter.
+func severityCasings(s string) []string {
+	lower := strings.ToLower(s)
+	upper := strings.ToUpper(s)
+	title := lower
+	if len(lower) > 0 {
+		title = strings.ToUpper(lower[:1]) + lower[1:]
+	}
+	variants := []string{upper}
+	if lower != upper {
+		variants = append(variants, lower)
+	}
+	if title != upper && title != lower {
+		variants = append(variants, title)
+	}
+	return variants
 }
 
 // QueryMetrics queries metrics from Signoz.

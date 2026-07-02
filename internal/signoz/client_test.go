@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -604,5 +605,67 @@ func TestQueryTracesEmptyResultNoPhantomEntries(t *testing.T) {
 	}
 	if len(result.Traces) != 0 {
 		t.Fatalf("expected 0 traces for empty result, got %d: %+v", len(result.Traces), result.Traces)
+	}
+}
+
+func TestSeverityCasings(t *testing.T) {
+	tests := []struct {
+		in   string
+		want []string
+	}{
+		{"error", []string{"ERROR", "error", "Error"}},
+		{"ERROR", []string{"ERROR", "error", "Error"}},
+		{"Error", []string{"ERROR", "error", "Error"}},
+		{"warn", []string{"WARN", "warn", "Warn"}},
+	}
+	for _, tt := range tests {
+		got := severityCasings(tt.in)
+		if len(got) != len(tt.want) {
+			t.Errorf("severityCasings(%q) = %v, want %v", tt.in, got, tt.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.want[i] {
+				t.Errorf("severityCasings(%q) = %v, want %v", tt.in, got, tt.want)
+				break
+			}
+		}
+	}
+}
+
+func TestQueryLogsSeverityFilterMatchesAnyCasing(t *testing.T) {
+	var payload QueryRangePayload
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &payload)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"success","data":{"result":[{"queryName":"A","list":null}]}}`)
+	}))
+	defer server.Close()
+
+	client := New(types.Instance{URL: server.URL})
+	if _, err := client.QueryLogs(context.Background(), "", 60, 10, "error"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	items := payload.CompositeQuery.BuilderQueries["A"].Filters.Items
+	if len(items) != 1 {
+		t.Fatalf("expected 1 filter item, got %d", len(items))
+	}
+	if items[0].Op != "in" {
+		t.Errorf("severity filter op = %q, want \"in\"", items[0].Op)
+	}
+	values, ok := items[0].Value.([]interface{})
+	if !ok {
+		t.Fatalf("severity filter value is %T, want JSON array", items[0].Value)
+	}
+	want := map[string]bool{"ERROR": true, "error": true, "Error": true}
+	if len(values) != len(want) {
+		t.Fatalf("expected %d casing variants, got %v", len(want), values)
+	}
+	for _, v := range values {
+		if s, _ := v.(string); !want[s] {
+			t.Errorf("unexpected casing variant %v", v)
+		}
 	}
 }
