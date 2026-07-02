@@ -246,3 +246,22 @@ func TestBuildPromptErrorTraces(t *testing.T) {
 		t.Error("prompt should have Error Traces section")
 	}
 }
+
+func TestBuildPromptErrorRateIsNotRescaled(t *testing.T) {
+	data := &CorrelatedData{
+		Service:  "api",
+		Instance: "prod",
+		Services: []types.Service{
+			{Name: "api", NumCalls: 1000, NumErrors: 15, ErrorRate: 1.5},
+		},
+	}
+
+	prompt := BuildPrompt(data)
+
+	if !strings.Contains(prompt, "(1.50%)") {
+		t.Errorf("prompt should report 1.50%% for ErrorRate=1.5, got:\n%s", prompt)
+	}
+	if strings.Contains(prompt, "150.00%") {
+		t.Errorf("prompt must not multiply the percentage by 100 again:\n%s", prompt)
+	}
+}

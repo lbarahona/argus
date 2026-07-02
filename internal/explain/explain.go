@@ -13,9 +13,9 @@ import (
 
 // Options configures the explain command.
 type Options struct {
-	Service      string
-	Duration     int // minutes
-	AIProvider   ai.Provider
+	Service    string
+	Duration   int // minutes
+	AIProvider ai.Provider
 }
 
 // CorrelatedData holds all collected observability data for a service.
@@ -92,8 +92,8 @@ func BuildPrompt(data *CorrelatedData) string {
 		if s.Name == data.Service {
 			marker = " ← TARGET"
 		}
-		rate := s.ErrorRate * 100
-		if s.NumCalls > 0 && s.ErrorRate == 0 {
+		rate := s.ErrorRate // already a percentage
+		if s.NumCalls > 0 && rate == 0 {
 			rate = float64(s.NumErrors) / float64(s.NumCalls) * 100
 		}
 		b.WriteString(fmt.Sprintf("- %s: %d calls, %d errors (%.2f%%)%s\n", s.Name, s.NumCalls, s.NumErrors, rate, marker))
