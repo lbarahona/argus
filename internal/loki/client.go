@@ -245,6 +245,34 @@ func (c *Client) IndexStats(ctx context.Context, query string, start, end time.T
 	return &stats, nil
 }
 
+// MatchAllSelector builds a match-all LogQL selector from the instance's own
+// labels. Loki has no __name__ label (that is Prometheus), so a usable
+// selector must reference a label that actually exists.
+//
+// It prefers common, high-cardinality-safe labels (job, app, service_name,
+// namespace) and falls back to the first non-internal label. Returns an
+// empty string if no usable label is found.
+func MatchAllSelector(labels []string) string {
+	return matchAllSelector(labels)
+}
+
+func matchAllSelector(labels []string) string {
+	preferred := []string{"job", "app", "service_name", "namespace"}
+	for _, p := range preferred {
+		for _, l := range labels {
+			if l == p {
+				return fmt.Sprintf(`{%s=~".+"}`, p)
+			}
+		}
+	}
+	for _, l := range labels {
+		if !strings.HasPrefix(l, "__") {
+			return fmt.Sprintf(`{%s=~".+"}`, l)
+		}
+	}
+	return ""
+}
+
 // BuildSummary gathers information for the summary command.
 func (c *Client) BuildSummary(ctx context.Context) (*Summary, error) {
 	s := &Summary{}
@@ -262,18 +290,22 @@ func (c *Client) BuildSummary(ctx context.Context) (*Summary, error) {
 	// Labels count
 	now := time.Now()
 	start := now.Add(-1 * time.Hour)
+	var labelNames []string
 	if labels, err := c.Labels(ctx, start, now); err == nil {
 		s.Labels = len(labels)
+		labelNames = labels
 	}
 
-	// Series count
-	if series, err := c.Series(ctx, []string{`{__name__=~".+"}`}, start, now); err == nil {
-		s.Series = len(series)
-	}
-
-	// Stats
-	if stats, err := c.IndexStats(ctx, "", start, now); err == nil {
-		s.Stats = stats
+	// Series and stats, scoped to a real match-all selector derived from
+	// the instance's own labels (Loki rejects both {__name__=~".+"} and an
+	// empty query).
+	if sel := matchAllSelector(labelNames); sel != "" {
+		if series, err := c.Series(ctx, []string{sel}, start, now); err == nil {
+			s.Series = len(series)
+		}
+		if stats, err := c.IndexStats(ctx, sel, start, now); err == nil {
+			s.Stats = stats
+		}
 	}
 
 	return s, nil

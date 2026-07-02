@@ -3078,7 +3078,19 @@ func lokiStatsCmd() *cobra.Command {
 			end := time.Now()
 			start := end.Add(-time.Duration(duration) * time.Minute)
 
-			stats, err := client.IndexStats(ctx, query, start, end)
+			q := query
+			if q == "" {
+				labels, err := client.Labels(ctx, start, end)
+				if err != nil {
+					return fmt.Errorf("deriving default query: %w", err)
+				}
+				q = lokilib.MatchAllSelector(labels)
+				if q == "" {
+					return fmt.Errorf("no labels found to build a default query; pass -q '{label=~\".+\"}'")
+				}
+			}
+
+			stats, err := client.IndexStats(ctx, q, start, end)
 			if err != nil {
 				return err
 			}
@@ -3094,7 +3106,7 @@ func lokiStatsCmd() *cobra.Command {
 	}
 
 	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes")
-	cmd.Flags().StringVarP(&query, "query", "q", "", "Optional LogQL selector to scope stats")
+	cmd.Flags().StringVarP(&query, "query", "q", "", "Optional LogQL selector to scope stats (default: derived from your labels)")
 	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
 
 	return cmd

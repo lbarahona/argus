@@ -3,8 +3,10 @@ package loki
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -471,6 +473,55 @@ func TestBuildSummary(t *testing.T) {
 	}
 	if summary.Stats.Entries != 50000 {
 		t.Errorf("expected 50000 entries, got %d", summary.Stats.Entries)
+	}
+}
+
+func TestMatchAllSelector(t *testing.T) {
+	if got := matchAllSelector([]string{"filename", "job", "app"}); got != `{job=~".+"}` {
+		t.Errorf("prefer job label, got %q", got)
+	}
+	if got := matchAllSelector([]string{"custom_label"}); got != `{custom_label=~".+"}` {
+		t.Errorf("fall back to first label, got %q", got)
+	}
+	if got := matchAllSelector(nil); got != "" {
+		t.Errorf("no labels → empty selector, got %q", got)
+	}
+}
+
+func TestBuildSummaryUsesRealLabelMatcher(t *testing.T) {
+	var seriesMatch, statsQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/labels"):
+			fmt.Fprint(w, `{"status":"success","data":["app","job"]}`)
+		case strings.HasSuffix(r.URL.Path, "/series"):
+			seriesMatch = r.URL.Query().Get("match[]")
+			fmt.Fprint(w, `{"status":"success","data":[{"app":"nginx"}]}`)
+		case strings.HasSuffix(r.URL.Path, "/index/stats"):
+			statsQuery = r.URL.Query().Get("query")
+			fmt.Fprint(w, `{"streams":1,"chunks":2,"entries":3,"bytes":4}`)
+		case strings.HasSuffix(r.URL.Path, "/ready"):
+			fmt.Fprint(w, "ready")
+		default:
+			fmt.Fprint(w, `{"status":"success","data":{}}`)
+		}
+	}))
+	defer server.Close()
+
+	c := NewClient(LokiConfig{URL: server.URL})
+	s, err := c.BuildSummary(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if seriesMatch != `{job=~".+"}` {
+		t.Errorf("series matcher = %q, want {job=~\".+\"} (label-derived)", seriesMatch)
+	}
+	if statsQuery != `{job=~".+"}` {
+		t.Errorf("stats query = %q, must not be empty (Loki 400s)", statsQuery)
+	}
+	if s.Series != 1 {
+		t.Errorf("series count = %d, want 1", s.Series)
 	}
 }
 
