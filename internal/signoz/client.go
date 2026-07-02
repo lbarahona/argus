@@ -182,7 +182,7 @@ type BuilderQuery struct {
 	Limit              int                 `json:"limit,omitempty"`
 	Offset             int                 `json:"offset"`
 	OrderBy            []OrderByItem       `json:"orderBy,omitempty"`
-	GroupBy            []interface{}        `json:"groupBy"`
+	GroupBy            []interface{}       `json:"groupBy"`
 	SelectColumns      []SelectColumn      `json:"selectColumns,omitempty"`
 }
 
@@ -265,9 +265,9 @@ func BuildQueryRangePayload(params QueryRangeParams) QueryRangePayload {
 	}
 
 	return QueryRangePayload{
-		Start:     start.UnixMilli(),
-		End:       now.UnixMilli(),
-		Step:      step,
+		Start: start.UnixMilli(),
+		End:   now.UnixMilli(),
+		Step:  step,
 		CompositeQuery: CompositeQuery{
 			BuilderQueries: map[string]*BuilderQuery{"A": bq},
 			PanelType:      params.PanelType,
@@ -703,6 +703,10 @@ func mapToTraceEntry(m map[string]interface{}) types.TraceEntry {
 		entry.StatusCode = v
 	} else if v, ok := m["status_code"].(string); ok {
 		entry.StatusCode = v
+	} else if v, ok := m["statusCode"].(float64); ok {
+		entry.StatusCode = statusCodeString(int64(v))
+	} else if v, ok := m["status_code"].(float64); ok {
+		entry.StatusCode = statusCodeString(int64(v))
 	}
 
 	if v, ok := m["timestamp"].(string); ok {
@@ -714,6 +718,19 @@ func mapToTraceEntry(m map[string]interface{}) types.TraceEntry {
 	}
 
 	return entry
+}
+
+// statusCodeString maps OTel numeric span status codes to their names, so
+// consumers can match on one canonical string form.
+func statusCodeString(code int64) string {
+	switch code {
+	case 2:
+		return "STATUS_CODE_ERROR"
+	case 1:
+		return "STATUS_CODE_OK"
+	default:
+		return "STATUS_CODE_UNSET"
+	}
 }
 
 func parseMetricsResponse(data []byte) ([]types.MetricEntry, error) {

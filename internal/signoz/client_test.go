@@ -695,3 +695,24 @@ func TestQueryLogsSeverityFilterMatchesAnyCasing(t *testing.T) {
 		}
 	}
 }
+
+func TestMapToTraceEntryNumericStatusCode(t *testing.T) {
+	entry := mapToTraceEntry(map[string]interface{}{
+		"traceID":     "abc",
+		"serviceName": "api",
+		"statusCode":  float64(2), // numeric, as declared int64 in defaultSelectColumns
+	})
+	if entry.StatusCode != "STATUS_CODE_ERROR" {
+		t.Errorf("numeric statusCode 2 should map to STATUS_CODE_ERROR, got %q", entry.StatusCode)
+	}
+
+	entry = mapToTraceEntry(map[string]interface{}{"statusCode": float64(1)})
+	if entry.StatusCode != "STATUS_CODE_OK" {
+		t.Errorf("numeric statusCode 1 should map to STATUS_CODE_OK, got %q", entry.StatusCode)
+	}
+
+	entry = mapToTraceEntry(map[string]interface{}{"statusCode": "STATUS_CODE_ERROR"})
+	if entry.StatusCode != "STATUS_CODE_ERROR" {
+		t.Errorf("string statusCode must pass through unchanged, got %q", entry.StatusCode)
+	}
+}
