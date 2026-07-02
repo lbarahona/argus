@@ -344,6 +344,12 @@ func TestPercentile(t *testing.T) {
 	if got := percentile([]float64{42}, 0.99); got != 42 {
 		t.Errorf("p99 of single value = %v, want 42", got)
 	}
+	if got := percentile([]float64{}, 0.99); got != 0 {
+		t.Errorf("p99 of empty input = %v, want 0", got)
+	}
+	if got := percentile(nil, 0.5); got != 0 {
+		t.Errorf("p50 of nil input = %v, want 0", got)
+	}
 }
 
 func TestRunCancellation(t *testing.T) {

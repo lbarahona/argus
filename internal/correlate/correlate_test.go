@@ -235,3 +235,32 @@ func TestBuildAIPrompt(t *testing.T) {
 func TestSanitizeMermaid(t *testing.T) {
 	assert.Equal(t, "my_service_v1", sanitizeMermaid("my-service.v1"))
 }
+
+func TestRunTraceStatusCodeClassification(t *testing.T) {
+	mock := &mockQuerier{
+		services: []types.Service{{Name: "svc", NumCalls: 100, NumErrors: 0}},
+		traces: map[string][]types.TraceEntry{
+			"svc": {
+				{Timestamp: baseTime(), ServiceName: "svc", OperationName: "op-ok", DurationNano: 1_000_000, StatusCode: "STATUS_CODE_OK"},
+				{Timestamp: baseTime().Add(time.Second), ServiceName: "svc", OperationName: "op-unset", DurationNano: 1_000_000, StatusCode: "STATUS_CODE_UNSET"},
+				{Timestamp: baseTime().Add(2 * time.Second), ServiceName: "svc", OperationName: "op-err", DurationNano: 1_000_000, StatusCode: "STATUS_CODE_ERROR"},
+			},
+		},
+	}
+
+	result, err := Run(context.Background(), mock, "test", Options{Duration: 30, BucketSize: 60, MinEvents: 1})
+	require.NoError(t, err)
+
+	var traceSignals []Signal
+	for _, s := range result.Signals {
+		if s.Source == "traces" {
+			traceSignals = append(traceSignals, s)
+		}
+	}
+
+	// STATUS_CODE_OK and STATUS_CODE_UNSET traces are not slow and must not
+	// be misclassified as errors; only STATUS_CODE_ERROR should surface.
+	require.Len(t, traceSignals, 1)
+	assert.True(t, traceSignals[0].IsError)
+	assert.Contains(t, traceSignals[0].Summary, "op-err")
+}

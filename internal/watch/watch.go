@@ -267,6 +267,9 @@ func (w *Watcher) enrichWithLatency(ctx context.Context, snapshots []ServiceSnap
 // percentile returns the p-th percentile (0 < p <= 1) using the
 // nearest-rank method. vals is sorted in place.
 func percentile(vals []float64, p float64) float64 {
+	if len(vals) == 0 {
+		return 0
+	}
 	sort.Float64s(vals)
 	idx := int(math.Ceil(p*float64(len(vals)))) - 1
 	if idx < 0 {

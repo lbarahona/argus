@@ -124,7 +124,7 @@ func Run(ctx context.Context, client signoz.SignozQuerier, instanceName string, 
 		// Traces (focus on errors and slow spans)
 		if traceResult, err := client.QueryTraces(ctx, svc.Name, opts.Duration, 100); err == nil {
 			for _, t := range traceResult.Traces {
-				isError := t.StatusCode != "" && t.StatusCode != "OK" && t.StatusCode != "0"
+				isError := t.StatusCode == "STATUS_CODE_ERROR" || t.StatusCode == "ERROR"
 				isSlow := t.DurationMs() > 1000
 				if !isError && !isSlow {
 					continue

@@ -715,4 +715,22 @@ func TestMapToTraceEntryNumericStatusCode(t *testing.T) {
 	if entry.StatusCode != "STATUS_CODE_ERROR" {
 		t.Errorf("string statusCode must pass through unchanged, got %q", entry.StatusCode)
 	}
+
+	entry = mapToTraceEntry(map[string]interface{}{"status_code": float64(2)})
+	if entry.StatusCode != "STATUS_CODE_ERROR" {
+		t.Errorf("numeric snake_case status_code 2 should map to STATUS_CODE_ERROR, got %q", entry.StatusCode)
+	}
+}
+
+func TestParseMetricPointNumericObjectValue(t *testing.T) {
+	entry, ok := parseMetricPoint(json.RawMessage(`{"timestamp":1708070400000,"value":42.5}`))
+	if !ok {
+		t.Fatal("expected numeric object-shaped point to parse, got ok=false")
+	}
+	if entry.Value != 42.5 {
+		t.Errorf("value = %v, want 42.5", entry.Value)
+	}
+	if entry.Timestamp.UnixMilli() != 1708070400000 {
+		t.Errorf("timestamp = %v, want 1708070400000ms", entry.Timestamp.UnixMilli())
+	}
 }

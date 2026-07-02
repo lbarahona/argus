@@ -247,6 +247,54 @@ func TestBuildPromptErrorTraces(t *testing.T) {
 	}
 }
 
+func TestBuildPromptStatusCodeOKNotClassifiedAsError(t *testing.T) {
+	data := &CorrelatedData{
+		Service:  "api",
+		Instance: "prod",
+		Services: []types.Service{{Name: "api", NumCalls: 100}},
+		Traces: []types.TraceEntry{
+			{ServiceName: "api", OperationName: "GET /ok", DurationNano: 100_000_000, StatusCode: "STATUS_CODE_OK", Timestamp: time.Now()},
+		},
+	}
+
+	prompt := BuildPrompt(data)
+	if strings.Contains(prompt, "Error Traces") {
+		t.Error("STATUS_CODE_OK trace must not be classified as an error trace")
+	}
+}
+
+func TestBuildPromptStatusCodeUnsetNotClassifiedAsError(t *testing.T) {
+	data := &CorrelatedData{
+		Service:  "api",
+		Instance: "prod",
+		Services: []types.Service{{Name: "api", NumCalls: 100}},
+		Traces: []types.TraceEntry{
+			{ServiceName: "api", OperationName: "GET /unset", DurationNano: 100_000_000, StatusCode: "STATUS_CODE_UNSET", Timestamp: time.Now()},
+		},
+	}
+
+	prompt := BuildPrompt(data)
+	if strings.Contains(prompt, "Error Traces") {
+		t.Error("STATUS_CODE_UNSET trace must not be classified as an error trace")
+	}
+}
+
+func TestBuildPromptStatusCodeErrorConstantClassifiedAsError(t *testing.T) {
+	data := &CorrelatedData{
+		Service:  "api",
+		Instance: "prod",
+		Services: []types.Service{{Name: "api", NumCalls: 100}},
+		Traces: []types.TraceEntry{
+			{ServiceName: "api", OperationName: "GET /err", DurationNano: 100_000_000, StatusCode: "STATUS_CODE_ERROR", Timestamp: time.Now()},
+		},
+	}
+
+	prompt := BuildPrompt(data)
+	if !strings.Contains(prompt, "Error Traces") {
+		t.Error("STATUS_CODE_ERROR trace must be classified as an error trace")
+	}
+}
+
 func TestBuildPromptErrorRateIsNotRescaled(t *testing.T) {
 	data := &CorrelatedData{
 		Service:  "api",

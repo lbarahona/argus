@@ -135,7 +135,7 @@ func BuildPrompt(data *CorrelatedData) string {
 			if t.DurationMs() > 1000 {
 				slowTraces = append(slowTraces, t)
 			}
-			if t.StatusCode != "" && t.StatusCode != "OK" && t.StatusCode != "0" {
+			if t.StatusCode == "STATUS_CODE_ERROR" || t.StatusCode == "ERROR" {
 				errorTraces = append(errorTraces, t)
 			}
 		}

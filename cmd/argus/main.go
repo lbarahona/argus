@@ -1954,10 +1954,12 @@ and a run log saved under ~/.argus/runbooks/runs/.`,
 			}
 			log := executor.Run(cmd.Context(), rb)
 
-			if path, err := store.SaveRunLog(log); err == nil {
-				fmt.Printf("   📝 run log: %s\n", path)
-			} else {
-				fmt.Printf("   ⚠️  could not save run log: %v\n", err)
+			if execute {
+				if path, err := store.SaveRunLog(log); err == nil {
+					fmt.Printf("   📝 run log: %s\n", path)
+				} else {
+					fmt.Printf("   ⚠️  could not save run log: %v\n", err)
+				}
 			}
 
 			runbook.PrintRunLog(os.Stdout, log)

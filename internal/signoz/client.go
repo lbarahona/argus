@@ -769,16 +769,24 @@ func parseMetricsResponse(data []byte) ([]types.MetricEntry, error) {
 }
 
 // parseMetricPoint decodes one series point. Signoz v3 marshals points as
-// {"timestamp": <epoch-ms>, "value": "<float-as-string>"}; Prometheus-style
-// [ts, value] tuples are kept as a fallback for older/proxied responses.
+// {"timestamp": <epoch-ms>, "value": "<float-as-string>"}; some responses
+// (and Prometheus-style [ts, value] tuples, kept as a fallback below) carry
+// value as a JSON number instead of a string.
 func parseMetricPoint(raw json.RawMessage) (types.MetricEntry, bool) {
 	var obj struct {
-		Timestamp int64  `json:"timestamp"`
-		Value     string `json:"value"`
+		Timestamp int64           `json:"timestamp"`
+		Value     json.RawMessage `json:"value"`
 	}
 	if err := json.Unmarshal(raw, &obj); err == nil && obj.Timestamp != 0 {
-		if v, err := strconv.ParseFloat(obj.Value, 64); err == nil {
-			return types.MetricEntry{Timestamp: time.UnixMilli(obj.Timestamp), Value: v}, true
+		var s string
+		if err := json.Unmarshal(obj.Value, &s); err == nil {
+			if v, err := strconv.ParseFloat(s, 64); err == nil {
+				return types.MetricEntry{Timestamp: time.UnixMilli(obj.Timestamp), Value: v}, true
+			}
+		}
+		var f float64
+		if err := json.Unmarshal(obj.Value, &f); err == nil {
+			return types.MetricEntry{Timestamp: time.UnixMilli(obj.Timestamp), Value: f}, true
 		}
 	}
 

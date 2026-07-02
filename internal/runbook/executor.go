@@ -87,6 +87,9 @@ func (e *Executor) Run(ctx context.Context, rb *Runbook) *RunLog {
 
 		case step.Manual:
 			result.Status = e.confirm(in, "Done? (y/n/skip): ")
+			if result.Status == "failed" {
+				result.Error = "step declined by operator"
+			}
 
 		case step.Command != "":
 			answer := e.confirm(in, "Run? (y/n/skip): ")
@@ -117,8 +120,17 @@ func (e *Executor) Run(ctx context.Context, rb *Runbook) *RunLog {
 			result.Status = "passed"
 
 		default:
-			// No command, not manual (check-only steps run their check).
+			// No command, not manual (check-only steps still require
+			// per-step confirmation before their check runs).
 			if step.Check != "" {
+				answer := e.confirm(in, "Check? (y/n/skip): ")
+				if answer != "passed" {
+					result.Status = answer
+					if answer == "failed" {
+						result.Error = "step declined by operator"
+					}
+					break
+				}
 				start := time.Now()
 				out, err := e.runner()(ctx, step.Check, stepTimeout(step))
 				result.Output = strings.TrimSpace(out)
@@ -141,11 +153,29 @@ func (e *Executor) Run(ctx context.Context, rb *Runbook) *RunLog {
 			switch rb.OnFailure {
 			case "rollback":
 				if step.Rollback != "" {
-					fmt.Fprintf(e.Out, "  ↩️  on_failure=rollback — running rollback for %q\n", step.Name)
-					out, err := e.runner()(ctx, step.Rollback, stepTimeout(step))
-					if err != nil {
-						fmt.Fprintf(e.Out, "       rollback failed: %v: %s\n", err, strings.TrimSpace(out))
+					rollbackResult := StepResult{StepName: step.Name + " (rollback)", StartedAt: time.Now()}
+					fmt.Fprintf(e.Out, "       $ %s\n", step.Rollback)
+					answer := e.confirm(in, "Rollback? (y/n/skip): ")
+					if answer != "passed" {
+						rollbackResult.Status = answer
+						if answer == "failed" {
+							rollbackResult.Error = "step declined by operator"
+						}
+					} else {
+						fmt.Fprintf(e.Out, "  ↩️  on_failure=rollback — running rollback for %q\n", step.Name)
+						start := time.Now()
+						out, err := e.runner()(ctx, step.Rollback, stepTimeout(step))
+						rollbackResult.Output = strings.TrimSpace(out)
+						rollbackResult.Duration = time.Since(start).Round(time.Millisecond).String()
+						if err != nil {
+							rollbackResult.Status = "failed"
+							rollbackResult.Error = err.Error()
+							fmt.Fprintf(e.Out, "       rollback failed: %v: %s\n", err, rollbackResult.Output)
+						} else {
+							rollbackResult.Status = "passed"
+						}
 					}
+					log.StepResults = append(log.StepResults, rollbackResult)
 				}
 				fmt.Fprintln(e.Out, "  ⚠️  stopping after rollback")
 			case "continue":

@@ -170,7 +170,9 @@ func TestExecutorOnFailureRollbackRunsRollbackCommand(t *testing.T) {
 	rb.Steps[0].Rollback = "kubectl rollout undo deploy/api"
 	f := &fakeRunner{fail: map[string]bool{"kubectl rollout restart deploy/api": true}}
 	var out strings.Builder
-	e := &Executor{Out: &out, In: strings.NewReader("y\n"), Execute: true, Runner: f.run}
+	// First "y" confirms the failing command step; second "y" confirms the
+	// rollback prompt — rollbacks must never auto-execute.
+	e := &Executor{Out: &out, In: strings.NewReader("y\ny\n"), Execute: true, Runner: f.run}
 
 	log := e.Run(context.Background(), rb)
 
@@ -185,6 +187,92 @@ func TestExecutorOnFailureRollbackRunsRollbackCommand(t *testing.T) {
 	}
 	if log.Status != "failed" {
 		t.Errorf("log status = %q, want failed", log.Status)
+	}
+	if !strings.Contains(out.String(), "Rollback? (y/n/skip):") {
+		t.Errorf("expected rollback confirmation prompt, got output: %s", out.String())
+	}
+
+	var rollbackResult *StepResult
+	for i := range log.StepResults {
+		if log.StepResults[i].StepName == "restart (rollback)" {
+			rollbackResult = &log.StepResults[i]
+		}
+	}
+	if rollbackResult == nil {
+		t.Fatalf("expected a rollback StepResult in the run log, got %+v", log.StepResults)
+	}
+	if rollbackResult.Status != "passed" {
+		t.Errorf("rollback StepResult status = %q, want passed", rollbackResult.Status)
+	}
+	if rollbackResult.Output != "ok-output" {
+		t.Errorf("rollback StepResult output = %q, want captured output", rollbackResult.Output)
+	}
+	if rollbackResult.Duration == "" {
+		t.Errorf("rollback StepResult duration not recorded")
+	}
+}
+
+func TestExecutorOnFailureRollbackDeclinedDoesNotExecute(t *testing.T) {
+	rb := testRunbook()
+	rb.OnFailure = "rollback"
+	rb.Steps[0].Rollback = "kubectl rollout undo deploy/api"
+	f := &fakeRunner{fail: map[string]bool{"kubectl rollout restart deploy/api": true}}
+	var out strings.Builder
+	e := &Executor{Out: &out, In: strings.NewReader("y\nn\n"), Execute: true, Runner: f.run}
+
+	log := e.Run(context.Background(), rb)
+
+	for _, c := range f.commands {
+		if c == "kubectl rollout undo deploy/api" {
+			t.Fatalf("declined rollback must not execute, ran %v", f.commands)
+		}
+	}
+
+	var rollbackResult *StepResult
+	for i := range log.StepResults {
+		if log.StepResults[i].StepName == "restart (rollback)" {
+			rollbackResult = &log.StepResults[i]
+		}
+	}
+	if rollbackResult == nil {
+		t.Fatalf("expected a rollback StepResult recording the decline, got %+v", log.StepResults)
+	}
+	if rollbackResult.Status != "failed" {
+		t.Errorf("declined rollback StepResult status = %q, want failed", rollbackResult.Status)
+	}
+	if rollbackResult.Error != "step declined by operator" {
+		t.Errorf("declined rollback StepResult error = %q, want %q", rollbackResult.Error, "step declined by operator")
+	}
+}
+
+func TestExecutorOnFailureRollbackEOFSkipsNeverExecutes(t *testing.T) {
+	rb := testRunbook()
+	rb.OnFailure = "rollback"
+	rb.Steps[0].Rollback = "kubectl rollout undo deploy/api"
+	f := &fakeRunner{fail: map[string]bool{"kubectl rollout restart deploy/api": true}}
+	var out strings.Builder
+	// Only one "y" (for the command); EOF hits the rollback prompt.
+	e := &Executor{Out: &out, In: strings.NewReader("y\n"), Execute: true, Runner: f.run}
+
+	log := e.Run(context.Background(), rb)
+
+	for _, c := range f.commands {
+		if c == "kubectl rollout undo deploy/api" {
+			t.Fatalf("EOF at rollback prompt must never execute, ran %v", f.commands)
+		}
+	}
+
+	var rollbackResult *StepResult
+	for i := range log.StepResults {
+		if log.StepResults[i].StepName == "restart (rollback)" {
+			rollbackResult = &log.StepResults[i]
+		}
+	}
+	if rollbackResult == nil {
+		t.Fatalf("expected a rollback StepResult recording the skip, got %+v", log.StepResults)
+	}
+	if rollbackResult.Status != "skipped" {
+		t.Errorf("EOF rollback StepResult status = %q, want skipped", rollbackResult.Status)
 	}
 }
 
@@ -201,6 +289,98 @@ func TestExecutorManualStepPrompts(t *testing.T) {
 	}
 	if len(f.commands) != 0 {
 		t.Errorf("manual steps must not execute commands")
+	}
+}
+
+func TestExecutorDeclinedManualStepRecordsError(t *testing.T) {
+	rb := &Runbook{ID: "m", Name: "Manual", Steps: []Step{{Name: "check dashboards", Manual: true}}}
+	f := &fakeRunner{}
+	var out strings.Builder
+	e := &Executor{Out: &out, In: strings.NewReader("n\n"), Execute: true, Runner: f.run}
+
+	log := e.Run(context.Background(), rb)
+
+	if log.StepResults[0].Status != "failed" {
+		t.Errorf("declined manual step = %q, want failed", log.StepResults[0].Status)
+	}
+	if log.StepResults[0].Error != "step declined by operator" {
+		t.Errorf("declined manual step error = %q, want %q", log.StepResults[0].Error, "step declined by operator")
+	}
+}
+
+func checkOnlyRunbook() *Runbook {
+	return &Runbook{
+		ID:   "check-only",
+		Name: "Check Only",
+		Steps: []Step{
+			{Name: "verify readiness", Check: "curl -sf http://api/ready"},
+		},
+	}
+}
+
+func TestExecutorCheckOnlyStepPromptsBeforeRunning(t *testing.T) {
+	f := &fakeRunner{}
+	var out strings.Builder
+	e := &Executor{Out: &out, In: strings.NewReader("y\n"), Execute: true, Runner: f.run}
+
+	log := e.Run(context.Background(), checkOnlyRunbook())
+
+	if len(f.commands) != 1 {
+		t.Fatalf("expected check to run once after confirmation, got %v", f.commands)
+	}
+	if log.StepResults[0].Status != "passed" {
+		t.Errorf("confirmed check-only step = %q, want passed", log.StepResults[0].Status)
+	}
+	if !strings.Contains(out.String(), "Check? (y/n/skip):") {
+		t.Errorf("expected confirmation prompt, got output: %s", out.String())
+	}
+}
+
+func TestExecutorCheckOnlyStepDeclinedDoesNotRun(t *testing.T) {
+	f := &fakeRunner{}
+	var out strings.Builder
+	e := &Executor{Out: &out, In: strings.NewReader("n\n"), Execute: true, Runner: f.run}
+
+	log := e.Run(context.Background(), checkOnlyRunbook())
+
+	if len(f.commands) != 0 {
+		t.Errorf("declined check must not execute, ran %v", f.commands)
+	}
+	if log.StepResults[0].Status != "failed" {
+		t.Errorf("declined check-only step = %q, want failed", log.StepResults[0].Status)
+	}
+	if log.StepResults[0].Error != "step declined by operator" {
+		t.Errorf("declined check-only step error = %q, want %q", log.StepResults[0].Error, "step declined by operator")
+	}
+}
+
+func TestExecutorCheckOnlyStepSkip(t *testing.T) {
+	f := &fakeRunner{}
+	var out strings.Builder
+	e := &Executor{Out: &out, In: strings.NewReader("skip\n"), Execute: true, Runner: f.run}
+
+	log := e.Run(context.Background(), checkOnlyRunbook())
+
+	if len(f.commands) != 0 {
+		t.Errorf("skipped check must not execute, ran %v", f.commands)
+	}
+	if log.StepResults[0].Status != "skipped" {
+		t.Errorf("skipped check-only step = %q, want skipped", log.StepResults[0].Status)
+	}
+}
+
+func TestExecutorCheckOnlyStepEOFSkips(t *testing.T) {
+	f := &fakeRunner{}
+	var out strings.Builder
+	e := &Executor{Out: &out, In: strings.NewReader(""), Execute: true, Runner: f.run}
+
+	log := e.Run(context.Background(), checkOnlyRunbook())
+
+	if len(f.commands) != 0 {
+		t.Errorf("EOF must never execute, ran %v", f.commands)
+	}
+	if log.StepResults[0].Status != "skipped" {
+		t.Errorf("EOF check-only step = %q, want skipped", log.StepResults[0].Status)
 	}
 }
 
