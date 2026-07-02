@@ -260,7 +260,13 @@ func TestCheckLogErrors(t *testing.T) {
 			return []types.Service{{Name: "api", NumCalls: 100}}, nil
 		},
 		queryLogsFunc: func(ctx context.Context, service string, durationMinutes, limit int, severityFilter string) (*types.QueryResult, error) {
-			return &types.QueryResult{Logs: make([]types.LogEntry, 60)}, nil
+			// Honor the limit exactly like the real client does.
+			available := 60
+			n := available
+			if limit < n {
+				n = limit
+			}
+			return &types.QueryResult{Logs: make([]types.LogEntry, n)}, nil
 		},
 	}
 
@@ -277,6 +283,46 @@ func TestCheckLogErrors(t *testing.T) {
 	}
 	if rpt.Results[0].Severity != SeverityCritical {
 		t.Errorf("expected critical for 60 > 50 threshold, got %v", rpt.Results[0].Severity)
+	}
+}
+
+func TestCheckLogErrorsCountsAboveOne(t *testing.T) {
+	mock := &mockSignozClient{
+		listServicesFunc: func(ctx context.Context) ([]types.Service, error) {
+			return []types.Service{{Name: "api", NumCalls: 100}}, nil
+		},
+		queryLogsFunc: func(ctx context.Context, service string, durationMinutes, limit int, severityFilter string) (*types.QueryResult, error) {
+			// Honor the limit exactly like the real client does.
+			available := 60
+			n := available
+			if limit < n {
+				n = limit
+			}
+			logs := make([]types.LogEntry, n)
+			for i := range logs {
+				logs[i] = types.LogEntry{Body: "boom", SeverityText: "ERROR"}
+			}
+			return &types.QueryResult{Logs: logs}, nil
+		},
+	}
+
+	checker := NewChecker(mock, "test")
+	cfg := &AlertConfig{
+		Rules: []Rule{
+			{Name: "log-errors", Type: "log_errors", Operator: "gt", Warning: 10, Critical: 50},
+		},
+	}
+
+	rpt, err := checker.CheckAll(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rpt.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(rpt.Results))
+	}
+	if rpt.Results[0].Severity != SeverityCritical {
+		t.Errorf("60 error logs with critical threshold 50 should be critical, got %v (count %.0f)",
+			rpt.Results[0].Severity, rpt.Results[0].Value)
 	}
 }
 

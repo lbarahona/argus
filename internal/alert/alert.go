@@ -65,6 +65,11 @@ func (r Rule) DurationMinutes() int {
 	return m
 }
 
+// logErrorsQueryLimit bounds how many error logs a log_errors rule fetches.
+// It must exceed any realistic rule threshold; counts are capped at this
+// value, so thresholds above it can never fire.
+const logErrorsQueryLimit = 1000
+
 // ──────────────────────────────────────────────
 // Check Results
 // ──────────────────────────────────────────────
@@ -377,7 +382,7 @@ func (ch *Checker) checkLogErrors(ctx context.Context, rule Rule, services []typ
 	duration := rule.DurationMinutes()
 
 	checkService := func(svc types.Service) {
-		result, err := ch.client.QueryLogs(ctx, svc.Name, duration, 1, "error")
+		result, err := ch.client.QueryLogs(ctx, svc.Name, duration, logErrorsQueryLimit, "error")
 		if err != nil {
 			results = append(results, CheckResult{
 				Rule:     rule.Name,
