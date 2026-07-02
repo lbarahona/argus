@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func setupTestStore(t *testing.T) func() {
@@ -418,6 +419,54 @@ func TestRenderListNonEmpty(t *testing.T) {
 	}
 	if !strings.Contains(out, "API down") {
 		t.Errorf("expected 'API down' in output, got: %q", out)
+	}
+}
+
+// TestRenderListLongTitleColumnAlignment guards against long titles
+// overflowing the %-30s TITLE column: the truncated cell must be at most
+// 29 runes (26 + "...") so the AGE column stays aligned across rows.
+func TestRenderListLongTitleColumnAlignment(t *testing.T) {
+	cleanup := setupTestStore(t)
+	defer cleanup()
+
+	store := &IncidentStore{}
+	longTitle := "A very long incident title that exceeds the thirty char column"
+	incLong := store.Create(longTitle, SeverityCritical, nil, "", "")
+	incShort := store.Create("Short", SeverityCritical, nil, "", "")
+
+	out := captureOutput(t, func() {
+		RenderList([]Incident{*incLong, *incShort}, "Alignment")
+	})
+
+	// The rendered title cell must be the 26-rune prefix plus "...".
+	runes := []rune(longTitle)
+	want := string(runes[:26]) + "..."
+	if n := utf8.RuneCountInString(want); n > 29 {
+		t.Fatalf("truncated title is %d runes, must be <= 29 to fit the %%-30s column", n)
+	}
+	if !strings.Contains(out, want) {
+		t.Fatalf("expected truncated title %q in output, got:\n%s", want, out)
+	}
+	if strings.Contains(out, string(runes[:30])) {
+		t.Errorf("title not truncated to fit the 30-char column, got:\n%s", out)
+	}
+
+	// Both incident rows share identical-width ID/SEV/STATUS/AGE fields, so
+	// with the title padded to the same column width their total rune
+	// lengths must match; an overflowing title would make the long row wider
+	// and push its AGE column out of alignment.
+	var rows []string
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.Contains(ln, "INC-") {
+			rows = append(rows, ln)
+		}
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 incident rows, got %d:\n%s", len(rows), out)
+	}
+	if l0, l1 := utf8.RuneCountInString(rows[0]), utf8.RuneCountInString(rows[1]); l0 != l1 {
+		t.Errorf("AGE column misaligned: long-title row is %d runes, short-title row is %d runes:\n%s\n%s",
+			l0, l1, rows[0], rows[1])
 	}
 }
 

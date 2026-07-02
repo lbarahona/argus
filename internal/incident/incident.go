@@ -308,7 +308,10 @@ func RenderList(incidents []Incident, title string) {
 			ageStr = inc.Duration + " (resolved)"
 		}
 
-		title := textutil.Truncate(inc.Title, 28)
+		// Cap at 26 runes so the "..." suffix keeps the cell within the
+		// %-30s TITLE column below (26 + 3 = 29, same ceiling as the old
+		// 28-rune + single-char "…" truncation).
+		title := textutil.Truncate(inc.Title, 26)
 
 		sevStyle := output.MutedStyle
 		switch inc.Severity {
