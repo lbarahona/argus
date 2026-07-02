@@ -454,7 +454,7 @@ func checkAnthropicKey(cfg *types.Config) CheckResult {
 		return CheckResult{
 			Name:    name,
 			Status:  StatusPass,
-			Message: fmt.Sprintf("Anthropic (sk-ant-...%s)", key[len(key)-4:]),
+			Message: fmt.Sprintf("Anthropic (sk-ant-...%s)", keySuffix(key)),
 		}
 
 	case "openai":
@@ -473,7 +473,7 @@ func checkAnthropicKey(cfg *types.Config) CheckResult {
 		return CheckResult{
 			Name:    name,
 			Status:  StatusPass,
-			Message: fmt.Sprintf("OpenAI (key: ...%s)", key[len(key)-4:]),
+			Message: fmt.Sprintf("OpenAI (key: ...%s)", keySuffix(key)),
 		}
 
 	case "bedrock":
@@ -792,6 +792,14 @@ func FormatMarkdown(r *Report) string {
 		r.PassCount(), r.WarnCount(), r.FailCount()))
 
 	return b.String()
+}
+
+// keySuffix returns the last 4 characters for display, or the whole key if shorter.
+func keySuffix(key string) string {
+	if len(key) <= 4 {
+		return key
+	}
+	return key[len(key)-4:]
 }
 
 func min(a, b int) int {

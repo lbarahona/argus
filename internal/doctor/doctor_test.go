@@ -189,6 +189,33 @@ func TestCheckInstanceURL_Valid(t *testing.T) {
 	}
 }
 
+func TestKeySuffix(t *testing.T) {
+	tests := []struct {
+		key  string
+		want string
+	}{
+		{"abc", "abc"},
+		{"", ""},
+		{"abcd", "abcd"},
+		{"sk-ant-abcdef1234", "1234"},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, keySuffix(tt.key), "keySuffix(%q)", tt.key)
+	}
+}
+
+func TestCheckAnthropicKey_ShortKey(t *testing.T) {
+	cfg := &types.Config{
+		AI: types.AIConfig{
+			Provider:     "anthropic",
+			AnthropicKey: "abc",
+		},
+	}
+	// Must not panic on a key shorter than 4 characters.
+	result := checkAnthropicKey(cfg)
+	assert.Equal(t, "AI provider configured", result.Name)
+}
+
 func TestConfigPath(t *testing.T) {
 	path := ConfigPath()
 	assert.True(t, strings.Contains(path, ".argus"))

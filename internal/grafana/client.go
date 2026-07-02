@@ -116,7 +116,7 @@ func (c *Client) Folders(ctx context.Context) ([]Folder, error) {
 
 // GetDashboard returns full dashboard details by UID.
 func (c *Client) GetDashboard(ctx context.Context, uid string) (*DashboardMeta, error) {
-	resp, err := c.do(ctx, http.MethodGet, "/api/dashboards/uid/"+uid)
+	resp, err := c.do(ctx, http.MethodGet, "/api/dashboards/uid/"+url.PathEscape(uid))
 	if err != nil {
 		return nil, fmt.Errorf("get dashboard request: %w", err)
 	}

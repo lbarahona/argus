@@ -323,6 +323,25 @@ func TestFormatAlerts_SortOrder(t *testing.T) {
 	}
 }
 
+func TestFormatSilences_ShortID(t *testing.T) {
+	silences := []Silence{
+		{
+			ID:        "abc",
+			Status:    Status{State: "active"},
+			Comment:   "Short ID silence",
+			CreatedBy: "sre",
+			StartsAt:  time.Now().Add(-time.Hour),
+			EndsAt:    time.Now().Add(time.Hour),
+		},
+	}
+
+	// Must not panic on an ID shorter than 8 characters.
+	out := FormatSilences(silences, false)
+	if !strings.Contains(out, "abc") {
+		t.Error("expected short ID 'abc' in output")
+	}
+}
+
 func TestFormatSilences_MatcherOperators(t *testing.T) {
 	silences := []Silence{
 		{

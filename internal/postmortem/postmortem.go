@@ -217,9 +217,9 @@ func Generate(ctx context.Context, opts Options) (*Postmortem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading incidents: %w", err)
 	}
-	inc := incStore.FindByID(opts.IncidentID)
-	if inc == nil {
-		return nil, fmt.Errorf("incident %q not found", opts.IncidentID)
+	inc, err := incStore.FindByPartialID(opts.IncidentID)
+	if err != nil {
+		return nil, err
 	}
 
 	now := time.Now()

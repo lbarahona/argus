@@ -75,6 +75,34 @@ func TestNew_NegativeMaxHistory(t *testing.T) {
 	}
 }
 
+func TestNew_OddMaxHistoryRoundsUpAndTrims(t *testing.T) {
+	s := New(&mockSignozClient{}, Options{
+		InstanceKey: "test",
+		AIProvider:  ai.NewAnthropicProvider("key", ""),
+		MaxHistory:  1,
+	})
+
+	if s.maxHistory != 2 {
+		t.Errorf("expected maxHistory normalized to 2, got %d", s.maxHistory)
+	}
+
+	// 6 history messages should still be trimmed down after normalization.
+	s.history = []ai.Message{
+		{Role: "user", Content: "q1"},
+		{Role: "assistant", Content: "a1"},
+		{Role: "user", Content: "q2"},
+		{Role: "assistant", Content: "a2"},
+		{Role: "user", Content: "q3"},
+		{Role: "assistant", Content: "a3"},
+	}
+
+	s.trimHistory()
+
+	if len(s.history) > 2 {
+		t.Errorf("expected history trimmed to <=2, got %d", len(s.history))
+	}
+}
+
 func TestNew_NoInstanceName(t *testing.T) {
 	s := New(&mockSignozClient{}, Options{
 		InstanceKey: "my-instance",

@@ -313,7 +313,7 @@ func TestDefaultStr(t *testing.T) {
 	}
 }
 
-func TestFindByIDPartialMatch(t *testing.T) {
+func TestFindByPartialIDMatch(t *testing.T) {
 	cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -322,12 +322,44 @@ func TestFindByIDPartialMatch(t *testing.T) {
 	// inc.ID is like "INC-20260309-001"; search by just the suffix "001"
 	suffix := inc.ID[len(inc.ID)-3:]
 
-	found := store.FindByID(suffix)
-	if found == nil {
-		t.Fatalf("expected partial match for suffix %q, got nil", suffix)
+	found, err := store.FindByPartialID(suffix)
+	if err != nil {
+		t.Fatalf("expected partial match for suffix %q, got error: %v", suffix, err)
 	}
 	if found.ID != inc.ID {
 		t.Errorf("expected ID %q, got %q", inc.ID, found.ID)
+	}
+}
+
+func TestFindByPartialID_Ambiguous(t *testing.T) {
+	cleanup := setupTestStore(t)
+	defer cleanup()
+
+	store := &IncidentStore{}
+	store.Incidents = []Incident{
+		{ID: "INC-20260701-001", Title: "First"},
+		{ID: "INC-20260701-101", Title: "Second"},
+	}
+
+	// "01" is a suffix of both 001 and 101 — must error listing both candidates.
+	_, err := store.FindByPartialID("01")
+	if err == nil {
+		t.Fatal("expected ambiguous error for '01', got nil")
+	}
+	if !strings.Contains(err.Error(), "ambiguous") {
+		t.Errorf("error = %q, expected 'ambiguous'", err.Error())
+	}
+	if !strings.Contains(err.Error(), "INC-20260701-001") || !strings.Contains(err.Error(), "INC-20260701-101") {
+		t.Errorf("error = %q, expected both candidate IDs listed", err.Error())
+	}
+
+	// "101" uniquely resolves.
+	found, err := store.FindByPartialID("101")
+	if err != nil {
+		t.Fatalf("expected unique match for '101', got error: %v", err)
+	}
+	if found.ID != "INC-20260701-101" {
+		t.Errorf("expected ID INC-20260701-101, got %q", found.ID)
 	}
 }
 
@@ -481,9 +513,17 @@ func TestActiveIncidentsAllResolved(t *testing.T) {
 	store.Create("First", SeverityMajor, nil, "", "")
 	store.Create("Second", SeverityMinor, nil, "", "")
 
-	// Use FindByID to get valid pointers after all appends are done
-	store.FindByID("001").Update(StatusResolved, "Done", "")
-	store.FindByID("002").Update(StatusResolved, "Done", "")
+	// Use FindByPartialID to get valid pointers after all appends are done
+	inc1, err := store.FindByPartialID("001")
+	if err != nil {
+		t.Fatalf("FindByPartialID(001): %v", err)
+	}
+	inc1.Update(StatusResolved, "Done", "")
+	inc2, err := store.FindByPartialID("002")
+	if err != nil {
+		t.Fatalf("FindByPartialID(002): %v", err)
+	}
+	inc2.Update(StatusResolved, "Done", "")
 
 	active := store.ActiveIncidents()
 	if len(active) != 0 {

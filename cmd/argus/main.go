@@ -1675,9 +1675,9 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 			if err != nil {
 				return err
 			}
-			inc := store.FindByID(args[0])
-			if inc == nil {
-				return fmt.Errorf("incident %q not found", args[0])
+			inc, err := store.FindByPartialID(args[0])
+			if err != nil {
+				return err
 			}
 			if updateStatus == "" {
 				return fmt.Errorf("--status is required (investigating, identified, monitoring, resolved)")
@@ -1713,9 +1713,9 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 			if err != nil {
 				return err
 			}
-			inc := store.FindByID(args[0])
-			if inc == nil {
-				return fmt.Errorf("incident %q not found", args[0])
+			inc, err := store.FindByPartialID(args[0])
+			if err != nil {
+				return err
 			}
 			msg := resolveMsg
 			if msg == "" {
@@ -1744,9 +1744,9 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 			if err != nil {
 				return err
 			}
-			inc := store.FindByID(args[0])
-			if inc == nil {
-				return fmt.Errorf("incident %q not found", args[0])
+			inc, err := store.FindByPartialID(args[0])
+			if err != nil {
+				return err
 			}
 			incident.RenderTimeline(inc)
 			return nil

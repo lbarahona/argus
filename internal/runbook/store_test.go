@@ -145,6 +145,50 @@ func TestLoad_InvalidYAML(t *testing.T) {
 	}
 }
 
+func TestLoad_PathTraversal(t *testing.T) {
+	s := tempStore(t)
+
+	for _, id := range []string{"../evil", "..\\evil", "sub/evil", "sub\\evil"} {
+		_, err := s.Load(id)
+		if err == nil {
+			t.Fatalf("Load(%q): expected error, got nil", id)
+		}
+		if !strings.Contains(err.Error(), "invalid runbook ID") {
+			t.Errorf("Load(%q) error = %q, expected 'invalid runbook ID'", id, err.Error())
+		}
+	}
+}
+
+func TestDelete_RemovesFileByResolvedName(t *testing.T) {
+	s := tempStore(t)
+	if err := s.EnsureDir(); err != nil {
+		t.Fatal(err)
+	}
+
+	// A runbook file on disk whose internal `id:` field does not match its filename.
+	content := "id: totally-different-id\nname: Mismatched Runbook\nsteps:\n  - name: s1\n"
+	if err := os.WriteFile(filepath.Join(s.dir, "on-disk-name.yaml"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A decoy file matching the internal ID — Delete must NOT touch this file.
+	decoy := &Runbook{ID: "totally-different-id", Name: "Decoy", Steps: []Step{{Name: "s1"}}}
+	if err := s.Save(decoy); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.Delete("on-disk-name"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(s.dir, "on-disk-name.yaml")); !os.IsNotExist(err) {
+		t.Error("expected on-disk-name.yaml to be deleted")
+	}
+	if _, err := os.Stat(filepath.Join(s.dir, "totally-different-id.yaml")); err != nil {
+		t.Error("expected decoy totally-different-id.yaml to remain untouched")
+	}
+}
+
 func TestList_SkipsDirectories(t *testing.T) {
 	s := tempStore(t)
 	if err := s.EnsureDir(); err != nil {

@@ -102,22 +102,24 @@ func (s *Store) Save(rb *Runbook) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-// Load reads a runbook by ID (supports partial ID matching)
-func (s *Store) Load(idOrPartial string) (*Runbook, error) {
+// resolve maps an exact or partial runbook ID to the file path that matches
+// it on disk. It rejects IDs containing path separators or ".." segments to
+// prevent path traversal outside the runbooks directory.
+func (s *Store) resolve(idOrPartial string) (string, error) {
+	if strings.ContainsAny(idOrPartial, "/\\") || strings.Contains(idOrPartial, "..") {
+		return "", fmt.Errorf("invalid runbook ID %q", idOrPartial)
+	}
+
 	// Try exact match first
 	path := filepath.Join(s.dir, idOrPartial+".yaml")
-	if data, err := os.ReadFile(path); err == nil {
-		var rb Runbook
-		if err := yaml.Unmarshal(data, &rb); err != nil {
-			return nil, fmt.Errorf("parsing runbook: %w", err)
-		}
-		return &rb, nil
+	if _, err := os.Stat(path); err == nil {
+		return path, nil
 	}
 
 	// Try partial ID match
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
-		return nil, fmt.Errorf("runbooks directory not found. Run: argus runbook init")
+		return "", fmt.Errorf("runbooks directory not found. Run: argus runbook init")
 	}
 
 	var matches []string
@@ -132,13 +134,31 @@ func (s *Store) Load(idOrPartial string) (*Runbook, error) {
 	}
 
 	if len(matches) == 0 {
-		return nil, fmt.Errorf("runbook %q not found", idOrPartial)
+		return "", fmt.Errorf("runbook %q not found", idOrPartial)
 	}
 	if len(matches) > 1 {
-		return nil, fmt.Errorf("ambiguous ID %q matches: %s", idOrPartial, strings.Join(matches, ", "))
+		return "", fmt.Errorf("ambiguous ID %q matches: %s", idOrPartial, strings.Join(matches, ", "))
 	}
 
-	return s.Load(matches[0])
+	return filepath.Join(s.dir, matches[0]+".yaml"), nil
+}
+
+// Load reads a runbook by ID (supports partial ID matching)
+func (s *Store) Load(idOrPartial string) (*Runbook, error) {
+	path, err := s.resolve(idOrPartial)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading runbook: %w", err)
+	}
+	var rb Runbook
+	if err := yaml.Unmarshal(data, &rb); err != nil {
+		return nil, fmt.Errorf("parsing runbook: %w", err)
+	}
+	return &rb, nil
 }
 
 // List returns all runbooks
@@ -174,13 +194,14 @@ func (s *Store) List() ([]*Runbook, error) {
 	return runbooks, nil
 }
 
-// Delete removes a runbook by ID
+// Delete removes a runbook by ID (supports partial ID matching). It removes
+// the file that was actually matched, not a path derived from the runbook's
+// internal ID field (which may differ from its filename).
 func (s *Store) Delete(id string) error {
-	rb, err := s.Load(id)
+	path, err := s.resolve(id)
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(s.dir, rb.ID+".yaml")
 	return os.Remove(path)
 }
 

@@ -151,7 +151,7 @@ func (s *IncidentStore) Create(title, severity string, services []string, comman
 	return &s.Incidents[len(s.Incidents)-1]
 }
 
-// FindByID returns an incident by ID (case-insensitive, partial match).
+// FindByID returns an incident by exact ID (case-insensitive).
 func (s *IncidentStore) FindByID(id string) *Incident {
 	id = strings.ToUpper(id)
 	for i := range s.Incidents {
@@ -159,13 +159,32 @@ func (s *IncidentStore) FindByID(id string) *Incident {
 			return &s.Incidents[i]
 		}
 	}
-	// Partial match (just the number)
+	return nil
+}
+
+// FindByPartialID resolves a case-insensitive suffix/exact match. It returns
+// an error listing candidates when the partial is ambiguous.
+func (s *IncidentStore) FindByPartialID(partial string) (*Incident, error) {
+	var matches []*Incident
+	lower := strings.ToLower(partial)
 	for i := range s.Incidents {
-		if strings.HasSuffix(strings.ToUpper(s.Incidents[i].ID), id) {
-			return &s.Incidents[i]
+		id := strings.ToLower(s.Incidents[i].ID)
+		if id == lower || strings.HasSuffix(id, lower) {
+			matches = append(matches, &s.Incidents[i])
 		}
 	}
-	return nil
+	switch len(matches) {
+	case 0:
+		return nil, fmt.Errorf("incident %q not found", partial)
+	case 1:
+		return matches[0], nil
+	default:
+		ids := make([]string, len(matches))
+		for i, m := range matches {
+			ids[i] = m.ID
+		}
+		return nil, fmt.Errorf("ambiguous incident ID %q matches: %s", partial, strings.Join(ids, ", "))
+	}
 }
 
 // Update changes incident status and adds a timeline entry.

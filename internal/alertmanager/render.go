@@ -154,7 +154,11 @@ func formatSingleSilence(s Silence) string {
 		icon = "⏳"
 	}
 
-	b.WriteString(fmt.Sprintf("  %s %s%s%s  %s%s%s\n", icon, stateColor, s.Status.State, colorReset, colorGray, s.ID[:8], colorReset))
+	shortID := s.ID
+	if len(shortID) > 8 {
+		shortID = shortID[:8]
+	}
+	b.WriteString(fmt.Sprintf("  %s %s%s%s  %s%s%s\n", icon, stateColor, s.Status.State, colorReset, colorGray, shortID, colorReset))
 	b.WriteString(fmt.Sprintf("    %s%s%s\n", colorWhite, s.Comment, colorReset))
 	b.WriteString(fmt.Sprintf("    %sby %s%s", colorGray, s.CreatedBy, colorReset))
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -192,6 +193,27 @@ func TestClient_GetDashboard(t *testing.T) {
 	}
 	if title, ok := dm.Dashboard["title"].(string); !ok || title != "Test Dashboard" {
 		t.Errorf("title = %v, want Test Dashboard", dm.Dashboard["title"])
+	}
+}
+
+func TestClient_GetDashboard_EscapesUID(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.EscapedPath()
+		json.NewEncoder(w).Encode(DashboardMeta{})
+	}))
+	defer srv.Close()
+
+	client := NewClientWithHTTP(srv.URL, srv.Client())
+
+	uid := "a/b?c"
+	if _, err := client.GetDashboard(context.Background(), uid); err != nil {
+		t.Fatalf("GetDashboard: %v", err)
+	}
+
+	want := "/api/dashboards/uid/" + url.PathEscape(uid)
+	if gotPath != want {
+		t.Errorf("request path = %q, want %q", gotPath, want)
 	}
 }
 

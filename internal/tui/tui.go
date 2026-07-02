@@ -76,6 +76,12 @@ func New(client signoz.SignozQuerier, opts Options) *Session {
 	if maxHistory <= 0 {
 		maxHistory = 20
 	}
+	if maxHistory < 2 {
+		maxHistory = 2
+	}
+	if maxHistory%2 != 0 {
+		maxHistory++
+	}
 	name := opts.InstanceName
 	if name == "" {
 		name = opts.InstanceKey
