@@ -325,6 +325,23 @@ func TestCheckDisabledSLO(t *testing.T) {
 	}
 }
 
+func TestCheckAvailabilitySubUnitBurnIsOK(t *testing.T) {
+	c := &Checker{}
+	s := SLO{Name: "avail", Type: "availability", Service: "api", Target: 99.9, Window: "30d"}
+	// 0.09% error rate over the observed 6h = 0.9x burn.
+	services := []types.Service{{Name: "api", NumCalls: 100000, NumErrors: 90}}
+
+	result := c.checkAvailability(s, services)
+
+	if result.Status != "ok" {
+		t.Errorf("0.9x burn on a 30d window should be ok, got %q (consumed %.2f%%)",
+			result.Status, result.BudgetConsumed)
+	}
+	if result.BurnRate < 0.85 || result.BurnRate > 0.95 {
+		t.Errorf("expected burn rate ~0.9, got %.2f", result.BurnRate)
+	}
+}
+
 // ──────────────────────────────────────────────
 // Report Tests
 // ──────────────────────────────────────────────

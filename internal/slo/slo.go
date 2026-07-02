@@ -17,6 +17,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// observedWindowMins is the window the Signoz ListServices data covers (6h,
+// fixed by the client).
+const observedWindowMins = 360.0
+
 // ──────────────────────────────────────────────
 // Config Types
 // ──────────────────────────────────────────────
@@ -271,9 +275,13 @@ func (c *Checker) checkAvailability(slo SLO, services []types.Service) Result {
 	// Error budget calculation
 	result.ErrorBudget = 100.0 - slo.Target // e.g. 0.1% for 99.9%
 	if result.ErrorBudget > 0 {
-		result.BudgetConsumed = (errorRate / result.ErrorBudget) * 100
-		result.BudgetRemain = math.Max(0, 100-result.BudgetConsumed)
 		result.BurnRate = errorRate / result.ErrorBudget
+		windowMins := float64(slo.WindowMinutes())
+		observed := math.Min(observedWindowMins, windowMins)
+		// Consumption during the observed window as a share of the
+		// full-window budget (see internal/budget for the same model).
+		result.BudgetConsumed = math.Min(100.0, result.BurnRate*(observed/windowMins)*100)
+		result.BudgetRemain = math.Max(0, 100-result.BudgetConsumed)
 	}
 
 	// Status based on budget consumption
