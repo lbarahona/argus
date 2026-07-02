@@ -135,7 +135,7 @@ func doctorCmd() *cobra.Command {
 			}
 
 			if report.FailCount() > 0 {
-				os.Exit(1)
+				return exitError{code: 1}
 			}
 			return nil
 		},

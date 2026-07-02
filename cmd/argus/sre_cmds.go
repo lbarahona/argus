@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/alert"
@@ -103,7 +102,9 @@ Exit code reflects highest severity: 0=ok, 1=warning, 2=critical.`,
 			}, nil, rpt); err != nil {
 				return err
 			}
-			os.Exit(rpt.ExitCode())
+			if code := rpt.ExitCode(); code != 0 {
+				return exitError{code: code}
+			}
 			return nil
 		},
 	}
@@ -208,7 +209,9 @@ Exit code reflects worst SLO: 0=ok, 1=warning, 2=critical/exhausted.`,
 			}, nil, rpt); err != nil {
 				return err
 			}
-			os.Exit(rpt.ExitCode())
+			if code := rpt.ExitCode(); code != 0 {
+				return exitError{code: code}
+			}
 			return nil
 		},
 	}
@@ -296,7 +299,9 @@ Exit codes: 0 = healthy, 1 = critical, 2 = exhausted/page.`,
 				return err
 			}
 
-			os.Exit(rpt.ExitCode())
+			if code := rpt.ExitCode(); code != 0 {
+				return exitError{code: code}
+			}
 			return nil
 		},
 	}
@@ -395,7 +400,9 @@ Use --strict for critical services (lower thresholds, blocks on warnings).`,
 				return err
 			}
 
-			os.Exit(rpt.ExitCode())
+			if code := rpt.ExitCode(); code != 0 {
+				return exitError{code: code}
+			}
 			return nil
 		},
 	}

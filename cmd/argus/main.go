@@ -2,6 +2,8 @@ package main
 
 import (
 	jsonPkg "encoding/json"
+	"errors"
+	"fmt"
 	"os"
 
 	"github.com/lbarahona/argus/internal/ai"
@@ -16,11 +18,35 @@ var (
 	date    = "unknown"
 )
 
+// exitError carries a process exit code through RunE without os.Exit,
+// so deferred cleanup runs and commands stay testable.
+type exitError struct{ code int }
+
+func (e exitError) Error() string { return "" }
+
+// exitCodeFor maps a RunE error to the process exit code.
+func exitCodeFor(err error) int {
+	if err == nil {
+		return 0
+	}
+	var ee exitError
+	if errors.As(err, &ee) {
+		return ee.code
+	}
+	return 1
+}
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "argus",
 		Short: "AI-powered observability CLI for SREs",
 		Long:  "Argus connects to Signoz instances and uses AI (Anthropic, OpenAI, or Amazon Bedrock) to analyze logs, metrics, and traces with natural language queries.",
+		// Errors and usage are handled in main() below so exitError (which
+		// carries a process exit code but no message) doesn't produce a
+		// blank "Error: " line or a usage dump after a command has already
+		// rendered its output.
+		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
 
 	rootCmd.AddCommand(
@@ -64,7 +90,10 @@ func main() {
 	)
 
 	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+		if msg := err.Error(); msg != "" {
+			fmt.Fprintln(os.Stderr, output.ErrorStyle.Render("Error: "+msg))
+		}
+		os.Exit(exitCodeFor(err))
 	}
 }
 

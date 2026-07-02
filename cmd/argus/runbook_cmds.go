@@ -210,7 +210,7 @@ and a run log saved under ~/.argus/runbooks/runs/.`,
 
 			runbook.PrintRunLog(os.Stdout, log)
 			if log.Status == "failed" {
-				os.Exit(1)
+				return exitError{code: 1}
 			}
 			return nil
 		},
