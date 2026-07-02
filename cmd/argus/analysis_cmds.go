@@ -28,14 +28,23 @@ func reportCmd() *cobra.Command {
 	var duration int
 	var withAI bool
 	var format string
+	var grade bool
+	var service string
 
 	cmd := &cobra.Command{
 		Use:   "report",
 		Short: "Generate a health report for shift handoffs",
-		Long:  "Compile a comprehensive health report including service status, error patterns, and optional AI summary. Perfect for shift handoffs and incident reviews.",
+		Long: `Compile a comprehensive health report including service status, error patterns, and optional AI summary. Perfect for shift handoffs and incident reviews.
+
+With --grade, generates a service reliability scorecard instead: grades each
+service on reliability (error rate, latency, trends) and produces an overall
+score. Use for weekly reviews, shift handoffs, or SLA reporting.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateFormat(format); err != nil {
 				return err
+			}
+			if service != "" && !grade {
+				return fmt.Errorf("--service is only valid with --grade")
 			}
 			sctx, err := newSignozContext(instance)
 			if err != nil {
@@ -50,6 +59,29 @@ func reportCmd() *cobra.Command {
 			}
 
 			ctx := context.Background()
+
+			if grade {
+				fmt.Printf("%s Generating reliability scorecard...\n", output.MutedStyle.Render("⏳"))
+
+				sc, err := scorecard.Generate(ctx, sctx.client, sctx.instKey, scorecard.Options{
+					Duration:   duration,
+					Service:    service,
+					WithAI:     withAI,
+					AIProvider: provider,
+				})
+				if err != nil {
+					return err
+				}
+
+				return renderOutput(format, func() error {
+					scorecard.RenderTerminal(os.Stdout, sc)
+					return nil
+				}, func() error {
+					scorecard.RenderMarkdown(os.Stdout, sc)
+					return nil
+				}, nil)
+			}
+
 			fmt.Printf("%s Generating health report...\n", output.MutedStyle.Render("⏳"))
 
 			r, err := report.Generate(ctx, sctx.client, sctx.instKey, report.Options{
@@ -74,6 +106,8 @@ func reportCmd() *cobra.Command {
 	addInstanceFlag(cmd, &instance)
 	addDurationFlag(cmd, &duration, 60, "Duration in minutes to cover (e.g. 90, 90m, 2h)")
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-generated summary (uses Anthropic API)")
+	cmd.Flags().BoolVar(&grade, "grade", false, "Generate a service reliability scorecard instead of a health report")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to a single service (only valid with --grade)")
 	addFormatFlag(cmd, &format, "terminal")
 
 	return cmd
@@ -534,62 +568,6 @@ blast radius.`,
 	cmd.Flags().IntVar(&logLimit, "log-limit", 50, "Maximum Loki log entries to scan per service")
 	cmd.Flags().IntVar(&samples, "samples", 3, "Maximum Loki log samples to show per correlated group")
 	addFormatFlag(cmd, &format, "terminal")
-	return cmd
-}
-
-func scorecardCmd() *cobra.Command {
-	var instance string
-	var duration int
-	var service string
-	var withAI bool
-	var format string
-
-	cmd := &cobra.Command{
-		Use:   "scorecard",
-		Short: "Generate a service reliability scorecard",
-		Long:  "Grade each service on reliability (error rate, latency, trends) and produce an overall score. Use for weekly reviews, shift handoffs, or SLA reporting.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			sctx, err := newSignozContext(instance)
-			if err != nil {
-				return err
-			}
-			var provider ai.Provider
-			if withAI {
-				provider, err = requireAI(sctx.cfg)
-				if err != nil {
-					return err
-				}
-			}
-
-			ctx := context.Background()
-			fmt.Printf("%s Generating reliability scorecard...\n", output.MutedStyle.Render("⏳"))
-
-			sc, err := scorecard.Generate(ctx, sctx.client, sctx.instKey, scorecard.Options{
-				Duration:   duration,
-				Service:    service,
-				WithAI:     withAI,
-				AIProvider: provider,
-			})
-			if err != nil {
-				return err
-			}
-
-			return renderOutput(format, func() error {
-				scorecard.RenderTerminal(os.Stdout, sc)
-				return nil
-			}, func() error {
-				scorecard.RenderMarkdown(os.Stdout, sc)
-				return nil
-			}, nil)
-		},
-	}
-
-	addInstanceFlag(cmd, &instance)
-	addDurationFlag(cmd, &duration, 60, "Duration in minutes to analyze (e.g. 90, 90m, 2h)")
-	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to a single service")
-	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-generated summary (uses Anthropic API)")
-	addFormatFlag(cmd, &format, "terminal")
-
 	return cmd
 }
 
