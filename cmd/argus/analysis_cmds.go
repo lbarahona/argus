@@ -49,7 +49,6 @@ func reportCmd() *cobra.Command {
 			r, err := report.Generate(ctx, sctx.client, sctx.instKey, report.Options{
 				Duration:   duration,
 				WithAI:     withAI,
-				Format:     format,
 				AIProvider: provider,
 			})
 			if err != nil {
@@ -167,6 +166,7 @@ func diffCmd() *cobra.Command {
 func watchCmd() *cobra.Command {
 	var instance string
 	var interval int
+	defaults := watch.DefaultThresholds()
 	var errWarn, errCrit, p99Warn, p99Crit, spike float64
 
 	cmd := &cobra.Command{
@@ -195,22 +195,12 @@ Thresholds can be customized. Alerts include:
 			if sctx.inst.Name != "" {
 				instName = sctx.inst.Name
 			}
-			thresholds := watch.DefaultThresholds()
-			if cmd.Flags().Changed("error-rate-warn") {
-				thresholds.ErrorRateWarning = errWarn
-			}
-			if cmd.Flags().Changed("error-rate-crit") {
-				thresholds.ErrorRateCritical = errCrit
-			}
-			if cmd.Flags().Changed("p99-warn") {
-				thresholds.P99Warning = p99Warn
-			}
-			if cmd.Flags().Changed("p99-crit") {
-				thresholds.P99Critical = p99Crit
-			}
-			if cmd.Flags().Changed("spike") {
-				thresholds.ErrorSpike = spike
-			}
+			thresholds := defaults
+			thresholds.ErrorRateWarning = errWarn
+			thresholds.ErrorRateCritical = errCrit
+			thresholds.P99Warning = p99Warn
+			thresholds.P99Critical = p99Crit
+			thresholds.ErrorSpike = spike
 
 			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer cancel()
@@ -222,11 +212,11 @@ Thresholds can be customized. Alerts include:
 
 	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to watch")
 	cmd.Flags().IntVar(&interval, "interval", 30, "Poll interval in seconds")
-	cmd.Flags().Float64Var(&errWarn, "error-rate-warn", 5, "Error rate % warning threshold")
-	cmd.Flags().Float64Var(&errCrit, "error-rate-crit", 15, "Error rate % critical threshold")
-	cmd.Flags().Float64Var(&p99Warn, "p99-warn", 2000, "P99 latency ms warning threshold")
-	cmd.Flags().Float64Var(&p99Crit, "p99-crit", 5000, "P99 latency ms critical threshold")
-	cmd.Flags().Float64Var(&spike, "spike", 3, "Error spike multiplier over baseline")
+	cmd.Flags().Float64Var(&errWarn, "error-rate-warn", defaults.ErrorRateWarning, "Error rate % warning threshold")
+	cmd.Flags().Float64Var(&errCrit, "error-rate-crit", defaults.ErrorRateCritical, "Error rate % critical threshold")
+	cmd.Flags().Float64Var(&p99Warn, "p99-warn", defaults.P99Warning, "P99 latency ms warning threshold")
+	cmd.Flags().Float64Var(&p99Crit, "p99-crit", defaults.P99Critical, "P99 latency ms critical threshold")
+	cmd.Flags().Float64Var(&spike, "spike", defaults.ErrorSpike, "Error spike multiplier over baseline")
 
 	return cmd
 }
@@ -416,7 +406,6 @@ Use --ai to generate an AI-powered incident narrative.`,
 				Duration:   duration,
 				Service:    service,
 				WithAI:     withAI,
-				Format:     format,
 				AIProvider: provider,
 			}
 
@@ -611,7 +600,6 @@ func scorecardCmd() *cobra.Command {
 				Duration:   duration,
 				Service:    service,
 				WithAI:     withAI,
-				Format:     format,
 				AIProvider: provider,
 			})
 			if err != nil {
@@ -676,7 +664,6 @@ Risk levels:
 				Duration:   duration,
 				Horizon:    horizon,
 				Service:    service,
-				Format:     format,
 				WithAI:     withAI,
 				AIProvider: provider,
 			})
@@ -730,10 +717,8 @@ func depsCmd() *cobra.Command {
 				Instance:   sctx.instKey,
 				Duration:   duration,
 				Service:    service,
-				Format:     format,
 				AI:         withAI,
 				AIProvider: provider,
-				Writer:     os.Stdout,
 			})
 			if err != nil {
 				return err
@@ -808,7 +793,6 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
 				Buckets:     buckets,
 				Service:     service,
 				Sensitivity: sensitivity,
-				Format:      format,
 				WithAI:      withAI,
 				AIProvider:  provider,
 			})

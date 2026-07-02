@@ -77,7 +77,6 @@ type Options struct {
 	Duration     int
 	Service      string // filter to single service
 	WithAI       bool
-	Format       string // "terminal" or "markdown"
 	AIProvider   ai.Provider
 }
 

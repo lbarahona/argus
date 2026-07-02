@@ -46,7 +46,6 @@ type Options struct {
 	Buckets      int    // number of time buckets (default: 12)
 	Service      string // optional: focus on one service
 	Sensitivity  string // low, medium, high (default: medium)
-	Format       string // terminal or markdown
 	WithAI       bool   // include AI analysis
 	AIProvider   ai.Provider
 }

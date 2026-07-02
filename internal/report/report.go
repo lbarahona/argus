@@ -50,7 +50,6 @@ type ErrorPattern struct {
 type Options struct {
 	Duration     int // minutes
 	WithAI       bool
-	Format       string // "terminal" or "markdown"
 	AIProvider   ai.Provider
 }
 

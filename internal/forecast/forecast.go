@@ -20,7 +20,6 @@ type Options struct {
 	Duration     int    // minutes of historical data to analyze
 	Horizon      int    // minutes to forecast into the future
 	Service      string // optional: filter to specific service
-	Format       string // "terminal" or "markdown"
 	WithAI       bool   // include AI narrative
 	AIProvider   ai.Provider
 }

@@ -52,10 +52,8 @@ type Options struct {
 	Instance   string
 	Duration   int    // minutes
 	Service    string // filter to show only deps for this service
-	Format     string // "table" or "markdown"
 	AI         bool
 	AIProvider ai.Provider
-	Writer     io.Writer
 }
 
 // Generate builds a service dependency map from trace data.

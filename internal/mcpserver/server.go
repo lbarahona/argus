@@ -558,7 +558,6 @@ func registerTools(server *mcp.Server) {
 		rpt, err := report.Generate(ctx, client, instKey, report.Options{
 			Duration:   defaults(input.Duration, 60),
 			WithAI:     input.WithAI,
-			Format:     "markdown",
 			AIProvider: reportProvider,
 		})
 		if err != nil {

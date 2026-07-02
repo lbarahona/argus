@@ -64,7 +64,6 @@ type Options struct {
 	Duration     int    // minutes to look back
 	Service      string // optional: filter to a specific service
 	WithAI       bool   // generate AI narrative
-	Format       string // "terminal" or "markdown"
 	AIProvider   ai.Provider
 }
 
