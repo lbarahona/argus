@@ -306,9 +306,10 @@ func (c *Checker) checkLatency(ctx context.Context, slo SLO, services []types.Se
 	}
 
 	traceResult, err := c.client.QueryTraces(ctx, service, dur, 1000)
-	if err != nil || len(traceResult.Traces) == 0 {
-		result.Current = 100.0
-		result.Status = "ok"
+	if err != nil || traceResult == nil || len(traceResult.Traces) == 0 {
+		// No data is not "healthy" — a broken trace pipeline must not turn
+		// latency SLOs green.
+		result.Status = "no_data"
 		result.ErrorBudget = 100.0 - slo.Target
 		result.BudgetRemain = result.ErrorBudget
 		return result
@@ -331,12 +332,14 @@ func (c *Checker) checkLatency(ctx context.Context, slo SLO, services []types.Se
 	result.ErrorBudget = 100.0 - slo.Target
 	violationRate := 100.0 - result.Current
 	if result.ErrorBudget > 0 {
-		result.BudgetConsumed = (violationRate / result.ErrorBudget) * 100
-		result.BudgetRemain = math.Max(0, 100-result.BudgetConsumed)
 		result.BurnRate = violationRate / result.ErrorBudget
+		windowMins := float64(slo.WindowMinutes())
+		observed := math.Min(float64(dur), windowMins)
+		result.BudgetConsumed = math.Min(100.0, result.BurnRate*(observed/windowMins)*100)
+		result.BudgetRemain = math.Max(0, 100-result.BudgetConsumed)
 	}
 
-	result.Status = classifyStatus(result.BudgetConsumed)
+	result.Status = escalateForBurnRate(classifyStatus(result.BudgetConsumed), result.BurnRate)
 
 	return result
 }
@@ -434,7 +437,7 @@ func FormatText(r *Report) string {
 	}
 
 	// Summary
-	var ok, warn, crit, exhausted int
+	var ok, warn, crit, exhausted, noData int
 	for _, res := range r.Results {
 		switch res.Status {
 		case "ok":
@@ -445,15 +448,18 @@ func FormatText(r *Report) string {
 			crit++
 		case "exhausted":
 			exhausted++
+		case "no_data":
+			noData++
 		}
 	}
 
-	sb.WriteString(fmt.Sprintf("  %s Summary: %s ok  %s warning  %s critical  %s exhausted\n\n",
+	sb.WriteString(fmt.Sprintf("  %s Summary: %s ok  %s warning  %s critical  %s exhausted  %s no_data\n\n",
 		output.MutedStyle.Render("─────"),
 		output.SuccessStyle.Render(fmt.Sprintf("%d", ok)),
 		output.WarningStyle.Render(fmt.Sprintf("%d", warn)),
 		output.ErrorStyle.Render(fmt.Sprintf("%d", crit)),
 		output.ErrorStyle.Render(fmt.Sprintf("%d", exhausted)),
+		output.MutedStyle.Render(fmt.Sprintf("%d", noData)),
 	))
 
 	return sb.String()
@@ -469,11 +475,17 @@ func statusIcon(status string) string {
 		return "🔴"
 	case "exhausted":
 		return "💀"
+	case "no_data":
+		return "⚪"
 	default:
 		return "❓"
 	}
 }
 
+// statusPriority ranks a status for sorting worst-first. "no_data" sits at
+// the same low priority as "ok" — it is not a violation to escalate on, but
+// it must render distinctly (see statusIcon/formatValue) since it means the
+// SLO could not actually be evaluated.
 func statusPriority(status string) int {
 	switch status {
 	case "exhausted":
@@ -484,6 +496,8 @@ func statusPriority(status string) int {
 		return 2
 	case "ok":
 		return 1
+	case "no_data":
+		return 0
 	default:
 		return 0
 	}
@@ -498,6 +512,8 @@ func formatValue(val float64, status string) string {
 		return output.WarningStyle.Render(s)
 	case "critical", "exhausted":
 		return output.ErrorStyle.Render(s)
+	case "no_data":
+		return output.MutedStyle.Render(s)
 	default:
 		return s
 	}

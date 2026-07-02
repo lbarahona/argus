@@ -3,6 +3,8 @@ package slo
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -299,8 +301,83 @@ func TestCheckLatencyNoTraces(t *testing.T) {
 	}
 
 	rpt, _ := checker.CheckAll(context.Background(), cfg)
-	if rpt.Results[0].Status != "ok" {
-		t.Errorf("expected ok for no traces, got %s", rpt.Results[0].Status)
+	// A broken/empty trace pipeline must not report a fake-healthy latency
+	// SLO — it must surface as "no_data", not "ok".
+	if rpt.Results[0].Status != "no_data" {
+		t.Errorf("expected no_data for no traces, got %s", rpt.Results[0].Status)
+	}
+}
+
+func TestCheckLatencyQueryFailureIsNoData(t *testing.T) {
+	mock := &mockSignozClient{
+		queryTracesFunc: func(ctx context.Context, service string, durationMinutes, limit int) (*types.QueryResult, error) {
+			return nil, fmt.Errorf("boom")
+		},
+	}
+	c := NewChecker(mock, "test")
+	s := SLO{Name: "lat", Type: "latency", Service: "api", Target: 99.0, Threshold: 500, Window: "24h"}
+
+	result := c.checkLatency(context.Background(), s, nil)
+
+	if result.Status != "no_data" {
+		t.Errorf("failed trace query must be no_data, not fake-ok; got %q", result.Status)
+	}
+}
+
+func TestCheckLatencyScalesConsumptionByWindow(t *testing.T) {
+	// 1000 traces, 20 over threshold → 2% violation on a 1% budget = 2x burn.
+	traces := make([]types.TraceEntry, 1000)
+	for i := range traces {
+		d := int64(100 * 1e6) // 100ms
+		if i < 20 {
+			d = int64(900 * 1e6) // 900ms, over the 500ms threshold
+		}
+		traces[i] = types.TraceEntry{DurationNano: d}
+	}
+	mock := &mockSignozClient{
+		queryTracesFunc: func(ctx context.Context, service string, durationMinutes, limit int) (*types.QueryResult, error) {
+			return &types.QueryResult{Traces: traces}, nil
+		},
+	}
+	c := NewChecker(mock, "test")
+	s := SLO{Name: "lat", Type: "latency", Service: "api", Target: 99.0, Threshold: 500, Window: "30d"}
+
+	result := c.checkLatency(context.Background(), s, nil)
+
+	// Observed window is min(1440, 43200) = 1440 of 43200 → fraction 1/30.
+	// BudgetConsumed = 2.0 * (1/30) * 100 ≈ 6.7, so status stays ok (burn 2x < 6x).
+	if result.BurnRate < 1.9 || result.BurnRate > 2.1 {
+		t.Errorf("burn rate = %.2f, want ~2.0", result.BurnRate)
+	}
+	if result.BudgetConsumed > 10 {
+		t.Errorf("consumed = %.1f, must be scaled by observed/window fraction", result.BudgetConsumed)
+	}
+	if result.Status != "ok" {
+		t.Errorf("2x burn is below the 6x escalation bar; got %q", result.Status)
+	}
+}
+
+func TestStatusPriorityNoData(t *testing.T) {
+	if got := statusPriority("no_data"); got != 0 {
+		t.Errorf("statusPriority(no_data) = %d, want 0", got)
+	}
+}
+
+func TestFormatTextRendersNoDataDistinctly(t *testing.T) {
+	rpt := &Report{
+		Instance:  "prod",
+		Timestamp: "2026-02-23T00:00:00Z",
+		Results: []Result{
+			{SLO: SLO{Name: "lat", Description: "test slo"}, Status: "no_data", Current: 0, Target: 99.0, BudgetRemain: 1, BurnRate: 0},
+		},
+	}
+
+	out := FormatText(rpt)
+	if !strings.Contains(out, "no_data") {
+		t.Errorf("expected summary to mention no_data, got: %s", out)
+	}
+	if strings.Contains(out, statusIcon("ok")) {
+		t.Errorf("no_data must not render with the ok icon: %s", out)
 	}
 }
 
