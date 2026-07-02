@@ -1464,20 +1464,42 @@ func TestTool_AmAlerts_AllIncludesActive(t *testing.T) {
 	grafanaServer := httptest.NewServer(mockGrafanaHandler())
 	defer grafanaServer.Close()
 
+	var allQuery, defaultQuery, activeOnlyQuery url.Values
 	withMockIntegrations(t, signoz.URL, aiServer.URL, amServer.URL, promServer.URL, grafanaServer.URL, func() {
 		cs := newTestSession(t)
 		result := callTool(t, cs, "argus_am_alerts", map[string]any{"all": true})
 		if result.IsError {
 			t.Fatalf("argus_am_alerts returned error: %s", textOf(t, result))
 		}
+		allQuery = gotQuery
+
+		gotQuery = nil
+		result = callTool(t, cs, "argus_am_alerts", map[string]any{})
+		if result.IsError {
+			t.Fatalf("default call errored: %s", textOf(t, result))
+		}
+		defaultQuery = gotQuery
+
+		gotQuery = nil
+		result = callTool(t, cs, "argus_am_alerts", map[string]any{"active_only": true})
+		if result.IsError {
+			t.Fatalf("active_only call errored: %s", textOf(t, result))
+		}
+		activeOnlyQuery = gotQuery
 	})
 
-	if gotQuery.Get("active") != "true" {
-		t.Errorf("all=true must keep active=true, got active=%q", gotQuery.Get("active"))
+	if allQuery.Get("active") != "true" {
+		t.Errorf("all=true must keep active=true, got active=%q", allQuery.Get("active"))
 	}
-	if gotQuery.Get("silenced") != "true" || gotQuery.Get("inhibited") != "true" {
+	if allQuery.Get("silenced") != "true" || allQuery.Get("inhibited") != "true" {
 		t.Errorf("all=true should include silenced and inhibited, got silenced=%q inhibited=%q",
-			gotQuery.Get("silenced"), gotQuery.Get("inhibited"))
+			allQuery.Get("silenced"), allQuery.Get("inhibited"))
+	}
+	if defaultQuery.Get("active") != "true" || defaultQuery.Get("silenced") != "false" || defaultQuery.Get("inhibited") != "false" {
+		t.Errorf("default params = %v, want active=true silenced=false inhibited=false", defaultQuery)
+	}
+	if activeOnlyQuery.Get("active") != "true" || activeOnlyQuery.Get("silenced") != "false" || activeOnlyQuery.Get("inhibited") != "false" {
+		t.Errorf("active_only params = %v, want active=true silenced=false inhibited=false", activeOnlyQuery)
 	}
 }
 
