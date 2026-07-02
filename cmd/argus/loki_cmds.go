@@ -18,7 +18,7 @@ func getLokiClient() (*lokilib.Client, error) {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 	if !cfg.Loki.IsConfigured() {
-		return nil, fmt.Errorf("loki not configured — add loki.url to your config:\n  argus config init  (or edit ~/.argus/config.yaml)")
+		return nil, fmt.Errorf("loki is not configured — add 'loki.url' to ~/.argus/config.yaml")
 	}
 	lokiCfg := lokilib.LokiConfig{
 		URL:      cfg.Loki.URL,

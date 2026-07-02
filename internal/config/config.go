@@ -226,6 +226,9 @@ func GetInstance(cfg *types.Config, name string) (*types.Instance, string, error
 		name = cfg.DefaultInstance
 	}
 	if name == "" {
+		if len(cfg.Instances) == 0 {
+			return nil, "", fmt.Errorf("no instance specified and no default set — run 'argus config init' to create a config")
+		}
 		return nil, "", fmt.Errorf("no instance specified and no default set")
 	}
 	inst, ok := cfg.Instances[name]

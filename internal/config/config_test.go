@@ -206,7 +206,9 @@ func TestLoadInvalidYAML(t *testing.T) {
 }
 
 // TestGetInstanceNoDefault verifies that GetInstance errors when there is no
-// name argument and no DefaultInstance set.
+// name argument, no DefaultInstance set, and zero configured instances — the
+// error should point the user at 'argus config init' since there's nothing
+// to select from.
 func TestGetInstanceNoDefault(t *testing.T) {
 	cfg := &types.Config{
 		DefaultInstance: "",
@@ -219,6 +221,33 @@ func TestGetInstanceNoDefault(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no instance specified") {
 		t.Errorf("error message should contain 'no instance specified', got: %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "argus config init") {
+		t.Errorf("error message should point to 'argus config init' when config has zero instances, got: %q", err.Error())
+	}
+}
+
+// TestGetInstanceNoDefaultPopulated verifies that GetInstance keeps the
+// plain error (no 'config init' pointer) when the config already has
+// instances configured but none is marked as the default — the fix here is
+// picking a default with '-i' or 'argus use', not running init again.
+func TestGetInstanceNoDefaultPopulated(t *testing.T) {
+	cfg := &types.Config{
+		DefaultInstance: "",
+		Instances: map[string]types.Instance{
+			"alpha": {URL: "https://alpha.example.com", Name: "Alpha"},
+		},
+	}
+
+	_, _, err := GetInstance(cfg, "")
+	if err == nil {
+		t.Fatal("expected error when no instance specified and no default set")
+	}
+	if !strings.Contains(err.Error(), "no instance specified") {
+		t.Errorf("error message should contain 'no instance specified', got: %q", err.Error())
+	}
+	if strings.Contains(err.Error(), "config init") {
+		t.Errorf("error message should NOT suggest 'config init' when instances already exist, got: %q", err.Error())
 	}
 }
 

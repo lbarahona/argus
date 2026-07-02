@@ -93,5 +93,5 @@ func TestCorrelateStackCmd_RequiresLoki(t *testing.T) {
 	cmd := correlateStackCmd()
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "loki not configured")
+	assert.Contains(t, err.Error(), "loki is not configured")
 }

@@ -19,7 +19,7 @@ func getGrafanaClient() (*grafanalib.Client, error) {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 	if !cfg.Grafana.IsConfigured() {
-		return nil, fmt.Errorf("grafana not configured — add grafana.url to your config:\n  argus config init  (or edit ~/.argus/config.yaml)")
+		return nil, fmt.Errorf("grafana is not configured — add 'grafana.url' to ~/.argus/config.yaml")
 	}
 	gCfg := grafanalib.GrafanaConfig{
 		URL:    cfg.Grafana.URL,

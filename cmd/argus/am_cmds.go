@@ -21,7 +21,7 @@ func getAMClient() (*amlib.Client, error) {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 	if !cfg.Alertmanager.IsConfigured() {
-		return nil, fmt.Errorf("alertmanager not configured — add alertmanager.url to your config:\n  argus config init  (or edit ~/.argus/config.yaml)")
+		return nil, fmt.Errorf("alertmanager is not configured — add 'alertmanager.url' to ~/.argus/config.yaml")
 	}
 	amCfg := amlib.AlertmanagerConfig{
 		URL: cfg.Alertmanager.URL,

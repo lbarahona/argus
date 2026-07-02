@@ -18,7 +18,7 @@ func getPromClient() (*promlib.Client, error) {
 		return nil, err
 	}
 	if !cfg.Prometheus.IsConfigured() {
-		return nil, fmt.Errorf("prometheus not configured — add 'prometheus.url' to ~/.argus.yaml")
+		return nil, fmt.Errorf("prometheus is not configured — add 'prometheus.url' to ~/.argus/config.yaml")
 	}
 	promCfg := promlib.PrometheusConfig{
 		URL: cfg.Prometheus.URL,
