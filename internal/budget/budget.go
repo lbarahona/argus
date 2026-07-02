@@ -256,7 +256,9 @@ func computeBurnWindow(s slo.SLO, services []types.Service, label string, mins i
 	allowedRate := 100.0 - s.Target
 	if allowedRate > 0 {
 		bw.BurnRate = bw.ErrorRate / allowedRate
-		bw.BudgetUsed = bw.BurnRate * (float64(mins) / float64(s.WindowMinutes())) * 100
+		windowMins := float64(s.WindowMinutes())
+		observed := math.Min(float64(mins), windowMins)
+		bw.BudgetUsed = math.Min(100, bw.BurnRate*(observed/windowMins)*100)
 	}
 
 	return bw

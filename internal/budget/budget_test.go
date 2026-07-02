@@ -358,6 +358,19 @@ func TestComputeBurnWindow(t *testing.T) {
 	})
 }
 
+func TestComputeBurnWindowFractionCapped(t *testing.T) {
+	// SLO window (1h) shorter than the 6h burn window: fraction must cap at 1.
+	s := slo.SLO{Service: "api", Target: 99.9, Window: "1h"}
+	services := []types.Service{{Name: "api", NumCalls: 10000, NumErrors: 5}} // 0.05% = 0.5x burn
+	bw := computeBurnWindow(s, services, "6h", 360)
+	if bw.BudgetUsed > 100 {
+		t.Errorf("BudgetUsed must be capped at 100, got %.1f", bw.BudgetUsed)
+	}
+	if bw.BudgetUsed < 45 || bw.BudgetUsed > 55 {
+		t.Errorf("0.5x burn with capped fraction should use ~50%%, got %.1f", bw.BudgetUsed)
+	}
+}
+
 // ──────────────────────────────────────────────
 // Tests: predictExhaustion
 // ──────────────────────────────────────────────
