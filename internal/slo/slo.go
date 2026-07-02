@@ -35,9 +35,9 @@ type SLO struct {
 	Name        string            `yaml:"name" json:"name"`
 	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
 	Service     string            `yaml:"service" json:"service"`
-	Type        string            `yaml:"type" json:"type"` // availability, latency
-	Target      float64           `yaml:"target" json:"target"` // e.g. 99.9 for 99.9%
-	Window      string            `yaml:"window" json:"window"` // 1h, 24h, 7d, 30d
+	Type        string            `yaml:"type" json:"type"`                               // availability, latency
+	Target      float64           `yaml:"target" json:"target"`                           // e.g. 99.9 for 99.9%
+	Window      string            `yaml:"window" json:"window"`                           // 1h, 24h, 7d, 30d
 	Threshold   float64           `yaml:"threshold,omitempty" json:"threshold,omitempty"` // for latency: max ms
 	Labels      map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
 	Enabled     *bool             `yaml:"enabled,omitempty" json:"enabled,omitempty"`
@@ -79,7 +79,7 @@ func (s SLO) WindowMinutes() int {
 // Result holds the evaluation of a single SLO.
 type Result struct {
 	SLO            SLO     `json:"slo"`
-	Current        float64 `json:"current"`         // current value (e.g. 99.85%)
+	Current        float64 `json:"current"`          // current value (e.g. 99.85%)
 	Target         float64 `json:"target"`           // target (e.g. 99.9%)
 	ErrorBudget    float64 `json:"error_budget"`     // total error budget (%)
 	BudgetConsumed float64 `json:"budget_consumed"`  // how much budget used (%)

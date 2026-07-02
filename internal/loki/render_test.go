@@ -349,9 +349,9 @@ func TestHumanBytes(t *testing.T) {
 
 func TestFormatLabelSet(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  map[string]string
-		want   string
+		name  string
+		input map[string]string
+		want  string
 	}{
 		{"empty", map[string]string{}, "{}"},
 		{"single", map[string]string{"app": "nginx"}, `{app="nginx"}`},

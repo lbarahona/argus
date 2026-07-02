@@ -103,7 +103,7 @@ type PromAlert struct {
 
 // QueryResult holds the result of an instant query.
 type QueryResult struct {
-	ResultType string       `json:"resultType"` // vector, matrix, scalar, string
+	ResultType string          `json:"resultType"` // vector, matrix, scalar, string
 	Result     json.RawMessage `json:"result"`
 }
 

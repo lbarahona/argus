@@ -15,19 +15,19 @@ func (c GrafanaConfig) IsConfigured() bool {
 
 // Dashboard represents a Grafana dashboard.
 type Dashboard struct {
-	ID          int       `json:"id"`
-	UID         string    `json:"uid"`
-	Title       string    `json:"title"`
-	URI         string    `json:"uri"`
-	URL         string    `json:"url"`
-	Slug        string    `json:"slug"`
-	Type        string    `json:"type"` // "dash-db" or "dash-folder"
-	Tags        []string  `json:"tags"`
-	IsStarred   bool      `json:"isStarred"`
-	FolderID    int       `json:"folderId"`
-	FolderUID   string    `json:"folderUid"`
-	FolderTitle string    `json:"folderTitle"`
-	FolderURL   string    `json:"folderUrl"`
+	ID          int      `json:"id"`
+	UID         string   `json:"uid"`
+	Title       string   `json:"title"`
+	URI         string   `json:"uri"`
+	URL         string   `json:"url"`
+	Slug        string   `json:"slug"`
+	Type        string   `json:"type"` // "dash-db" or "dash-folder"
+	Tags        []string `json:"tags"`
+	IsStarred   bool     `json:"isStarred"`
+	FolderID    int      `json:"folderId"`
+	FolderUID   string   `json:"folderUid"`
+	FolderTitle string   `json:"folderTitle"`
+	FolderURL   string   `json:"folderUrl"`
 }
 
 // DashboardMeta holds full dashboard details from /api/dashboards/uid/:uid.
@@ -102,15 +102,15 @@ type ProvisionedAlertRules []AlertRule
 
 // GrafanaAlertInstance represents a firing alert instance from /api/alertmanager/grafana/api/v2/alerts.
 type GrafanaAlertInstance struct {
-	Annotations  map[string]string `json:"annotations"`
-	EndsAt       time.Time         `json:"endsAt"`
-	Fingerprint  string            `json:"fingerprint"`
-	Receivers    []Receiver        `json:"receivers"`
-	StartsAt     time.Time         `json:"startsAt"`
+	Annotations  map[string]string   `json:"annotations"`
+	EndsAt       time.Time           `json:"endsAt"`
+	Fingerprint  string              `json:"fingerprint"`
+	Receivers    []Receiver          `json:"receivers"`
+	StartsAt     time.Time           `json:"startsAt"`
 	Status       AlertInstanceStatus `json:"status"`
-	Labels       map[string]string `json:"labels"`
-	GeneratorURL string            `json:"generatorURL"`
-	UpdatedAt    time.Time         `json:"updatedAt"`
+	Labels       map[string]string   `json:"labels"`
+	GeneratorURL string              `json:"generatorURL"`
+	UpdatedAt    time.Time           `json:"updatedAt"`
 }
 
 // Receiver holds receiver info.
@@ -161,11 +161,11 @@ type SearchResult = Dashboard
 
 // Summary aggregates Grafana instance statistics.
 type Summary struct {
-	Dashboards  int
-	Folders     int
-	Datasources int
-	AlertRules  int
+	Dashboards   int
+	Folders      int
+	Datasources  int
+	AlertRules   int
 	FiringAlerts int
-	Version     string
-	OrgName     string
+	Version      string
+	OrgName      string
 }

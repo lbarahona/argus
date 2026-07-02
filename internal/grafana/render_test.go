@@ -196,9 +196,9 @@ func TestFormatAlertInstances(t *testing.T) {
 			StartsAt:    time.Now().Add(-30 * time.Minute),
 		},
 		{
-			Labels:      map[string]string{"alertname": "DiskSpace", "severity": "warning"},
-			Status:      AlertInstanceStatus{State: "suppressed"},
-			StartsAt:    time.Now().Add(-2 * time.Hour),
+			Labels:   map[string]string{"alertname": "DiskSpace", "severity": "warning"},
+			Status:   AlertInstanceStatus{State: "suppressed"},
+			StartsAt: time.Now().Add(-2 * time.Hour),
 		},
 	}
 

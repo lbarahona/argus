@@ -50,10 +50,10 @@ type ServiceScore struct {
 type Trend int
 
 const (
-	TrendStable   Trend = 0
-	TrendBetter   Trend = 1
-	TrendWorse    Trend = -1
-	TrendNoData   Trend = 2
+	TrendStable Trend = 0
+	TrendBetter Trend = 1
+	TrendWorse  Trend = -1
+	TrendNoData Trend = 2
 )
 
 // ErrorGroup groups similar errors with count.
@@ -75,10 +75,10 @@ type Scorecard struct {
 
 // Options configures scorecard generation.
 type Options struct {
-	Duration     int
-	Service      string // filter to single service
-	WithAI       bool
-	AIProvider   ai.Provider
+	Duration   int
+	Service    string // filter to single service
+	WithAI     bool
+	AIProvider ai.Provider
 }
 
 // Generate creates a reliability scorecard from Signoz data.

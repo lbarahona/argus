@@ -19,22 +19,22 @@ import (
 
 // Options configures the correlate command.
 type Options struct {
-	Duration     int    // minutes to look back
-	Service      string // optional: focus on a specific service
-	BucketSize   int    // seconds per time bucket (default 60)
-	MinEvents    int    // minimum events in a bucket to count as a cluster
-	AIProvider   ai.Provider // for AI analysis
+	Duration   int         // minutes to look back
+	Service    string      // optional: focus on a specific service
+	BucketSize int         // seconds per time bucket (default 60)
+	MinEvents  int         // minimum events in a bucket to count as a cluster
+	AIProvider ai.Provider // for AI analysis
 }
 
 // Signal represents a timestamped event from any telemetry source.
 type Signal struct {
-	Timestamp   time.Time
-	Source      string // "logs", "traces"
-	Service     string
-	Severity    string // log severity or trace status
-	Summary     string // short description
-	DurationMs  float64
-	IsError     bool
+	Timestamp  time.Time
+	Source     string // "logs", "traces"
+	Service    string
+	Severity   string // log severity or trace status
+	Summary    string // short description
+	DurationMs float64
+	IsError    bool
 }
 
 // Cluster represents a temporal cluster of correlated signals.
@@ -58,12 +58,12 @@ type PropagationEdge struct {
 
 // Result holds the full correlation analysis.
 type Result struct {
-	TimeRange    time.Duration
-	Services     []types.Service
-	Signals      []Signal
-	Clusters     []Cluster
-	Propagation  []PropagationEdge
-	CollectedAt  time.Time
+	TimeRange   time.Duration
+	Services    []types.Service
+	Signals     []Signal
+	Clusters    []Cluster
+	Propagation []PropagationEdge
+	CollectedAt time.Time
 }
 
 // Run collects signals and performs correlation analysis.

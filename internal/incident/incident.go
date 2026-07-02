@@ -28,27 +28,27 @@ const (
 
 // Status values for incidents.
 const (
-	StatusOpen       = "open"
+	StatusOpen          = "open"
 	StatusInvestigating = "investigating"
-	StatusIdentified = "identified"
-	StatusMonitoring = "monitoring"
-	StatusResolved   = "resolved"
+	StatusIdentified    = "identified"
+	StatusMonitoring    = "monitoring"
+	StatusResolved      = "resolved"
 )
 
 // Incident represents a single incident.
 type Incident struct {
-	ID          string           `yaml:"id" json:"id"`
-	Title       string           `yaml:"title" json:"title"`
-	Severity    string           `yaml:"severity" json:"severity"`
-	Status      string           `yaml:"status" json:"status"`
-	Services    []string         `yaml:"services,omitempty" json:"services,omitempty"`
-	Commander   string           `yaml:"commander,omitempty" json:"commander,omitempty"`
-	Description string           `yaml:"description,omitempty" json:"description,omitempty"`
+	ID          string            `yaml:"id" json:"id"`
+	Title       string            `yaml:"title" json:"title"`
+	Severity    string            `yaml:"severity" json:"severity"`
+	Status      string            `yaml:"status" json:"status"`
+	Services    []string          `yaml:"services,omitempty" json:"services,omitempty"`
+	Commander   string            `yaml:"commander,omitempty" json:"commander,omitempty"`
+	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
 	Labels      map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
-	CreatedAt   time.Time        `yaml:"created_at" json:"created_at"`
-	ResolvedAt  *time.Time       `yaml:"resolved_at,omitempty" json:"resolved_at,omitempty"`
-	Timeline    []TimelineEntry  `yaml:"timeline" json:"timeline"`
-	Duration    string           `yaml:"duration,omitempty" json:"duration,omitempty"`
+	CreatedAt   time.Time         `yaml:"created_at" json:"created_at"`
+	ResolvedAt  *time.Time        `yaml:"resolved_at,omitempty" json:"resolved_at,omitempty"`
+	Timeline    []TimelineEntry   `yaml:"timeline" json:"timeline"`
+	Duration    string            `yaml:"duration,omitempty" json:"duration,omitempty"`
 }
 
 // TimelineEntry is a single event in the incident timeline.

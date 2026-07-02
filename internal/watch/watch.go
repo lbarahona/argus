@@ -354,10 +354,10 @@ func (w *Watcher) analyze(snapshots []ServiceSnapshot) []Alert {
 		// New errors detection
 		if w.thresholds.NewErrors && exists && baseline.Errors == 0 && s.Errors > 0 {
 			alerts = append(alerts, Alert{
-				Level:   AlertWarning,
-				Service: s.Name,
-				Message: fmt.Sprintf("New errors detected (%.0f errors, was clean)", s.Errors),
-				Value:   s.Errors,
+				Level:     AlertWarning,
+				Service:   s.Name,
+				Message:   fmt.Sprintf("New errors detected (%.0f errors, was clean)", s.Errors),
+				Value:     s.Errors,
 				Timestamp: time.Now(),
 			})
 		}
@@ -433,4 +433,3 @@ func (w *Watcher) Summary() string {
 
 	return sb.String()
 }
-

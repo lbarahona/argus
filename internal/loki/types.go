@@ -138,8 +138,8 @@ func samplePoint(pair [2]json.RawMessage) (SamplePoint, bool) {
 
 // Stream represents a single log stream (a label set + entries).
 type Stream struct {
-	Labels  map[string]string `json:"stream"`
-	Values  [][]string        `json:"values"` // Each entry: [timestamp_ns, log_line]
+	Labels map[string]string `json:"stream"`
+	Values [][]string        `json:"values"` // Each entry: [timestamp_ns, log_line]
 }
 
 // LogEntry is a parsed log line with its timestamp and labels.
@@ -198,10 +198,10 @@ type BuildInfo struct {
 
 // Summary aggregates Loki instance statistics for the summary command.
 type Summary struct {
-	Healthy  bool
-	Latency  time.Duration
-	Version  string
-	Labels   int
-	Series   int
-	Stats    *StatsResponse
+	Healthy bool
+	Latency time.Duration
+	Version string
+	Labels  int
+	Series  int
+	Stats   *StatsResponse
 }

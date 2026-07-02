@@ -247,4 +247,3 @@ func (s *Session) trimHistory() {
 		}
 	}
 }
-

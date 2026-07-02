@@ -10,17 +10,17 @@ import (
 )
 
 var (
-	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7C3AED"))
-	labelStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
-	stepNumStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#3B82F6"))
-	commandStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981"))
-	manualStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#F59E0B")).Bold(true)
-	sevP1Style    = lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
-	sevP2Style    = lipgloss.NewStyle().Foreground(lipgloss.Color("#F97316")).Bold(true)
-	sevP3Style    = lipgloss.NewStyle().Foreground(lipgloss.Color("#EAB308"))
-	sevP4Style    = lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
-	passedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981"))
-	failedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
+	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7C3AED"))
+	labelStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
+	stepNumStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#3B82F6"))
+	commandStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981"))
+	manualStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F59E0B")).Bold(true)
+	sevP1Style   = lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
+	sevP2Style   = lipgloss.NewStyle().Foreground(lipgloss.Color("#F97316")).Bold(true)
+	sevP3Style   = lipgloss.NewStyle().Foreground(lipgloss.Color("#EAB308"))
+	sevP4Style   = lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
+	passedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981"))
+	failedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
 )
 
 func severityStyle(sev string) lipgloss.Style {

@@ -432,13 +432,13 @@ func TestMatchesQuery(t *testing.T) {
 		query string
 		want  bool
 	}{
-		{"pod", true},          // matches name
-		{"production", true},   // matches description
-		{"kubernetes", true},   // matches category
+		{"pod", true},             // matches name
+		{"production", true},      // matches description
+		{"kubernetes", true},      // matches category
 		{"troubleshooting", true}, // matches tag
-		{"k8s", true},          // matches tag
-		{"nonexistent", false}, // no match
-		{"recovery", true},     // partial name match
+		{"k8s", true},             // matches tag
+		{"nonexistent", false},    // no match
+		{"recovery", true},        // partial name match
 	}
 
 	for _, tt := range tests {

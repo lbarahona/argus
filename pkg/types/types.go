@@ -20,8 +20,8 @@ func (i Instance) GetAPIVersion() string {
 
 // AIConfig holds configuration for AI providers.
 type AIConfig struct {
-	Provider     string        `yaml:"provider"`      // anthropic, openai, bedrock
-	Model        string        `yaml:"model"`         // auto or specific model name
+	Provider     string        `yaml:"provider"` // anthropic, openai, bedrock
+	Model        string        `yaml:"model"`    // auto or specific model name
 	AnthropicKey string        `yaml:"anthropic_key"`
 	OpenAIKey    string        `yaml:"openai_key"`
 	Bedrock      BedrockConfig `yaml:"bedrock"`
@@ -64,8 +64,8 @@ func (c PrometheusConfig) IsConfigured() bool {
 
 // Config represents the application configuration.
 type Config struct {
-	AnthropicKey    string              `yaml:"anthropic_key"`     // Legacy (still works)
-	AI              AIConfig            `yaml:"ai"`                // New structured AI config
+	AnthropicKey    string              `yaml:"anthropic_key"` // Legacy (still works)
+	AI              AIConfig            `yaml:"ai"`            // New structured AI config
 	DefaultInstance string              `yaml:"default_instance"`
 	Instances       map[string]Instance `yaml:"instances"`
 	Alertmanager    AlertmanagerConfig  `yaml:"alertmanager,omitempty"` // Alertmanager integration
@@ -76,9 +76,9 @@ type Config struct {
 
 // LokiConfig holds Loki connection details.
 type LokiConfig struct {
-	URL       string         `yaml:"url" json:"url"`
-	BasicAuth LokiBasicAuth  `yaml:"basic_auth,omitempty" json:"basic_auth,omitempty"`
-	TenantID  string         `yaml:"tenant_id,omitempty" json:"tenant_id,omitempty"`
+	URL       string        `yaml:"url" json:"url"`
+	BasicAuth LokiBasicAuth `yaml:"basic_auth,omitempty" json:"basic_auth,omitempty"`
+	TenantID  string        `yaml:"tenant_id,omitempty" json:"tenant_id,omitempty"`
 }
 
 // LokiBasicAuth holds basic auth credentials for Loki.
@@ -138,15 +138,15 @@ type LogEntry struct {
 
 // TraceEntry represents a single trace/span from Signoz.
 type TraceEntry struct {
-	Timestamp    time.Time         `json:"timestamp"`
-	TraceID      string            `json:"trace_id"`
-	SpanID       string            `json:"span_id"`
-	ParentSpanID string            `json:"parent_span_id,omitempty"`
-	ServiceName  string            `json:"service_name"`
-	OperationName string           `json:"operation_name"`
-	DurationNano int64             `json:"duration_nano"`
-	StatusCode   string            `json:"status_code"`
-	Attributes   map[string]string `json:"attributes"`
+	Timestamp     time.Time         `json:"timestamp"`
+	TraceID       string            `json:"trace_id"`
+	SpanID        string            `json:"span_id"`
+	ParentSpanID  string            `json:"parent_span_id,omitempty"`
+	ServiceName   string            `json:"service_name"`
+	OperationName string            `json:"operation_name"`
+	DurationNano  int64             `json:"duration_nano"`
+	StatusCode    string            `json:"status_code"`
+	Attributes    map[string]string `json:"attributes"`
 }
 
 // DurationMs returns the duration in milliseconds.

@@ -47,33 +47,33 @@ type Anomaly struct {
 
 // Result holds all anomalies found during a scan.
 type Result struct {
-	Anomalies   []Anomaly     `json:"anomalies"`
-	Services    []ServiceScan `json:"services"`
-	ScanTime    time.Time     `json:"scan_time"`
-	Duration    int           `json:"duration_minutes"`
-	Instance    string        `json:"instance"`
-	AISummary   string        `json:"ai_summary,omitempty"`
-	TotalScanned int          `json:"total_scanned"`
+	Anomalies    []Anomaly     `json:"anomalies"`
+	Services     []ServiceScan `json:"services"`
+	ScanTime     time.Time     `json:"scan_time"`
+	Duration     int           `json:"duration_minutes"`
+	Instance     string        `json:"instance"`
+	AISummary    string        `json:"ai_summary,omitempty"`
+	TotalScanned int           `json:"total_scanned"`
 }
 
 // ServiceScan summarizes the scan result for one service.
 type ServiceScan struct {
-	Name           string  `json:"name"`
-	Calls          int     `json:"calls"`
-	Errors         int     `json:"errors"`
-	ErrorRate      float64 `json:"error_rate"`
-	AnomalyCount   int     `json:"anomaly_count"`
-	HighestSeverity string `json:"highest_severity"`
+	Name            string  `json:"name"`
+	Calls           int     `json:"calls"`
+	Errors          int     `json:"errors"`
+	ErrorRate       float64 `json:"error_rate"`
+	AnomalyCount    int     `json:"anomaly_count"`
+	HighestSeverity string  `json:"highest_severity"`
 }
 
 // Options configures anomaly detection.
 type Options struct {
-	Duration       int     // minutes to analyze
-	Sensitivity    float64 // z-score threshold (default 2.0)
-	Service        string  // specific service to scan (empty = all)
-	WithAI         bool    // include AI analysis
-	AIProvider     ai.Provider
-	Quiet          bool    // only show anomalies (no OK services)
+	Duration    int     // minutes to analyze
+	Sensitivity float64 // z-score threshold (default 2.0)
+	Service     string  // specific service to scan (empty = all)
+	WithAI      bool    // include AI analysis
+	AIProvider  ai.Provider
+	Quiet       bool // only show anomalies (no OK services)
 }
 
 // DefaultSensitivity is the default z-score threshold.

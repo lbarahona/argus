@@ -96,11 +96,11 @@ type ActionItem struct {
 
 // MetricsSummary captures key metrics during the incident.
 type MetricsSummary struct {
-	PeakErrorRate  float64        `yaml:"peak_error_rate" json:"peak_error_rate"`
-	TotalErrors    int            `yaml:"total_errors" json:"total_errors"`
-	TotalCalls     int            `yaml:"total_calls" json:"total_calls"`
+	PeakErrorRate  float64         `yaml:"peak_error_rate" json:"peak_error_rate"`
+	TotalErrors    int             `yaml:"total_errors" json:"total_errors"`
+	TotalCalls     int             `yaml:"total_calls" json:"total_calls"`
 	ServiceMetrics []ServiceMetric `yaml:"service_metrics,omitempty" json:"service_metrics,omitempty"`
-	TopErrors      []ErrorSummary `yaml:"top_errors,omitempty" json:"top_errors,omitempty"`
+	TopErrors      []ErrorSummary  `yaml:"top_errors,omitempty" json:"top_errors,omitempty"`
 }
 
 // ServiceMetric captures per-service metrics during the incident.

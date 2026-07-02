@@ -302,10 +302,10 @@ func TestBuildTimeline(t *testing.T) {
 	now := time.Now()
 	resolved := now.Add(2 * time.Hour)
 	inc := &incident.Incident{
-		ID:        "inc-t1",
-		Title:     "Test incident",
-		Severity:  "major",
-		CreatedAt: now,
+		ID:         "inc-t1",
+		Title:      "Test incident",
+		Severity:   "major",
+		CreatedAt:  now,
 		ResolvedAt: &resolved,
 		Timeline: []incident.TimelineEntry{
 			{Timestamp: now.Add(5 * time.Minute), Status: "investigating", Message: "Investigating the issue"},
@@ -317,12 +317,12 @@ func TestBuildTimeline(t *testing.T) {
 
 	events := buildTimeline(inc)
 
-	assert.Len(t, events, 5) // 1 creation + 4 timeline entries
-	assert.Equal(t, "detection", events[0].Type)                        // creation
-	assert.Equal(t, "status_change", events[1].Type)                    // investigating
-	assert.Equal(t, "detection", events[2].Type)                        // has "alert"
-	assert.Equal(t, "mitigation", events[3].Type)                       // has "mitigat"
-	assert.Equal(t, "resolution", events[4].Type)                       // status=resolved
+	assert.Len(t, events, 5)                         // 1 creation + 4 timeline entries
+	assert.Equal(t, "detection", events[0].Type)     // creation
+	assert.Equal(t, "status_change", events[1].Type) // investigating
+	assert.Equal(t, "detection", events[2].Type)     // has "alert"
+	assert.Equal(t, "mitigation", events[3].Type)    // has "mitigat"
+	assert.Equal(t, "resolution", events[4].Type)    // status=resolved
 }
 
 func TestBuildTimeline_Empty(t *testing.T) {
@@ -490,8 +490,8 @@ func TestParseActionItems_NoPriority(t *testing.T) {
 	items := parseActionItems(text)
 
 	require.Len(t, items, 1)
-	assert.Equal(t, "P2", items[0].Priority) // default
-	assert.Equal(t, "prevent", items[0].Type)  // default
+	assert.Equal(t, "P2", items[0].Priority)  // default
+	assert.Equal(t, "prevent", items[0].Type) // default
 }
 
 // ──────────────────────────────────────────────

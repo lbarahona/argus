@@ -193,12 +193,12 @@ func (c *Client) ListReceivers(ctx context.Context) ([]Receiver, error) {
 
 // AlertListOptions controls filtering of the alert list.
 type AlertListOptions struct {
-	Active       *bool    // Show active alerts
-	Silenced     *bool    // Show silenced alerts
-	Inhibited    *bool    // Show inhibited alerts
-	Unprocessed  *bool    // Show unprocessed alerts
-	Filter       []string // Label filter (PromQL-style: alertname="Foo")
-	Receiver     string   // Filter by receiver
+	Active      *bool    // Show active alerts
+	Silenced    *bool    // Show silenced alerts
+	Inhibited   *bool    // Show inhibited alerts
+	Unprocessed *bool    // Show unprocessed alerts
+	Filter      []string // Label filter (PromQL-style: alertname="Foo")
+	Receiver    string   // Filter by receiver
 }
 
 // QueryParams converts options to URL query string.

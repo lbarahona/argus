@@ -62,10 +62,10 @@ const timelineFetchLimit = 500
 
 // Options configures timeline generation.
 type Options struct {
-	Duration     int    // minutes to look back
-	Service      string // optional: filter to a specific service
-	WithAI       bool   // generate AI narrative
-	AIProvider   ai.Provider
+	Duration   int    // minutes to look back
+	Service    string // optional: filter to a specific service
+	WithAI     bool   // generate AI narrative
+	AIProvider ai.Provider
 }
 
 // Generate builds an incident timeline from Signoz data.

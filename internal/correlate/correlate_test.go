@@ -13,7 +13,7 @@ import (
 // mockQuerier implements signoz.SignozQuerier for testing.
 type mockQuerier struct {
 	services []types.Service
-	logs     map[string][]types.LogEntry  // service → logs
+	logs     map[string][]types.LogEntry   // service → logs
 	traces   map[string][]types.TraceEntry // service → traces
 }
 
@@ -208,7 +208,7 @@ func TestClusterScoring(t *testing.T) {
 			Timestamp: base.Add(time.Duration(i) * time.Second),
 			Service:   svc,
 			IsError:   true,
-			Source:     "logs",
+			Source:    "logs",
 		}
 	}
 

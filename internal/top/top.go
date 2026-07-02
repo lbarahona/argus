@@ -34,7 +34,7 @@ type ServiceInfo struct {
 	Calls        int
 	Errors       int
 	ErrorRate    float64
-	RecentErrors int // errors from logs in the duration window
+	RecentErrors int    // errors from logs in the duration window
 	Severity     string // "critical", "warning", "healthy"
 }
 
@@ -170,4 +170,3 @@ func truncate(s string, n int) string {
 	}
 	return s
 }
-

@@ -49,9 +49,9 @@ type ErrorPattern struct {
 
 // Options configures report generation.
 type Options struct {
-	Duration     int // minutes
-	WithAI       bool
-	AIProvider   ai.Provider
+	Duration   int // minutes
+	WithAI     bool
+	AIProvider ai.Provider
 }
 
 // Generate creates a health report from Signoz data.
@@ -329,4 +329,3 @@ func truncate(s string, n int) string {
 	}
 	return s
 }
-

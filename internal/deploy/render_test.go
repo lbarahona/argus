@@ -44,12 +44,12 @@ func TestRenderTerminal(t *testing.T) {
 			},
 		},
 		Summary: Summary{
-			TotalChanges:    1,
+			TotalChanges:     1,
 			ServicesAffected: 1,
-			MostImpacted:    "payment-api",
-			OverallImpact:   ImpactNegative,
-			OverallScore:    -35.5,
-			Negative:        1,
+			MostImpacted:     "payment-api",
+			OverallImpact:    ImpactNegative,
+			OverallScore:     -35.5,
+			Negative:         1,
 		},
 	}
 
@@ -120,12 +120,12 @@ func TestRenderMarkdown(t *testing.T) {
 			},
 		},
 		Summary: Summary{
-			TotalChanges:    1,
+			TotalChanges:     1,
 			ServicesAffected: 1,
-			OverallImpact:   ImpactNegative,
-			OverallScore:    -20,
-			MostImpacted:    "api",
-			Negative:        1,
+			OverallImpact:    ImpactNegative,
+			OverallScore:     -20,
+			MostImpacted:     "api",
+			Negative:         1,
 		},
 		AISummary: "This looks like a deployment regression.",
 	}

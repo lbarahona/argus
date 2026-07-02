@@ -17,11 +17,11 @@ import (
 
 // Options configures forecast generation.
 type Options struct {
-	Duration     int    // minutes of historical data to analyze
-	Horizon      int    // minutes to forecast into the future
-	Service      string // optional: filter to specific service
-	WithAI       bool   // include AI narrative
-	AIProvider   ai.Provider
+	Duration   int    // minutes of historical data to analyze
+	Horizon    int    // minutes to forecast into the future
+	Service    string // optional: filter to specific service
+	WithAI     bool   // include AI narrative
+	AIProvider ai.Provider
 }
 
 // ServiceForecast holds prediction data for a single service.
@@ -29,18 +29,18 @@ type ServiceForecast struct {
 	Name string
 
 	// Current metrics
-	CurrentErrors   int
-	CurrentCalls    int
-	CurrentRate     float64
-	CurrentP99      float64 // ms, from traces
+	CurrentErrors int
+	CurrentCalls  int
+	CurrentRate   float64
+	CurrentP99    float64 // ms, from traces
 
 	// Trend data points (time-bucketed)
 	ErrorBuckets []DataPoint
 	CallBuckets  []DataPoint
 
 	// Linear regression results
-	ErrorTrend   Trend
-	RateTrend    Trend
+	ErrorTrend Trend
+	RateTrend  Trend
 
 	// Predictions
 	PredictedRate   float64 // error rate at horizon

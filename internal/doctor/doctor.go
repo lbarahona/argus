@@ -518,8 +518,8 @@ func checkAnthropicConnectivity(ctx context.Context, cfg *types.Config) CheckRes
 
 	if cfg == nil {
 		return CheckResult{
-			Name:   name,
-			Status: StatusSkip,
+			Name:    name,
+			Status:  StatusSkip,
 			Message: "No config — skipping connectivity test",
 		}
 	}
@@ -578,8 +578,8 @@ func checkAnthropicConnectivity(ctx context.Context, cfg *types.Config) CheckRes
 	}
 	if key == "" {
 		return CheckResult{
-			Name:   name,
-			Status: StatusSkip,
+			Name:    name,
+			Status:  StatusSkip,
 			Message: "No API key — skipping connectivity test",
 		}
 	}

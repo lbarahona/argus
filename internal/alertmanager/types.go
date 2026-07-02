@@ -76,16 +76,16 @@ type SilenceResponse struct {
 
 // AMStatus represents Alertmanager cluster status from /api/v2/status.
 type AMStatus struct {
-	Cluster   ClusterStatus `json:"cluster"`
-	VersionInfo VersionInfo `json:"versionInfo"`
-	Uptime    time.Time     `json:"uptime"`
+	Cluster     ClusterStatus `json:"cluster"`
+	VersionInfo VersionInfo   `json:"versionInfo"`
+	Uptime      time.Time     `json:"uptime"`
 }
 
 // ClusterStatus holds cluster peer info.
 type ClusterStatus struct {
-	Name   string   `json:"name"`
-	Status string   `json:"status"`
-	Peers  []Peer   `json:"peers"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Peers  []Peer `json:"peers"`
 }
 
 // Peer represents a cluster peer.
@@ -123,11 +123,11 @@ func (c AlertmanagerConfig) IsConfigured() bool {
 
 // AlertSummary provides a quick overview of alert state.
 type AlertSummary struct {
-	TotalAlerts   int
-	ActiveAlerts  int
+	TotalAlerts      int
+	ActiveAlerts     int
 	SuppressedAlerts int
-	FiringByName  map[string]int // alertname -> count
-	BySeverity    map[string]int // severity -> count
+	FiringByName     map[string]int // alertname -> count
+	BySeverity       map[string]int // severity -> count
 }
 
 // BuildSummary creates a summary from a list of alerts.

@@ -16,16 +16,16 @@ func TestFormatAlerts_Empty(t *testing.T) {
 func TestFormatAlerts_Active(t *testing.T) {
 	alerts := []Alert{
 		{
-			Status:   AlertStatus{State: "active"},
-			Labels:   map[string]string{"alertname": "HighLatency", "severity": "critical", "instance": "web-1"},
+			Status:      AlertStatus{State: "active"},
+			Labels:      map[string]string{"alertname": "HighLatency", "severity": "critical", "instance": "web-1"},
 			Annotations: map[string]string{"summary": "Latency is above 500ms"},
-			StartsAt: time.Now().Add(-30 * time.Minute),
+			StartsAt:    time.Now().Add(-30 * time.Minute),
 		},
 		{
-			Status:   AlertStatus{State: "active"},
-			Labels:   map[string]string{"alertname": "DiskFull", "severity": "warning", "instance": "db-1"},
+			Status:      AlertStatus{State: "active"},
+			Labels:      map[string]string{"alertname": "DiskFull", "severity": "warning", "instance": "db-1"},
 			Annotations: map[string]string{"description": "Disk usage above 90% on db-1 volume /data"},
-			StartsAt: time.Now().Add(-2 * time.Hour),
+			StartsAt:    time.Now().Add(-2 * time.Hour),
 		},
 	}
 

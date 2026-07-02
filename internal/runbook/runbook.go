@@ -42,13 +42,13 @@ type Step struct {
 
 // RunLog represents a runbook execution log
 type RunLog struct {
-	RunbookID   string        `yaml:"runbook_id"`
-	RunbookName string        `yaml:"runbook_name"`
-	StartedAt   time.Time     `yaml:"started_at"`
-	CompletedAt time.Time     `yaml:"completed_at,omitempty"`
-	Status      string        `yaml:"status"` // running, completed, failed, aborted
-	Operator    string        `yaml:"operator,omitempty"`
-	StepResults []StepResult  `yaml:"step_results"`
+	RunbookID   string       `yaml:"runbook_id"`
+	RunbookName string       `yaml:"runbook_name"`
+	StartedAt   time.Time    `yaml:"started_at"`
+	CompletedAt time.Time    `yaml:"completed_at,omitempty"`
+	Status      string       `yaml:"status"` // running, completed, failed, aborted
+	Operator    string       `yaml:"operator,omitempty"`
+	StepResults []StepResult `yaml:"step_results"`
 }
 
 // StepResult records the outcome of executing a step

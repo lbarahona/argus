@@ -28,15 +28,15 @@ type ServiceQuerier interface {
 
 // Options configures the deployment guard check.
 type Options struct {
-	Service      string // optional: check specific service only
-	Strict       bool   // strict mode: lower thresholds, block on warnings
-	Format       string // "terminal", "markdown", or "json"
-	WithAI       bool   // include AI deployment advisory
-	AIProvider   ai.Provider
+	Service    string // optional: check specific service only
+	Strict     bool   // strict mode: lower thresholds, block on warnings
+	Format     string // "terminal", "markdown", or "json"
+	WithAI     bool   // include AI deployment advisory
+	AIProvider ai.Provider
 	// Thresholds (overridable, zero = defaults)
-	MaxErrorRate   float64 // max acceptable error rate %
-	MaxP99Latency  float64 // max acceptable P99 ms
-	MinCallVolume  int     // minimum calls to consider service active
+	MaxErrorRate  float64 // max acceptable error rate %
+	MaxP99Latency float64 // max acceptable P99 ms
+	MinCallVolume int     // minimum calls to consider service active
 }
 
 // Verdict is the final deploy/no-deploy decision.
@@ -72,7 +72,7 @@ type GuardReport struct {
 	Timestamp  string               `json:"timestamp"`
 	Instance   string               `json:"instance"`
 	Verdict    Verdict              `json:"verdict"`
-	Score      int                  `json:"score"`       // 0-100 deployment confidence
+	Score      int                  `json:"score"` // 0-100 deployment confidence
 	Checks     []CheckResult        `json:"checks"`
 	Services   []ServiceGuardResult `json:"services"`
 	Summary    string               `json:"summary"`
@@ -85,15 +85,15 @@ type GuardReport struct {
 // ──────────────────────────────────────────────
 
 const (
-	defaultMaxErrorRate      = 5.0  // 5% error rate → block
-	defaultWarnErrorRate     = 1.0  // 1% error rate → caution
-	defaultMaxP99Latency     = 5000 // 5s P99 → block
-	defaultWarnP99Latency    = 2000 // 2s P99 → caution
-	defaultMinCallVolume     = 10   // ignore services with < 10 calls
-	strictMaxErrorRate       = 1.0  // strict: 1% → block
-	strictWarnErrorRate      = 0.5  // strict: 0.5% → caution
-	strictMaxP99Latency      = 2000 // strict: 2s → block
-	strictWarnP99Latency     = 1000 // strict: 1s → caution
+	defaultMaxErrorRate   = 5.0  // 5% error rate → block
+	defaultWarnErrorRate  = 1.0  // 1% error rate → caution
+	defaultMaxP99Latency  = 5000 // 5s P99 → block
+	defaultWarnP99Latency = 2000 // 2s P99 → caution
+	defaultMinCallVolume  = 10   // ignore services with < 10 calls
+	strictMaxErrorRate    = 1.0  // strict: 1% → block
+	strictWarnErrorRate   = 0.5  // strict: 0.5% → caution
+	strictMaxP99Latency   = 2000 // strict: 2s → block
+	strictWarnP99Latency  = 1000 // strict: 1s → caution
 )
 
 // ──────────────────────────────────────────────

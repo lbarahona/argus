@@ -43,12 +43,12 @@ const (
 
 // Options configures deployment detection.
 type Options struct {
-	Duration     int    // minutes of data to analyze (default: 360 = 6h)
-	Buckets      int    // number of time buckets (default: 12)
-	Service      string // optional: focus on one service
-	Sensitivity  string // low, medium, high (default: medium)
-	WithAI       bool   // include AI analysis
-	AIProvider   ai.Provider
+	Duration    int    // minutes of data to analyze (default: 360 = 6h)
+	Buckets     int    // number of time buckets (default: 12)
+	Service     string // optional: focus on one service
+	Sensitivity string // low, medium, high (default: medium)
+	WithAI      bool   // include AI analysis
+	AIProvider  ai.Provider
 }
 
 // ChangePoint represents a detected behavioral change in a service.
@@ -67,7 +67,7 @@ type ChangePoint struct {
 // ServiceImpact summarizes the deployment impact on a single service.
 type ServiceImpact struct {
 	Name         string        `json:"name"`
-	Impact       string        `json:"impact"` // positive, negative, neutral, mixed
+	Impact       string        `json:"impact"`       // positive, negative, neutral, mixed
 	ImpactScore  float64       `json:"impact_score"` // -100 to +100
 	Changes      []ChangePoint `json:"changes"`
 	ErrorsBefore int           `json:"errors_before"`
@@ -80,15 +80,15 @@ type ServiceImpact struct {
 
 // Result holds the complete deployment detection analysis.
 type Result struct {
-	Instance       string          `json:"instance"`
-	Duration       int             `json:"duration_minutes"`
-	Buckets        int             `json:"buckets"`
-	Sensitivity    string          `json:"sensitivity"`
-	Services       []ServiceImpact `json:"services"`
-	ChangePoints   []ChangePoint   `json:"change_points"`
-	Summary        Summary         `json:"summary"`
-	AISummary      string          `json:"ai_summary,omitempty"`
-	GeneratedAt    time.Time       `json:"generated_at"`
+	Instance     string          `json:"instance"`
+	Duration     int             `json:"duration_minutes"`
+	Buckets      int             `json:"buckets"`
+	Sensitivity  string          `json:"sensitivity"`
+	Services     []ServiceImpact `json:"services"`
+	ChangePoints []ChangePoint   `json:"change_points"`
+	Summary      Summary         `json:"summary"`
+	AISummary    string          `json:"ai_summary,omitempty"`
+	GeneratedAt  time.Time       `json:"generated_at"`
 
 	// Truncated is true when the log fetch hit its query limit, meaning
 	// older buckets may undercount and change points may be skewed toward
@@ -111,15 +111,15 @@ const deployTraceFetchLimit = 500
 
 // Summary provides a high-level overview.
 type Summary struct {
-	TotalChanges   int     `json:"total_changes"`
-	ServicesAffected int   `json:"services_affected"`
-	MostImpacted   string  `json:"most_impacted"`
-	OverallImpact  string  `json:"overall_impact"`
-	OverallScore   float64 `json:"overall_score"` // -100 to +100
-	Positive       int     `json:"positive"`
-	Negative       int     `json:"negative"`
-	Neutral        int     `json:"neutral"`
-	Mixed          int     `json:"mixed"`
+	TotalChanges     int     `json:"total_changes"`
+	ServicesAffected int     `json:"services_affected"`
+	MostImpacted     string  `json:"most_impacted"`
+	OverallImpact    string  `json:"overall_impact"`
+	OverallScore     float64 `json:"overall_score"` // -100 to +100
+	Positive         int     `json:"positive"`
+	Negative         int     `json:"negative"`
+	Neutral          int     `json:"neutral"`
+	Mixed            int     `json:"mixed"`
 }
 
 // thresholds returns sensitivity-dependent thresholds.
