@@ -263,6 +263,22 @@ Think of it as having a senior SRE look at all your dashboards at once.`,
 	return cmd
 }
 
+func analyzeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "analyze",
+		Short: "Investigate system behavior: anomalies, timelines, correlations, changes",
+		Long: `Analysis commands that scan services, error logs, and traces:
+
+  anomalies   z-score anomaly detection across services
+  timeline    chronological incident-style event timeline
+  correlate   cross-signal correlation and error propagation
+  changes     deployment/change-point detection
+  diff        error-count comparison between two time windows`,
+	}
+	cmd.AddCommand(anomalyCmd(), timelineCmd(), correlateCmd(), deployCmd(), diffCmd())
+	return cmd
+}
+
 func anomalyCmd() *cobra.Command {
 	var instance string
 	var duration int
@@ -272,7 +288,7 @@ func anomalyCmd() *cobra.Command {
 	var quiet bool
 
 	cmd := &cobra.Command{
-		Use:   "anomaly",
+		Use:   "anomalies",
 		Short: "Detect anomalies across services",
 		Long:  "Automatically detect anomalies in error rates, log patterns, and latency using statistical analysis (z-score, percentiles) with optional AI root cause analysis.",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -377,11 +393,11 @@ Analyzes logs, traces, and service health to detect:
   - Service degradation (high error rates)
 
 Use --ai to generate an AI-powered incident narrative.`,
-		Example: `  argus timeline
-  argus timeline --duration 120
-  argus timeline --service api-service --ai
-  argus timeline --format markdown > incident-report.md
-  argus timeline -i production --duration 30 --ai`,
+		Example: `  argus analyze timeline
+  argus analyze timeline --duration 120
+  argus analyze timeline --service api-service --ai
+  argus analyze timeline --format markdown > incident-report.md
+  argus analyze timeline -i production --duration 30 --ai`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateFormat(format); err != nil {
 				return err
@@ -448,12 +464,12 @@ correlations, error propagation patterns, and causal chains.
 Unlike 'explain' (which focuses on one service), 'correlate' looks at the
 entire system to find how issues spread between services and identifies
 the root cause in a cascade.`,
-		Example: `  argus correlate
-  argus correlate --service api-gateway
-  argus correlate --duration 30 --ai
-  argus correlate --bucket 30 --min-events 5
-  argus correlate --format markdown
-  argus correlate stack --duration 30`,
+		Example: `  argus analyze correlate
+  argus analyze correlate --service api-gateway
+  argus analyze correlate --duration 30 --ai
+  argus analyze correlate --bucket 30 --min-events 5
+  argus analyze correlate --format markdown
+  argus analyze correlate stack --duration 30`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sctx, err := newSignozContext(instance)
 			if err != nil {
@@ -717,7 +733,7 @@ func deployCmd() *cobra.Command {
 	var withAI bool
 
 	cmd := &cobra.Command{
-		Use:   "deploy",
+		Use:   "changes",
 		Short: "Detect deployments from behavioral changes and analyze impact",
 		Long: `Analyze service behavior to detect deployment-like changes and assess their impact.
 
@@ -736,10 +752,10 @@ Sensitivity levels:
   low    — Only major changes (50%+ error rate shift)
 
 Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
-		Example: `  argus deploy
-  argus deploy --duration 720 --sensitivity high
-  argus deploy -s payment-api --ai
-  argus deploy -f markdown > deploy-report.md`,
+		Example: `  argus analyze changes
+  argus analyze changes --duration 720 --sensitivity high
+  argus analyze changes -s payment-api --ai
+  argus analyze changes -f markdown > deploy-report.md`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateFormat(format); err != nil {
 				return err
