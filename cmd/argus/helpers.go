@@ -3,11 +3,15 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/signoz"
 	"github.com/lbarahona/argus/pkg/types"
+	"github.com/spf13/cobra"
 )
 
 // signozContext bundles what every Signoz-backed command needs: the loaded
@@ -76,4 +80,80 @@ func renderOutput(format string, terminal func() error, markdown func() error, j
 	default:
 		return fmt.Errorf("unknown format %q (valid: terminal, markdown, json)", format)
 	}
+}
+
+// addInstanceFlag registers -i/--instance with completion from the config's
+// instance names.
+func addInstanceFlag(cmd *cobra.Command, target *string) {
+	cmd.Flags().StringVarP(target, "instance", "i", "", "Signoz instance name (default: configured default)")
+	_ = cmd.RegisterFlagCompletionFunc("instance", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		cfg, err := config.Load()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		names := make([]string, 0, len(cfg.Instances))
+		for name := range cfg.Instances {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		return names, cobra.ShellCompDirectiveNoFileComp
+	})
+}
+
+// validFormats matches renderOutput's accepted values.
+var validFormats = []string{"terminal", "markdown", "json"}
+
+// addFormatFlag registers -f/--format with completion. def preserves each
+// command's existing default string.
+func addFormatFlag(cmd *cobra.Command, target *string, def string) {
+	cmd.Flags().StringVarP(target, "format", "f", def, "Output format: terminal, markdown, json")
+	_ = cmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return validFormats, cobra.ShellCompDirectiveNoFileComp
+	})
+}
+
+// validateFormat rejects unknown formats before any expensive work happens.
+// renderOutput re-validates at render time; this is the eager gate.
+func validateFormat(format string) error {
+	switch format {
+	case "", "terminal", "text", "table", "markdown", "md", "json":
+		return nil
+	default:
+		return fmt.Errorf("unknown format %q (valid: terminal, markdown, json)", format)
+	}
+}
+
+// minutesValue is a pflag.Value accepting bare minutes ("90") or Go-style
+// durations ("90m", "2h", "1h30m"), stored as whole minutes.
+type minutesValue int
+
+func newMinutesValue(def int, p *int) *minutesValue {
+	*p = def
+	return (*minutesValue)(p)
+}
+
+func (m *minutesValue) String() string { return strconv.Itoa(int(*m)) }
+func (m *minutesValue) Type() string   { return "duration" }
+func (m *minutesValue) Set(s string) error {
+	if n, err := strconv.Atoi(s); err == nil {
+		if n < 0 {
+			return fmt.Errorf("duration must be positive")
+		}
+		*m = minutesValue(n)
+		return nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("invalid duration %q (use minutes like 90, or 90m / 2h)", s)
+	}
+	if d < 0 {
+		return fmt.Errorf("duration must be positive")
+	}
+	*m = minutesValue(int(d.Minutes()))
+	return nil
+}
+
+// addDurationFlag registers -d/--duration accepting minutes or human strings.
+func addDurationFlag(cmd *cobra.Command, target *int, def int, help string) {
+	cmd.Flags().VarP(newMinutesValue(def, target), "duration", "d", help)
 }

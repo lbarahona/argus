@@ -5,9 +5,11 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/lbarahona/argus/pkg/types"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -196,4 +198,162 @@ func TestRenderOutput_JSONMarshalErrorPropagates(t *testing.T) {
 	// jsonMarshal error path.
 	err := renderOutput("json", nil, nil, func() {})
 	require.Error(t, err)
+}
+
+func TestMinutesValue_Set(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    int
+		wantErr bool
+	}{
+		{name: "bare minutes", input: "90", want: 90},
+		{name: "minutes suffix", input: "90m", want: 90},
+		{name: "hours suffix", input: "2h", want: 120},
+		{name: "hours and minutes", input: "1h30m", want: 90},
+		{name: "junk", input: "junk", wantErr: true},
+		{name: "negative bare", input: "-5", wantErr: true},
+		{name: "negative duration", input: "-5m", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var target int
+			mv := newMinutesValue(0, &target)
+			err := mv.Set(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, target)
+			assert.Equal(t, tt.want, int(*mv))
+			assert.Equal(t, strconv.Itoa(tt.want), mv.String())
+		})
+	}
+}
+
+func TestNewMinutesValue_DefaultPreservedWhenUnset(t *testing.T) {
+	var target int
+	mv := newMinutesValue(42, &target)
+	assert.Equal(t, 42, target)
+	assert.Equal(t, "42", mv.String())
+	assert.Equal(t, "duration", mv.Type())
+}
+
+func TestAddDurationFlag_ParsesFromCommandLine(t *testing.T) {
+	cmd := &cobra.Command{Use: "test", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
+	var duration int
+	addDurationFlag(cmd, &duration, 60, "test duration flag")
+
+	assert.Equal(t, 60, duration)
+
+	cmd.SetArgs([]string{"--duration", "2h"})
+	require.NoError(t, cmd.Execute())
+	assert.Equal(t, 120, duration)
+}
+
+func TestValidateFormat_Synonyms(t *testing.T) {
+	for _, format := range []string{"", "terminal", "text", "table", "markdown", "md", "json"} {
+		t.Run(format, func(t *testing.T) {
+			assert.NoError(t, validateFormat(format))
+		})
+	}
+}
+
+func TestValidateFormat_UnknownErrors(t *testing.T) {
+	err := validateFormat("bogus")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown format "bogus"`)
+	assert.Contains(t, err.Error(), "valid: terminal, markdown, json")
+}
+
+func TestAddInstanceFlag_RegistersWithoutPanic(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	var instance string
+
+	assert.NotPanics(t, func() {
+		addInstanceFlag(cmd, &instance)
+	})
+
+	flag := cmd.Flags().Lookup("instance")
+	require.NotNil(t, flag)
+	assert.Equal(t, "i", flag.Shorthand)
+}
+
+func TestAddInstanceFlag_CompletionReturnsConfiguredInstances(t *testing.T) {
+	setupTestConfig(t, newSignozContextTestConfig())
+
+	cmd := &cobra.Command{Use: "test"}
+	var instance string
+	addInstanceFlag(cmd, &instance)
+
+	completionFunc, exists := cmd.GetFlagCompletionFunc("instance")
+	require.True(t, exists)
+	completions, directive := completionFunc(cmd, nil, "")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.ElementsMatch(t, []string{"prod", "staging"}, completions)
+}
+
+func TestAddInstanceFlag_CompletionHandlesMissingConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	cmd := &cobra.Command{Use: "test"}
+	var instance string
+	addInstanceFlag(cmd, &instance)
+
+	// config.Load() returns an empty (non-error) config when the file is
+	// simply absent, so completions should be an empty, non-nil slice.
+	completionFunc, exists := cmd.GetFlagCompletionFunc("instance")
+	require.True(t, exists)
+	completions, directive := completionFunc(cmd, nil, "")
+	assert.Empty(t, completions)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestAddInstanceFlag_CompletionHandlesUnreadableConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	argusDir := tmpDir + "/.argus"
+	require.NoError(t, os.MkdirAll(argusDir, 0700))
+	// Malformed YAML causes config.Load() to return an error, which the
+	// completion func must handle gracefully instead of panicking.
+	require.NoError(t, os.WriteFile(argusDir+"/config.yaml", []byte("not: valid: yaml: [["), 0600))
+
+	cmd := &cobra.Command{Use: "test"}
+	var instance string
+	addInstanceFlag(cmd, &instance)
+
+	completionFunc, exists := cmd.GetFlagCompletionFunc("instance")
+	require.True(t, exists)
+	completions, directive := completionFunc(cmd, nil, "")
+	assert.Nil(t, completions)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestAddFormatFlag_RegistersWithoutPanicAndDefault(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	var format string
+
+	assert.NotPanics(t, func() {
+		addFormatFlag(cmd, &format, "terminal")
+	})
+
+	flag := cmd.Flags().Lookup("format")
+	require.NotNil(t, flag)
+	assert.Equal(t, "f", flag.Shorthand)
+	assert.Equal(t, "terminal", format)
+}
+
+func TestAddFormatFlag_CompletionReturnsValidFormats(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	var format string
+	addFormatFlag(cmd, &format, "")
+
+	completionFunc, exists := cmd.GetFlagCompletionFunc("format")
+	require.True(t, exists)
+	completions, directive := completionFunc(cmd, nil, "")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Equal(t, validFormats, completions)
 }
