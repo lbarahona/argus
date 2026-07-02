@@ -20,7 +20,6 @@ import (
 	"github.com/lbarahona/argus/internal/output"
 	"github.com/lbarahona/argus/internal/report"
 	"github.com/lbarahona/argus/internal/scorecard"
-	"github.com/lbarahona/argus/internal/signoz"
 	"github.com/lbarahona/argus/internal/timeline"
 	topkg "github.com/lbarahona/argus/internal/top"
 	"github.com/lbarahona/argus/internal/watch"
@@ -38,22 +37,16 @@ func reportCmd() *cobra.Command {
 		Short: "Generate a health report for shift handoffs",
 		Long:  "Compile a comprehensive health report including service status, error patterns, and optional AI summary. Perfect for shift handoffs and incident reviews.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(cfg)
+			provider, _ := getAIProvider(sctx.cfg)
 
-			inst, instKey, err := config.GetInstance(cfg, instance)
-			if err != nil {
-				return err
-			}
-
-			client := signoz.New(*inst)
 			ctx := context.Background()
 			fmt.Printf("%s Generating health report...\n", output.MutedStyle.Render("⏳"))
 
-			r, err := report.Generate(ctx, client, instKey, report.Options{
+			r, err := report.Generate(ctx, sctx.client, sctx.instKey, report.Options{
 				Duration:   duration,
 				WithAI:     withAI,
 				Format:     format,
@@ -91,11 +84,6 @@ func topCmd() *cobra.Command {
 		Short: "Show top services by errors, like htop for your services",
 		Long:  "Display a ranked view of services sorted by errors, error rate, or call volume. Quick triage tool for on-call SREs.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
-			if err != nil {
-				return err
-			}
-
 			var sf topkg.SortField
 			switch strings.ToLower(sortBy) {
 			case "errors":
@@ -110,16 +98,15 @@ func topCmd() *cobra.Command {
 				sf = topkg.SortByErrors
 			}
 
-			inst, instKey, err := config.GetInstance(cfg, instance)
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
 
-			client := signoz.New(*inst)
 			ctx := context.Background()
 			fmt.Printf("%s Fetching service data...\n", output.MutedStyle.Render("⏳"))
 
-			result, err := topkg.Run(ctx, client, instKey, topkg.Options{
+			result, err := topkg.Run(ctx, sctx.client, sctx.instKey, topkg.Options{
 				Limit:    limit,
 				SortBy:   sf,
 				Duration: duration,
@@ -150,21 +137,15 @@ func diffCmd() *cobra.Command {
 		Short: "Compare error rates between two time windows",
 		Long:  "Compare the current time window against the previous window to detect anomalies. Shows which services are degrading, improving, or stable.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
 
-			inst, instKey, err := config.GetInstance(cfg, instance)
-			if err != nil {
-				return err
-			}
-
-			client := signoz.New(*inst)
 			ctx := context.Background()
 			fmt.Printf("%s Comparing time windows...\n", output.MutedStyle.Render("⏳"))
 
-			result, err := diff.Compare(ctx, client, instKey, diff.Options{
+			result, err := diff.Compare(ctx, sctx.client, sctx.instKey, diff.Options{
 				Duration: duration,
 			})
 			if err != nil {
@@ -204,21 +185,15 @@ Thresholds can be customized. Alerts include:
   argus watch --error-rate-warn 3 --error-rate-crit 10
   argus watch -i production --p99-warn 1000`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
 
-			inst, instKey, err := config.GetInstance(cfg, instance)
-			if err != nil {
-				return err
+			instName := sctx.instKey
+			if sctx.inst.Name != "" {
+				instName = sctx.inst.Name
 			}
-
-			instName := instKey
-			if inst.Name != "" {
-				instName = inst.Name
-			}
-			client := signoz.New(*inst)
 			thresholds := watch.DefaultThresholds()
 			if cmd.Flags().Changed("error-rate-warn") {
 				thresholds.ErrorRateWarning = errWarn
@@ -239,7 +214,7 @@ Thresholds can be customized. Alerts include:
 			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer cancel()
 
-			w := watch.New(client, instName, time.Duration(interval)*time.Second, thresholds, os.Stdout)
+			w := watch.New(sctx.client, instName, time.Duration(interval)*time.Second, thresholds, os.Stdout)
 			return w.Run(ctx)
 		},
 	}
@@ -280,17 +255,16 @@ Think of it as having a senior SRE look at all your dashboards at once.`,
 			if !hasAIConfig(cfg) {
 				return fmt.Errorf("AI provider not configured. Run: argus config init")
 			}
-			inst, instKey, err := config.GetInstance(cfg, instance)
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
-			client := signoz.New(*inst)
 			ctx := context.Background()
 
 			fmt.Printf("%s Collecting observability data for %s from %s...\n",
-				output.MutedStyle.Render("🔍"), output.AccentStyle.Render(args[0]), output.AccentStyle.Render(instKey))
+				output.MutedStyle.Render("🔍"), output.AccentStyle.Render(args[0]), output.AccentStyle.Render(sctx.instKey))
 
-			data, err := explain.Collect(ctx, client, instKey, explain.Options{
+			data, err := explain.Collect(ctx, sctx.client, sctx.instKey, explain.Options{
 				Service:    args[0],
 				Duration:   duration,
 				AIProvider: provider,
@@ -329,18 +303,12 @@ func anomalyCmd() *cobra.Command {
 		Short: "Detect anomalies across services",
 		Long:  "Automatically detect anomalies in error rates, log patterns, and latency using statistical analysis (z-score, percentiles) with optional AI root cause analysis.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(cfg)
+			provider, _ := getAIProvider(sctx.cfg)
 
-			inst, instKey, err := config.GetInstance(cfg, instance)
-			if err != nil {
-				return err
-			}
-
-			client := signoz.New(*inst)
 			ctx := context.Background()
 
 			opts := anomaly.Options{
@@ -354,7 +322,7 @@ func anomalyCmd() *cobra.Command {
 
 			fmt.Printf("🔍 Scanning for anomalies (last %d min, sensitivity=%.1f)...\n\n", duration, sensitivity)
 
-			result, err := anomaly.Detect(ctx, client, instKey, opts)
+			result, err := anomaly.Detect(ctx, sctx.client, sctx.instKey, opts)
 			if err != nil {
 				return err
 			}
@@ -436,16 +404,11 @@ Use --ai to generate an AI-powered incident narrative.`,
   argus timeline --format markdown > incident-report.md
   argus timeline -i production --duration 30 --ai`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(cfg)
-			inst, instKey, err := config.GetInstance(cfg, instance)
-			if err != nil {
-				return err
-			}
-			client := signoz.New(*inst)
+			provider, _ := getAIProvider(sctx.cfg)
 			ctx := context.Background()
 
 			opts := timeline.Options{
@@ -456,11 +419,11 @@ Use --ai to generate an AI-powered incident narrative.`,
 				AIProvider: provider,
 			}
 
-			if withAI && !hasAIConfig(cfg) {
+			if withAI && !hasAIConfig(sctx.cfg) {
 				return fmt.Errorf("AI provider not configured. Run: argus config init")
 			}
 
-			tl, err := timeline.Generate(ctx, client, instKey, opts)
+			tl, err := timeline.Generate(ctx, sctx.client, sctx.instKey, opts)
 			if err != nil {
 				return err
 			}
@@ -510,17 +473,12 @@ the root cause in a cascade.`,
   argus correlate --markdown
   argus correlate stack --duration 30`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(cfg)
+			provider, _ := getAIProvider(sctx.cfg)
 
-			inst, instKey, err := config.GetInstance(cfg, instance)
-			if err != nil {
-				return err
-			}
-			client := signoz.New(*inst)
 			ctx := context.Background()
 
 			opts := correlate.Options{
@@ -532,18 +490,18 @@ the root cause in a cascade.`,
 			}
 
 			if useAI {
-				if !hasAIConfig(cfg) {
+				if !hasAIConfig(sctx.cfg) {
 					return fmt.Errorf("AI provider not configured. Run: argus config init")
 				}
 				fmt.Printf("%s Collecting signals from %s...\n",
-					output.MutedStyle.Render("🔍"), output.AccentStyle.Render(instKey))
-				return correlate.RunWithAI(ctx, client, instKey, opts, os.Stdout)
+					output.MutedStyle.Render("🔍"), output.AccentStyle.Render(sctx.instKey))
+				return correlate.RunWithAI(ctx, sctx.client, sctx.instKey, opts, os.Stdout)
 			}
 
 			fmt.Printf("%s Collecting signals from %s...\n",
-				output.MutedStyle.Render("🔍"), output.AccentStyle.Render(instKey))
+				output.MutedStyle.Render("🔍"), output.AccentStyle.Render(sctx.instKey))
 
-			result, err := correlate.Run(ctx, client, instKey, opts)
+			result, err := correlate.Run(ctx, sctx.client, sctx.instKey, opts)
 			if err != nil {
 				return err
 			}
@@ -646,22 +604,16 @@ func scorecardCmd() *cobra.Command {
 		Short: "Generate a service reliability scorecard",
 		Long:  "Grade each service on reliability (error rate, latency, trends) and produce an overall score. Use for weekly reviews, shift handoffs, or SLA reporting.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(cfg)
+			provider, _ := getAIProvider(sctx.cfg)
 
-			inst, instKey, err := config.GetInstance(cfg, instance)
-			if err != nil {
-				return err
-			}
-
-			client := signoz.New(*inst)
 			ctx := context.Background()
 			fmt.Printf("%s Generating reliability scorecard...\n", output.MutedStyle.Render("⏳"))
 
-			sc, err := scorecard.Generate(ctx, client, instKey, scorecard.Options{
+			sc, err := scorecard.Generate(ctx, sctx.client, sctx.instKey, scorecard.Options{
 				Duration:   duration,
 				Service:    service,
 				WithAI:     withAI,
@@ -714,24 +666,18 @@ Risk levels:
   argus forecast -s api-service --ai
   argus forecast -f markdown > forecast.md`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(cfg)
+			provider, _ := getAIProvider(sctx.cfg)
 
-			inst, instKey, err := config.GetInstance(cfg, instance)
-			if err != nil {
-				return err
-			}
-
-			client := signoz.New(*inst)
 			ctx := context.Background()
 
 			fmt.Printf("%s Analyzing trends from %s (last %dm, forecasting %dm)...\n",
-				output.MutedStyle.Render("🔮"), output.AccentStyle.Render(instKey), duration, horizon)
+				output.MutedStyle.Render("🔮"), output.AccentStyle.Render(sctx.instKey), duration, horizon)
 
-			r, err := forecast.Generate(ctx, client, instKey, forecast.Options{
+			r, err := forecast.Generate(ctx, sctx.client, sctx.instKey, forecast.Options{
 				Duration:   duration,
 				Horizon:    horizon,
 				Service:    service,
@@ -774,24 +720,18 @@ func depsCmd() *cobra.Command {
 		Short: "Map service dependencies from trace data",
 		Long:  "Discover upstream and downstream service dependencies by analyzing trace spans. Shows call volumes, error rates, and latency between services. Outputs an ASCII dependency graph and optional Mermaid diagram.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(cfg)
+			provider, _ := getAIProvider(sctx.cfg)
 
-			inst, instKey, err := config.GetInstance(cfg, instance)
-			if err != nil {
-				return err
-			}
-
-			client := signoz.New(*inst)
 			ctx := context.Background()
 			fmt.Printf("%s Mapping service dependencies...\n", output.MutedStyle.Render("⏳"))
 
 			dm, err := deps.Generate(ctx, deps.Options{
-				Querier:    client,
-				Instance:   instKey,
+				Querier:    sctx.client,
+				Instance:   sctx.instKey,
 				Duration:   duration,
 				Service:    service,
 				Format:     format,
@@ -855,24 +795,18 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
   argus deploy -s payment-api --ai
   argus deploy -f markdown > deploy-report.md`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(cfg)
+			provider, _ := getAIProvider(sctx.cfg)
 
-			inst, instKey, err := config.GetInstance(cfg, instance)
-			if err != nil {
-				return err
-			}
-
-			client := signoz.New(*inst)
 			ctx := context.Background()
 
 			fmt.Printf("%s Scanning %s for deployment changes (last %dm, %s sensitivity)...\n",
-				output.MutedStyle.Render("🚀"), output.AccentStyle.Render(instKey), duration, sensitivity)
+				output.MutedStyle.Render("🚀"), output.AccentStyle.Render(sctx.instKey), duration, sensitivity)
 
-			r, err := deploy.Detect(ctx, client, instKey, deploy.Options{
+			r, err := deploy.Detect(ctx, sctx.client, sctx.instKey, deploy.Options{
 				Duration:    duration,
 				Buckets:     buckets,
 				Service:     service,

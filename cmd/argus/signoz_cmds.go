@@ -73,12 +73,7 @@ func logsCmd() *cobra.Command {
 		Short: "Query and analyze logs",
 		Long:  "Query logs from Signoz and optionally analyze them with AI.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
-			if err != nil {
-				return err
-			}
-
-			inst, instKey, err := config.GetInstance(cfg, instance)
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
@@ -88,18 +83,17 @@ func logsCmd() *cobra.Command {
 				service = args[0]
 			}
 
-			client := signoz.New(*inst)
 			ctx := context.Background()
 
-			fmt.Printf("%s Querying logs from %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(instKey))
+			fmt.Printf("%s Querying logs from %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(sctx.instKey))
 
-			result, err := client.QueryLogs(ctx, service, duration, limit, severity)
+			result, err := sctx.client.QueryLogs(ctx, service, duration, limit, severity)
 			if err != nil {
 				return fmt.Errorf("querying logs: %w", err)
 			}
 
 			// If we have a query, send to AI for analysis
-			if query != "" && hasAIConfig(cfg) {
+			if query != "" && hasAIConfig(sctx.cfg) {
 				output.PrintAnalyzing(query)
 
 				dataContext := result.Raw
@@ -108,9 +102,9 @@ func logsCmd() *cobra.Command {
 				}
 
 				prompt := fmt.Sprintf("User query: %s\n\nObservability data from Signoz instance %q:\n%s",
-					query, instKey, dataContext)
+					query, sctx.instKey, dataContext)
 
-				provider, err := getAIProvider(cfg)
+				provider, err := getAIProvider(sctx.cfg)
 				if err != nil {
 					return fmt.Errorf("creating AI provider: %w", err)
 				}
@@ -141,22 +135,16 @@ func servicesCmd() *cobra.Command {
 		Short: "List services from Signoz",
 		Long:  "List all services discovered by Signoz with call counts and error rates.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
 
-			inst, instKey, err := config.GetInstance(cfg, instance)
-			if err != nil {
-				return err
-			}
-
-			client := signoz.New(*inst)
 			ctx := context.Background()
 
-			fmt.Printf("%s Fetching services from %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(instKey))
+			fmt.Printf("%s Fetching services from %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(sctx.instKey))
 
-			services, err := client.ListServices(ctx)
+			services, err := sctx.client.ListServices(ctx)
 			if err != nil {
 				return fmt.Errorf("listing services: %w", err)
 			}
@@ -182,12 +170,7 @@ func tracesCmd() *cobra.Command {
 		Short: "Query traces from Signoz",
 		Long:  "Query distributed traces from Signoz, optionally filtered by service.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
-			if err != nil {
-				return err
-			}
-
-			inst, instKey, err := config.GetInstance(cfg, instance)
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
@@ -197,24 +180,23 @@ func tracesCmd() *cobra.Command {
 				service = args[0]
 			}
 
-			client := signoz.New(*inst)
 			ctx := context.Background()
 
-			fmt.Printf("%s Querying traces from %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(instKey))
+			fmt.Printf("%s Querying traces from %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(sctx.instKey))
 
-			result, err := client.QueryTraces(ctx, service, duration, limit)
+			result, err := sctx.client.QueryTraces(ctx, service, duration, limit)
 			if err != nil {
 				return fmt.Errorf("querying traces: %w", err)
 			}
 
 			// If we have a query, send to AI
-			if query != "" && hasAIConfig(cfg) {
+			if query != "" && hasAIConfig(sctx.cfg) {
 				output.PrintAnalyzing(query)
 
 				prompt := fmt.Sprintf("User query: %s\n\nTrace data from Signoz instance %q:\n%s",
-					query, instKey, result.Raw)
+					query, sctx.instKey, result.Raw)
 
-				provider, err := getAIProvider(cfg)
+				provider, err := getAIProvider(sctx.cfg)
 				if err != nil {
 					return fmt.Errorf("creating AI provider: %w", err)
 				}
@@ -246,12 +228,7 @@ func metricsCmd() *cobra.Command {
 		Long:  "Query metrics from Signoz by metric name.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
-			if err != nil {
-				return err
-			}
-
-			inst, instKey, err := config.GetInstance(cfg, instance)
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
@@ -261,23 +238,22 @@ func metricsCmd() *cobra.Command {
 				metricName = args[0]
 			}
 
-			client := signoz.New(*inst)
 			ctx := context.Background()
 
-			fmt.Printf("%s Querying metrics from %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(instKey))
+			fmt.Printf("%s Querying metrics from %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(sctx.instKey))
 
-			result, err := client.QueryMetrics(ctx, metricName, duration)
+			result, err := sctx.client.QueryMetrics(ctx, metricName, duration)
 			if err != nil {
 				return fmt.Errorf("querying metrics: %w", err)
 			}
 
-			if query != "" && hasAIConfig(cfg) {
+			if query != "" && hasAIConfig(sctx.cfg) {
 				output.PrintAnalyzing(query)
 
 				prompt := fmt.Sprintf("User query: %s\n\nMetric data from Signoz instance %q:\n%s",
-					query, instKey, result.Raw)
+					query, sctx.instKey, result.Raw)
 
-				provider, err := getAIProvider(cfg)
+				provider, err := getAIProvider(sctx.cfg)
 				if err != nil {
 					return fmt.Errorf("creating AI provider: %w", err)
 				}
@@ -337,21 +313,22 @@ func dashboardCmd() *cobra.Command {
 				statuses = append(statuses, s)
 			}
 
-			// Get services and recent errors from the target instance
-			inst, _, err := config.GetInstance(cfg, instance)
+			// Get services and recent errors from the target instance.
+			// Instance resolution failures are returned (e.g. a typo'd -i);
+			// individual query failures still degrade gracefully.
+			sctx, err := newSignozContext(instance)
+			if err != nil {
+				return err
+			}
 			var services []types.Service
 			var recentLogs []types.LogEntry
 
-			if err == nil {
-				client := signoz.New(*inst)
+			if svcs, err := sctx.client.ListServices(ctx); err == nil {
+				services = svcs
+			}
 
-				if svcs, err := client.ListServices(ctx); err == nil {
-					services = svcs
-				}
-
-				if result, err := client.QueryLogs(ctx, "", duration, 20, "ERROR"); err == nil {
-					recentLogs = result.Logs
-				}
+			if result, err := sctx.client.QueryLogs(ctx, "", duration, 20, "ERROR"); err == nil {
+				recentLogs = result.Logs
 			}
 
 			output.PrintDashboard(statuses, services, recentLogs)
@@ -386,38 +363,39 @@ func askCmd() *cobra.Command {
 			question := strings.Join(args, " ")
 			output.PrintAnalyzing(question)
 
-			// Gather context from Signoz
-			inst, instKey, _ := config.GetInstance(cfg, instance)
+			// Gather context from Signoz. A bad -i now errors instead of
+			// silently producing output with missing context.
+			sctx, err := newSignozContext(instance)
+			if err != nil {
+				return err
+			}
 			contextInfo := ""
-			if inst != nil {
-				client := signoz.New(*inst)
-				ctx := context.Background()
+			ctx := context.Background()
 
-				// Try to get services for context
-				if services, err := client.ListServices(ctx); err == nil && len(services) > 0 {
-					contextInfo += fmt.Sprintf("\n\nServices in %s:\n", instKey)
-					for _, svc := range services {
-						contextInfo += fmt.Sprintf("- %s (calls: %d, errors: %d, error rate: %.1f%%)\n",
-							svc.Name, svc.NumCalls, svc.NumErrors, svc.ErrorRate)
+			// Try to get services for context
+			if services, err := sctx.client.ListServices(ctx); err == nil && len(services) > 0 {
+				contextInfo += fmt.Sprintf("\n\nServices in %s:\n", sctx.instKey)
+				for _, svc := range services {
+					contextInfo += fmt.Sprintf("- %s (calls: %d, errors: %d, error rate: %.1f%%)\n",
+						svc.Name, svc.NumCalls, svc.NumErrors, svc.ErrorRate)
+				}
+			}
+
+			// Try to get recent error logs
+			if result, err := sctx.client.QueryLogs(ctx, "", 30, 20, "ERROR"); err == nil && len(result.Logs) > 0 {
+				contextInfo += "\nRecent errors:\n"
+				for _, log := range result.Logs {
+					body := log.Body
+					if len(body) > 200 {
+						body = body[:200]
 					}
+					contextInfo += fmt.Sprintf("- [%s] %s: %s\n",
+						log.Timestamp.Format("15:04:05"), log.ServiceName, body)
 				}
+			}
 
-				// Try to get recent error logs
-				if result, err := client.QueryLogs(ctx, "", 30, 20, "ERROR"); err == nil && len(result.Logs) > 0 {
-					contextInfo += "\nRecent errors:\n"
-					for _, log := range result.Logs {
-						body := log.Body
-						if len(body) > 200 {
-							body = body[:200]
-						}
-						contextInfo += fmt.Sprintf("- [%s] %s: %s\n",
-							log.Timestamp.Format("15:04:05"), log.ServiceName, body)
-					}
-				}
-
-				if contextInfo == "" {
-					contextInfo = fmt.Sprintf("\n\nConnected Signoz instance: %s (%s)", instKey, inst.URL)
-				}
+			if contextInfo == "" {
+				contextInfo = fmt.Sprintf("\n\nConnected Signoz instance: %s (%s)", sctx.instKey, sctx.inst.URL)
 			}
 
 			prompt := question + contextInfo

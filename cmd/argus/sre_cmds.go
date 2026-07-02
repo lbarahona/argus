@@ -8,10 +8,8 @@ import (
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/alert"
 	"github.com/lbarahona/argus/internal/budget"
-	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/guard"
 	"github.com/lbarahona/argus/internal/output"
-	"github.com/lbarahona/argus/internal/signoz"
 	"github.com/lbarahona/argus/internal/slo"
 	"github.com/spf13/cobra"
 )
@@ -86,20 +84,15 @@ Exit code reflects highest severity: 0=ok, 1=warning, 2=critical.`,
 			if err != nil {
 				return err
 			}
-			appCfg, err := config.Load()
-			if err != nil {
-				return err
-			}
-			inst, instKey, err := config.GetInstance(appCfg, instance)
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
 			ctx := context.Background()
-			client := signoz.New(*inst)
 			if format != "json" {
-				fmt.Printf("%s Checking alerts against %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(instKey))
+				fmt.Printf("%s Checking alerts against %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(sctx.instKey))
 			}
-			checker := alert.NewChecker(client, instKey)
+			checker := alert.NewChecker(sctx.client, sctx.instKey)
 			rpt, err := checker.CheckAll(ctx, alertCfg)
 			if err != nil {
 				return err
@@ -199,20 +192,15 @@ Exit code reflects worst SLO: 0=ok, 1=warning, 2=critical/exhausted.`,
 			if err != nil {
 				return err
 			}
-			appCfg, err := config.Load()
-			if err != nil {
-				return err
-			}
-			inst, instKey, err := config.GetInstance(appCfg, instance)
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
 			ctx := context.Background()
-			client := signoz.New(*inst)
 			if format != "json" {
-				fmt.Printf("%s Evaluating SLOs against %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(instKey))
+				fmt.Printf("%s Evaluating SLOs against %s...\n", output.MutedStyle.Render("⏳"), output.AccentStyle.Render(sctx.instKey))
 			}
-			checker := slo.NewChecker(client, instKey)
+			checker := slo.NewChecker(sctx.client, sctx.instKey)
 			rpt, err := checker.CheckAll(ctx, sloCfg)
 			if err != nil {
 				return err
@@ -272,26 +260,21 @@ Exit codes: 0 = healthy, 1 = critical, 2 = exhausted/page.`,
 			if err != nil {
 				return fmt.Errorf("loading SLOs: %w (run 'argus slo init' first)", err)
 			}
-			appCfg, err := config.Load()
-			if err != nil {
-				return err
-			}
-			inst, instKey, err := config.GetInstance(appCfg, instance)
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
 
 			ctx := context.Background()
-			client := signoz.New(*inst)
 
 			if format != "json" {
 				fmt.Printf("%s Analyzing error budgets against %s...\n\n",
-					output.MutedStyle.Render("⏳"), output.AccentStyle.Render(instKey))
+					output.MutedStyle.Render("⏳"), output.AccentStyle.Render(sctx.instKey))
 			}
 
 			var budgetProvider ai.Provider
 			if useAI {
-				budgetProvider, _ = getAIProvider(appCfg)
+				budgetProvider, _ = getAIProvider(sctx.cfg)
 			}
 			opts := budget.Options{
 				Window:     window,
@@ -301,7 +284,7 @@ Exit codes: 0 = healthy, 1 = critical, 2 = exhausted/page.`,
 				AIProvider: budgetProvider,
 			}
 
-			analyzer := budget.NewAnalyzer(client, instKey)
+			analyzer := budget.NewAnalyzer(sctx.client, sctx.instKey)
 			rpt, err := analyzer.Analyze(ctx, sloCfg, opts)
 			if err != nil {
 				return err
@@ -374,17 +357,12 @@ Use --strict for critical services (lower thresholds, blocks on warnings).`,
   - name: Pre-deploy check
     run: argus guard --strict --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appCfg, err := config.Load()
-			if err != nil {
-				return err
-			}
-			inst, instKey, err := config.GetInstance(appCfg, instance)
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
 
 			ctx := context.Background()
-			client := signoz.New(*inst)
 
 			if format != "json" {
 				mode := "normal"
@@ -392,12 +370,12 @@ Use --strict for critical services (lower thresholds, blocks on warnings).`,
 					mode = "STRICT"
 				}
 				fmt.Printf("%s Running deployment guard checks against %s [%s mode]...\n\n",
-					output.MutedStyle.Render("🛡️"), output.AccentStyle.Render(instKey), mode)
+					output.MutedStyle.Render("🛡️"), output.AccentStyle.Render(sctx.instKey), mode)
 			}
 
 			var guardProvider ai.Provider
 			if useAI {
-				guardProvider, _ = getAIProvider(appCfg)
+				guardProvider, _ = getAIProvider(sctx.cfg)
 			}
 			opts := guard.Options{
 				Service:       service,
@@ -410,7 +388,7 @@ Use --strict for critical services (lower thresholds, blocks on warnings).`,
 				MinCallVolume: minCallVolume,
 			}
 
-			analyzer := guard.NewAnalyzer(client, instKey)
+			analyzer := guard.NewAnalyzer(sctx.client, sctx.instKey)
 			rpt, err := analyzer.Check(ctx, opts)
 			if err != nil {
 				return err

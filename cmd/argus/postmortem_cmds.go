@@ -35,6 +35,7 @@ func postmortemCmd() *cobra.Command {
 func postmortemGenerateCmd() *cobra.Command {
 	var useAI bool
 	var format string
+	var instance string
 
 	cmd := &cobra.Command{
 		Use:   "generate <incident-id>",
@@ -55,14 +56,22 @@ func postmortemGenerateCmd() *cobra.Command {
 				return nil
 			}
 
-			// Try to get Signoz querier
+			// Try to get a Signoz querier. Enrichment is optional — a
+			// postmortem without Signoz data is still valid — so a config
+			// load failure only warns and continues. But once config loads,
+			// an instance resolution failure (e.g. a typo'd -i) is returned
+			// instead of silently skipping enrichment.
 			var querier signoz.SignozQuerier
-			cfg, err := config.Load()
-			if err == nil {
-				inst, _, err := config.GetInstance(cfg, "")
-				if err == nil {
-					querier = signoz.New(*inst)
+			cfg, cfgErr := config.Load()
+			if cfgErr != nil {
+				fmt.Println(output.WarningStyle.Render(fmt.Sprintf("⚠️  Could not load config (%v); continuing without Signoz enrichment.", cfgErr)))
+			} else {
+				sctx, err := newSignozContext(instance)
+				if err != nil {
+					return err
 				}
+				cfg = sctx.cfg
+				querier = sctx.client
 			}
 
 			// Get AI provider
@@ -127,6 +136,7 @@ func postmortemGenerateCmd() *cobra.Command {
 
 	cmd.Flags().BoolVar(&useAI, "ai", false, "Enable AI-powered root cause analysis and action items")
 	cmd.Flags().StringVar(&format, "format", "terminal", "Output format: terminal, markdown, json")
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to enrich the postmortem with (default: default instance)")
 
 	return cmd
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/doctor"
 	"github.com/lbarahona/argus/internal/mcpserver"
-	"github.com/lbarahona/argus/internal/signoz"
 	"github.com/lbarahona/argus/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -42,23 +41,21 @@ down into issues with follow-up questions.`,
 				return fmt.Errorf("AI provider not configured. Run: argus config init")
 			}
 
-			inst, instKey, err := config.GetInstance(cfg, instance)
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
 
-			instName := instKey
-			if inst.Name != "" {
-				instName = inst.Name
+			instName := sctx.instKey
+			if sctx.inst.Name != "" {
+				instName = sctx.inst.Name
 			}
-
-			client := signoz.New(*inst)
 
 			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer cancel()
 
-			session := tui.New(client, tui.Options{
-				InstanceKey:  instKey,
+			session := tui.New(sctx.client, tui.Options{
+				InstanceKey:  sctx.instKey,
 				InstanceName: instName,
 				AIProvider:   provider,
 				MaxHistory:   maxHistory,
