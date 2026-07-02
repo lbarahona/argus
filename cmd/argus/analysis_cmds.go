@@ -39,6 +39,11 @@ func reportCmd() *cobra.Command {
 With --grade, generates a service reliability scorecard instead: grades each
 service on reliability (error rate, latency, trends) and produces an overall
 score. Use for weekly reviews, shift handoffs, or SLA reporting.`,
+		Example: `  argus report
+  argus report --ai -d 2h
+  argus report --grade
+  argus report --grade --service api-gateway
+  argus report --format markdown`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateFormat(format); err != nil {
 				return err

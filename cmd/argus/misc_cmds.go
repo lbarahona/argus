@@ -70,11 +70,12 @@ func mcpCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "mcp",
 		Short: "Start MCP (Model Context Protocol) server",
-		Long: `Start an MCP server over stdio, exposing Argus observability tools
-to AI agents and LLM applications.
+		Long: `Start an MCP server over stdio.
 
-Supported tools: status, services, logs, traces, metrics, ask, explain,
-dashboard, report, top, diff, alert_check, slo_check.
+Exposes Argus observability tools over MCP — status, services, logs, traces,
+metrics, analysis commands, and the Alertmanager/Prometheus/Grafana
+integrations — to AI agents and LLM applications like Claude Desktop, Cursor,
+and other MCP clients.
 
 Configure in Claude Desktop, Cursor, or any MCP client:
   {

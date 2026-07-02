@@ -73,6 +73,10 @@ func logsCmd() *cobra.Command {
 		Use:   "logs [service]",
 		Short: "Query and analyze logs",
 		Long:  "Query logs from Signoz and optionally analyze them with AI.",
+		Example: `  argus logs
+  argus logs api-gateway
+  argus logs api-gateway --severity ERROR -d 2h
+  argus logs api-gateway -q "what's causing these timeouts?"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sctx, err := newSignozContext(instance)
 			if err != nil {
@@ -145,6 +149,10 @@ func servicesCmd() *cobra.Command {
 		Use:   "services",
 		Short: "List services from Signoz",
 		Long:  "List all services discovered by Signoz with call counts and error rates. Use --sort to rank by errors, error rate, or call volume, like htop for your services.",
+		Example: `  argus services
+  argus services --sort errors
+  argus services --sort rate -d 2h
+  argus services --sort calls --limit 10`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sctx, err := newSignozContext(instance)
 			if err != nil {
@@ -219,6 +227,10 @@ func tracesCmd() *cobra.Command {
 		Use:   "traces [service]",
 		Short: "Query traces from Signoz",
 		Long:  "Query distributed traces from Signoz, optionally filtered by service.",
+		Example: `  argus traces
+  argus traces api-gateway
+  argus traces api-gateway -d 2h --limit 50
+  argus traces api-gateway -q "why are these traces so slow?"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sctx, err := newSignozContext(instance)
 			if err != nil {

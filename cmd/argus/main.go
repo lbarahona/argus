@@ -40,7 +40,10 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:   "argus",
 		Short: "AI-powered observability CLI for SREs",
-		Long:  "Argus connects to Signoz instances and uses AI (Anthropic, OpenAI, or Amazon Bedrock) to analyze logs, metrics, and traces with natural language queries.",
+		Long: `Argus connects to your observability stack — Signoz, Loki, Prometheus,
+Grafana, and Alertmanager — and uses AI (Anthropic, OpenAI, or Amazon
+Bedrock) to analyze logs, metrics, traces, and alerts with natural
+language queries.`,
 		// Errors and usage are handled in main() below so exitError (which
 		// carries a process exit code but no message) doesn't produce a
 		// blank "Error: " line or a usage dump after a command has already
