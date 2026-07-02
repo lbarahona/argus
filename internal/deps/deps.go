@@ -27,13 +27,13 @@ type Edge struct {
 
 // ServiceNode holds aggregated stats for a service in the graph.
 type ServiceNode struct {
-	Name       string
-	TotalCalls int
+	Name        string
+	TotalCalls  int
 	TotalErrors int
-	Upstream   []string // services that call this one
-	Downstream []string // services this one calls
-	IsRoot     bool     // no upstream callers
-	IsLeaf     bool     // no downstream calls
+	Upstream    []string // services that call this one
+	Downstream  []string // services this one calls
+	IsRoot      bool     // no upstream callers
+	IsLeaf      bool     // no downstream calls
 }
 
 // DependencyMap holds the complete service dependency graph.
@@ -48,14 +48,14 @@ type DependencyMap struct {
 
 // Options configures dependency map generation.
 type Options struct {
-	Querier   signoz.SignozQuerier
-	Instance  string
-	Duration  int    // minutes
-	Service   string // filter to show only deps for this service
-	Format    string // "table" or "markdown"
-	AI        bool
+	Querier    signoz.SignozQuerier
+	Instance   string
+	Duration   int    // minutes
+	Service    string // filter to show only deps for this service
+	Format     string // "table" or "markdown"
+	AI         bool
 	AIProvider ai.Provider
-	Writer    io.Writer
+	Writer     io.Writer
 }
 
 // Generate builds a service dependency map from trace data.
@@ -78,54 +78,55 @@ func Generate(ctx context.Context, opts Options) (*DependencyMap, error) {
 		Edges:       []Edge{},
 	}
 
-	// Gather traces from each service to find parent-child relationships
+	// Gather traces to find parent-child relationships
 	edgeMap := make(map[string]*Edge) // "from->to" => edge
 
-	for _, svc := range services {
-		result, err := opts.Querier.QueryTraces(ctx, svc.Name, opts.Duration, 500)
-		if err != nil {
-			continue // skip services with query errors
+	// One unfiltered query: a cross-service parent/child pair only joins when
+	// both spans are in the same result set, which a per-service filter makes
+	// impossible (the real client filters serviceName = <service>).
+	result, err := opts.Querier.QueryTraces(ctx, "", opts.Duration, 2000)
+	if err != nil {
+		return nil, fmt.Errorf("querying traces: %w", err)
+	}
+
+	// Build span index: spanID -> trace entry
+	spanIndex := make(map[string]*types.TraceEntry)
+	for i := range result.Traces {
+		t := &result.Traces[i]
+		spanIndex[t.SpanID] = t
+	}
+
+	// Find cross-service edges by matching parent spans
+	for i := range result.Traces {
+		span := &result.Traces[i]
+		if span.ParentSpanID == "" {
+			continue
+		}
+		parent, ok := spanIndex[span.ParentSpanID]
+		if !ok {
+			continue
+		}
+		if parent.ServiceName == span.ServiceName {
+			continue // same service, skip
 		}
 
-		// Build span index: spanID -> trace entry
-		spanIndex := make(map[string]*types.TraceEntry)
-		for i := range result.Traces {
-			t := &result.Traces[i]
-			spanIndex[t.SpanID] = t
+		key := parent.ServiceName + "->" + span.ServiceName
+		edge, exists := edgeMap[key]
+		if !exists {
+			edge = &Edge{
+				From: parent.ServiceName,
+				To:   span.ServiceName,
+			}
+			edgeMap[key] = edge
 		}
-
-		// Find cross-service edges by matching parent spans
-		for i := range result.Traces {
-			span := &result.Traces[i]
-			if span.ParentSpanID == "" {
-				continue
-			}
-			parent, ok := spanIndex[span.ParentSpanID]
-			if !ok {
-				continue
-			}
-			if parent.ServiceName == span.ServiceName {
-				continue // same service, skip
-			}
-
-			key := parent.ServiceName + "->" + span.ServiceName
-			edge, exists := edgeMap[key]
-			if !exists {
-				edge = &Edge{
-					From: parent.ServiceName,
-					To:   span.ServiceName,
-				}
-				edgeMap[key] = edge
-			}
-			edge.Calls++
-			latMs := span.DurationMs()
-			edge.AvgLatency += latMs
-			if latMs > edge.P99Latency {
-				edge.P99Latency = latMs
-			}
-			if span.StatusCode == "STATUS_CODE_ERROR" || span.StatusCode == "ERROR" {
-				edge.Errors++
-			}
+		edge.Calls++
+		latMs := span.DurationMs()
+		edge.AvgLatency += latMs
+		if latMs > edge.P99Latency {
+			edge.P99Latency = latMs
+		}
+		if span.StatusCode == "STATUS_CODE_ERROR" || span.StatusCode == "ERROR" {
+			edge.Errors++
 		}
 	}
 

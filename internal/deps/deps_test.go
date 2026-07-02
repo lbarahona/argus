@@ -61,15 +61,14 @@ func TestGenerateBasicDeps(t *testing.T) {
 			{Name: "db-service"},
 		},
 		traces: map[string][]types.TraceEntry{
-			"api-gateway": {
+			// Unfiltered query ("") returns the full cross-service span set;
+			// the real client only ever returns single-service spans for a
+			// service-filtered query.
+			"": {
 				makeTrace("t1", "s1", "", "api-gateway", "GET /users", "OK", 5000000),
-				makeTrace("t1", "s2", "s1", "user-service", "GetUser", "OK", 3000000),
-			},
-			"user-service": {
 				makeTrace("t1", "s2", "s1", "user-service", "GetUser", "OK", 3000000),
 				makeTrace("t1", "s3", "s2", "db-service", "SELECT", "OK", 1000000),
 			},
-			"db-service": {},
 		},
 	}
 
@@ -96,13 +95,12 @@ func TestGenerateWithErrors(t *testing.T) {
 			{Name: "backend"},
 		},
 		traces: map[string][]types.TraceEntry{
-			"frontend": {
+			"": {
 				makeTrace("t1", "s1", "", "frontend", "GET /", "OK", 10000000),
 				makeTrace("t1", "s2", "s1", "backend", "Process", "STATUS_CODE_ERROR", 5000000),
 				makeTrace("t2", "s3", "", "frontend", "GET /", "OK", 8000000),
 				makeTrace("t2", "s4", "s3", "backend", "Process", "OK", 4000000),
 			},
-			"backend": {},
 		},
 	}
 
@@ -138,15 +136,12 @@ func TestFilterForService(t *testing.T) {
 			{Name: "a"}, {Name: "b"}, {Name: "c"},
 		},
 		traces: map[string][]types.TraceEntry{
-			"a": {
+			"": {
 				makeTrace("t1", "s1", "", "a", "op", "OK", 1000000),
 				makeTrace("t1", "s2", "s1", "b", "op", "OK", 1000000),
-			},
-			"b": {
 				makeTrace("t2", "s3", "", "b", "op", "OK", 1000000),
 				makeTrace("t2", "s4", "s3", "c", "op", "OK", 1000000),
 			},
-			"c": {},
 		},
 	}
 
@@ -173,15 +168,11 @@ func TestRootAndLeafDetection(t *testing.T) {
 			{Name: "gateway"}, {Name: "api"}, {Name: "database"},
 		},
 		traces: map[string][]types.TraceEntry{
-			"gateway": {
+			"": {
 				makeTrace("t1", "s1", "", "gateway", "op", "OK", 1000000),
-				makeTrace("t1", "s2", "s1", "api", "op", "OK", 1000000),
-			},
-			"api": {
 				makeTrace("t1", "s2", "s1", "api", "op", "OK", 1000000),
 				makeTrace("t1", "s3", "s2", "database", "op", "OK", 1000000),
 			},
-			"database": {},
 		},
 	}
 
@@ -222,13 +213,57 @@ func TestEmptyTraces(t *testing.T) {
 	}
 }
 
+// TestGenerateFindsEdgesWithRealClientSemantics verifies that Generate can
+// discover cross-service edges even though the real Signoz client filters
+// each QueryTraces call to a single service (serviceName = <service>), which
+// means a parent span from another service can never appear alongside its
+// child in a service-filtered result set. Only an unfiltered query (service
+// == "") can return both ends of a cross-service edge together.
+func TestGenerateFindsEdgesWithRealClientSemantics(t *testing.T) {
+	allSpans := []types.TraceEntry{
+		makeTrace("t1", "s1", "", "api-gateway", "GET /users", "OK", 50_000_000),
+		makeTrace("t1", "s2", "s1", "user-service", "getUser", "STATUS_CODE_ERROR", 30_000_000),
+	}
+
+	q := &mockQuerier{
+		services: []types.Service{
+			{Name: "api-gateway", NumCalls: 100},
+			{Name: "user-service", NumCalls: 80},
+		},
+		traces: map[string][]types.TraceEntry{
+			// Real client semantics: a service-filtered query only ever
+			// returns spans for that one service.
+			"api-gateway":  {allSpans[0]},
+			"user-service": {allSpans[1]},
+			// Unfiltered query returns everything, which is the only way
+			// to see both ends of the cross-service edge together.
+			"": allSpans,
+		},
+	}
+
+	dm, err := Generate(context.Background(), Options{Querier: q, Duration: 60})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(dm.Edges) != 1 {
+		t.Fatalf("expected 1 cross-service edge under real client semantics, got %d", len(dm.Edges))
+	}
+	e := dm.Edges[0]
+	if e.From != "api-gateway" || e.To != "user-service" {
+		t.Errorf("edge = %s->%s, want api-gateway->user-service", e.From, e.To)
+	}
+	if e.Errors != 1 {
+		t.Errorf("edge errors = %d, want 1 (STATUS_CODE_ERROR span)", e.Errors)
+	}
+}
+
 func TestRenderTable(t *testing.T) {
 	dm := &DependencyMap{
 		GeneratedAt: time.Now(),
 		Duration:    60,
 		Nodes: map[string]*ServiceNode{
-			"api":  {Name: "api", IsRoot: true, Downstream: []string{"db"}},
-			"db":   {Name: "db", IsLeaf: true, Upstream: []string{"api"}},
+			"api": {Name: "api", IsRoot: true, Downstream: []string{"db"}},
+			"db":  {Name: "db", IsLeaf: true, Upstream: []string{"api"}},
 		},
 		Edges: []Edge{
 			{From: "api", To: "db", Calls: 100, Errors: 5, ErrorRate: 5.0, AvgLatency: 12.3},
@@ -310,13 +345,12 @@ func TestLatencyCalculation(t *testing.T) {
 	q := &mockQuerier{
 		services: []types.Service{{Name: "a"}, {Name: "b"}},
 		traces: map[string][]types.TraceEntry{
-			"a": {
+			"": {
 				makeTrace("t1", "s1", "", "a", "op", "OK", 10000000),
 				makeTrace("t1", "s2", "s1", "b", "op", "OK", 2000000), // 2ms
 				makeTrace("t2", "s3", "", "a", "op", "OK", 10000000),
 				makeTrace("t2", "s4", "s3", "b", "op", "OK", 8000000), // 8ms
 			},
-			"b": {},
 		},
 	}
 
