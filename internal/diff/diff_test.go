@@ -44,6 +44,26 @@ func (m *mockSignozClient) QueryMetrics(ctx context.Context, metricName string, 
 	return &types.QueryResult{}, nil
 }
 
+// windowedDiffMock implements SignozQuerier + signoz.WindowedQuerier.
+type windowedDiffMock struct {
+	mockSignozClient
+	rangeCalls []struct{ Start, End time.Time }
+	rangeLogs  []types.LogEntry
+}
+
+func (m *windowedDiffMock) QueryLogsRange(ctx context.Context, service string, start, end time.Time, limit int, severityFilter string) (*types.QueryResult, error) {
+	m.rangeCalls = append(m.rangeCalls, struct{ Start, End time.Time }{start, end})
+	return &types.QueryResult{Logs: m.rangeLogs}, nil
+}
+
+func (m *windowedDiffMock) QueryTracesRange(ctx context.Context, service string, start, end time.Time, limit int) (*types.QueryResult, error) {
+	return &types.QueryResult{}, nil
+}
+
+func (m *windowedDiffMock) ListServicesRange(ctx context.Context, start, end time.Time) ([]types.Service, error) {
+	return nil, nil
+}
+
 // ──────────────────────────────────────────────
 // Compare Tests (mock-based)
 // ──────────────────────────────────────────────
@@ -144,5 +164,58 @@ func TestStatusEmoji(t *testing.T) {
 	}
 	if statusEmoji("improved") != "🟢" {
 		t.Error("wrong emoji for improved")
+	}
+}
+
+// ──────────────────────────────────────────────
+// Windowed previous-window & truncation tests
+// ──────────────────────────────────────────────
+
+func TestCompareUsesWindowedQueryForPreviousWindow(t *testing.T) {
+	oldTS := time.Now().Add(-90 * time.Minute)
+	mock := &windowedDiffMock{rangeLogs: []types.LogEntry{{ServiceName: "api", Timestamp: oldTS}}}
+	// Recent window: plain QueryLogs returns one recent error for api.
+	mock.queryLogsFunc = func(ctx context.Context, service string, durationMinutes, limit int, severityFilter string) (*types.QueryResult, error) {
+		return &types.QueryResult{Logs: []types.LogEntry{{ServiceName: "api", Timestamp: time.Now().Add(-5 * time.Minute)}}}, nil
+	}
+
+	result, err := Compare(context.Background(), mock, "test", Options{Duration: 60})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(mock.rangeCalls) != 1 {
+		t.Fatalf("expected 1 windowed query for the previous window, got %d", len(mock.rangeCalls))
+	}
+	// Previous window: [now-2d, now-d]
+	span := mock.rangeCalls[0].End.Sub(mock.rangeCalls[0].Start)
+	if span != 60*time.Minute {
+		t.Errorf("previous window span = %v, want 60m", span)
+	}
+	// api: 1 before, 1 after → stable, not "new"
+	for _, d := range result.Services {
+		if d.Name == "api" && d.Status == "new" {
+			t.Errorf("api had errors in the previous window; must not be classified new")
+		}
+	}
+}
+
+func TestCompareSetsTruncationCaveat(t *testing.T) {
+	logs := make([]types.LogEntry, 500) // == the fetch limit
+	for i := range logs {
+		logs[i] = types.LogEntry{ServiceName: "api", Timestamp: time.Now().Add(-time.Minute)}
+	}
+	mock := &mockSignozClient{ // plain, non-windowed mock
+		queryLogsFunc: func(ctx context.Context, service string, durationMinutes, limit int, severityFilter string) (*types.QueryResult, error) {
+			return &types.QueryResult{Logs: logs}, nil
+		},
+	}
+
+	result, err := Compare(context.Background(), mock, "test", Options{Duration: 60})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Truncated || result.DataCaveat == "" {
+		t.Errorf("fetch at limit must set Truncated + DataCaveat, got %+v / %q", result.Truncated, result.DataCaveat)
 	}
 }

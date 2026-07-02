@@ -15,28 +15,34 @@ import (
 
 // ServiceDiff represents the change in a service between two windows.
 type ServiceDiff struct {
-	Name          string
-	CallsBefore   int
-	CallsAfter    int
-	ErrorsBefore  int
-	ErrorsAfter   int
-	RateBefore    float64
-	RateAfter     float64
-	CallsChange   float64 // percentage
-	ErrorsChange  float64 // percentage
-	RateChange    float64 // absolute change in error rate
-	Status        string  // "improved", "degraded", "stable", "new", "gone"
+	Name         string
+	CallsBefore  int
+	CallsAfter   int
+	ErrorsBefore int
+	ErrorsAfter  int
+	RateBefore   float64
+	RateAfter    float64
+	CallsChange  float64 // percentage
+	ErrorsChange float64 // percentage
+	RateChange   float64 // absolute change in error rate
+	Status       string  // "improved", "degraded", "stable", "new", "gone"
 }
 
 // DiffResult holds comparison data between two time windows.
 type DiffResult struct {
-	Instance     string
-	WindowA      string // e.g., "60-120 min ago"
-	WindowB      string // e.g., "0-60 min ago"
-	DurationMin  int
-	Services     []ServiceDiff
-	Summary      DiffSummary
-	GeneratedAt  time.Time
+	Instance    string
+	WindowA     string // e.g., "60-120 min ago"
+	WindowB     string // e.g., "0-60 min ago"
+	DurationMin int
+	Services    []ServiceDiff
+	Summary     DiffSummary
+	GeneratedAt time.Time
+	// Truncated is true when a fetch hit the query limit, meaning older
+	// entries may be missing and per-window counts may undercount.
+	Truncated bool
+	// DataCaveat is a human-readable warning describing the truncation,
+	// set only when Truncated is true.
+	DataCaveat string
 }
 
 // DiffSummary provides a high-level overview.
@@ -63,32 +69,50 @@ func Compare(ctx context.Context, client signoz.SignozQuerier, instKey string, o
 	// For a real diff, we'd need historical data. Since Signoz services endpoint
 	// returns aggregate data, we'll fetch error logs from two time windows to compare.
 
+	const diffFetchLimit = 500
+
 	dur := opts.Duration
 	if dur <= 0 {
 		dur = 60
 	}
 
 	// Window B (recent): 0 to dur minutes ago
-	recentLogs, err := client.QueryLogs(ctx, "", dur, 500, "ERROR")
+	recentLogs, err := client.QueryLogs(ctx, "", dur, diffFetchLimit, "ERROR")
 	if err != nil {
 		return nil, fmt.Errorf("querying recent logs: %w", err)
 	}
 
-	// Window A (previous): dur to 2*dur minutes ago
-	previousLogs, err := client.QueryLogs(ctx, "", dur*2, 500, "ERROR")
-	if err != nil {
-		return nil, fmt.Errorf("querying previous logs: %w", err)
+	now := time.Now()
+	cutoff := now.Add(-time.Duration(dur) * time.Minute)
+
+	// Window A (previous): dur to 2*dur minutes ago. With a windowed
+	// querier this is a real absolute-range query; otherwise it is carved
+	// out of a single newest-N fetch over 2*dur, which silently loses the
+	// older half once that fetch hits its limit.
+	var previousWindowLogs []types.LogEntry
+	var truncated bool
+	if wq, ok := client.(signoz.WindowedQuerier); ok {
+		prev, err := wq.QueryLogsRange(ctx, "", now.Add(-time.Duration(2*dur)*time.Minute), cutoff, diffFetchLimit, "ERROR")
+		if err != nil {
+			return nil, fmt.Errorf("querying previous window: %w", err)
+		}
+		previousWindowLogs = prev.Logs
+		truncated = len(recentLogs.Logs) >= diffFetchLimit || len(prev.Logs) >= diffFetchLimit
+	} else {
+		previousLogs, err := client.QueryLogs(ctx, "", dur*2, diffFetchLimit, "ERROR")
+		if err != nil {
+			return nil, fmt.Errorf("querying previous logs: %w", err)
+		}
+		previousWindowLogs = previousLogs.Logs
+		truncated = len(recentLogs.Logs) >= diffFetchLimit || len(previousLogs.Logs) >= diffFetchLimit
 	}
 
 	// Current services for call counts
 	services, _ := client.ListServices(ctx)
 
-	now := time.Now()
-	cutoff := now.Add(-time.Duration(dur) * time.Minute)
-
 	// Split previous logs into window A (older) and window B (recent)
 	recentErrors := countByService(recentLogs.Logs, cutoff, now)
-	previousErrors := countByService(previousLogs.Logs, now.Add(-time.Duration(dur*2)*time.Minute), cutoff)
+	previousErrors := countByService(previousWindowLogs, now.Add(-time.Duration(dur*2)*time.Minute), cutoff)
 
 	// Build service map from current services
 	serviceMap := make(map[string]types.Service)
@@ -114,6 +138,10 @@ func Compare(ctx context.Context, client signoz.SignozQuerier, instKey string, o
 		WindowB:     fmt.Sprintf("0-%d min ago", dur),
 		DurationMin: dur,
 		GeneratedAt: now,
+		Truncated:   truncated,
+	}
+	if truncated {
+		result.DataCaveat = fmt.Sprintf("A window hit the %d-log fetch limit; older entries are missing and per-window counts undercount.", diffFetchLimit)
 	}
 
 	for name := range allServices {
@@ -193,6 +221,10 @@ func (r *DiffResult) RenderTerminal(w io.Writer) {
 	fmt.Fprintf(w, "  Instance: %s  |  Window: %d min\n", r.Instance, r.DurationMin)
 	fmt.Fprintf(w, "  Comparing: [%s] vs [%s]\n\n", r.WindowA, r.WindowB)
 
+	if r.Truncated && r.DataCaveat != "" {
+		fmt.Fprintf(w, "  ⚠️  %s\n\n", r.DataCaveat)
+	}
+
 	// Summary
 	totalChange := r.Summary.TotalErrorsAfter - r.Summary.TotalErrorsBefore
 	changeIcon := "→"
@@ -254,4 +286,3 @@ func truncate(s string, n int) string {
 	}
 	return s
 }
-
