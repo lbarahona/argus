@@ -73,7 +73,6 @@ func main() {
 		depsCmd(),
 		mcpCmd(),
 		postmortemCmd(),
-		budgetCmd(),
 		guardCmd(),
 		doctorCmd(),
 		amCmd(),

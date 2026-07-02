@@ -174,16 +174,22 @@ Exit codes: 0 = all OK, 1 = warnings, 2 = critical/exhausted.`,
 
 	var instance string
 	var format string
+	var failOnNoData bool
 	checkCmd := &cobra.Command{
 		Use:   "check",
 		Short: "Evaluate all SLOs against Signoz data",
 		Long: `Evaluate all enabled SLOs and report error budgets, burn rates, and compliance.
 
 Use --format json for machine-readable output (great for cron jobs and dashboards).
-Exit code reflects worst SLO: 0=ok, 1=warning, 2=critical/exhausted.`,
+Exit code reflects worst SLO: 0=ok, 1=warning, 2=critical/exhausted.
+
+Use --fail-on-no-data in CI gates so a broken data pipeline (SLOs stuck at
+no_data) doesn't silently report clean; it exits 1 unless something worse
+already applies.`,
 		Example: `  argus slo check
   argus slo check --format json
   argus slo check -i production
+  argus slo check --fail-on-no-data
   argus slo check --format json | jq '.results[] | select(.status != "ok")'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sloCfg, err := slo.LoadSLOs()
@@ -209,7 +215,7 @@ Exit code reflects worst SLO: 0=ok, 1=warning, 2=critical/exhausted.`,
 			}, nil, rpt); err != nil {
 				return err
 			}
-			if code := rpt.ExitCode(); code != 0 {
+			if code := rpt.ExitCode(failOnNoData); code != 0 {
 				return exitError{code: code}
 			}
 			return nil
@@ -217,12 +223,18 @@ Exit code reflects worst SLO: 0=ok, 1=warning, 2=critical/exhausted.`,
 	}
 	addInstanceFlag(checkCmd, &instance)
 	addFormatFlag(checkCmd, &format, "text")
+	checkCmd.Flags().BoolVar(&failOnNoData, "fail-on-no-data", false, "Exit 1 if any SLO has no data (unless a worse status already applies)")
 	cmd.AddCommand(checkCmd)
+
+	cmd.AddCommand(budgetCmd())
 
 	return cmd
 }
 
 func budgetCmd() *cobra.Command {
+	var instance, service, format, window string
+	var useAI bool
+
 	cmd := &cobra.Command{
 		Use:   "budget",
 		Short: "Error budget burndown analysis",
@@ -237,21 +249,13 @@ Implements Google SRE multi-window burn rate alerting:
   - Elevated: 1h >6x → WATCH closely
 
 Requires SLOs to be configured (run 'argus slo init' first).
-Exit codes: 0 = healthy, 1 = critical, 2 = exhausted/page.`,
-	}
-
-	var instance, service, format, window string
-	var useAI bool
-
-	checkCmd := &cobra.Command{
-		Use:   "check",
-		Short: "Analyze error budget burndown for all SLOs",
-		Example: `  argus budget check
-  argus budget check --service api-gateway
-  argus budget check --format json
-  argus budget check --format markdown
-  argus budget check --ai
-  argus budget check --window 24h`,
+Exit codes: 0 = healthy, 1 = warning (burning/ticket/watch), 2 = critical (critical/exhausted/page).`,
+		Example: `  argus slo budget
+  argus slo budget --service api-gateway
+  argus slo budget --format json
+  argus slo budget --format markdown
+  argus slo budget --ai
+  argus slo budget --window 24h`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateFormat(format); err != nil {
 				return err
@@ -311,12 +315,11 @@ Exit codes: 0 = healthy, 1 = critical, 2 = exhausted/page.`,
 			return nil
 		},
 	}
-	addInstanceFlag(checkCmd, &instance)
-	checkCmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
-	addFormatFlag(checkCmd, &format, "terminal")
-	checkCmd.Flags().StringVarP(&window, "window", "w", "6h", "Analysis window: 1h, 6h, 24h, 7d, 30d")
-	checkCmd.Flags().BoolVar(&useAI, "ai", false, "Include AI-powered recommendations")
-	cmd.AddCommand(checkCmd)
+	addInstanceFlag(cmd, &instance)
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
+	addFormatFlag(cmd, &format, "terminal")
+	cmd.Flags().StringVarP(&window, "window", "w", "6h", "Analysis window: 1h, 6h, 24h, 7d, 30d")
+	cmd.Flags().BoolVar(&useAI, "ai", false, "Include AI-powered recommendations")
 
 	return cmd
 }

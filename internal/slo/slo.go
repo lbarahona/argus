@@ -542,21 +542,32 @@ func renderBudgetBar(remaining float64, width int) string {
 	return "[" + bar + "]"
 }
 
-// ExitCode returns an exit code based on worst SLO status.
-func (r *Report) ExitCode() int {
+// ExitCode returns an exit code based on worst SLO status. When
+// failOnNoData is set, a report that is otherwise clean (exit 0) but
+// contains at least one "no_data" result exits 1 instead — a broken
+// data pipeline must not report clean in a CI gate. A real
+// warning/critical/exhausted finding always takes precedence: no_data
+// never downgrades a higher code.
+func (r *Report) ExitCode(failOnNoData bool) int {
 	worst := 0
+	hasNoData := false
 	for _, res := range r.Results {
-		p := statusPriority(res.Status)
-		if p > worst {
+		if res.Status == "no_data" {
+			hasNoData = true
+		}
+		if p := statusPriority(res.Status); p > worst {
 			worst = p
 		}
 	}
+	code := 0
 	switch worst {
 	case 4, 3:
-		return 2 // critical/exhausted
+		code = 2 // critical/exhausted
 	case 2:
-		return 1 // warning
-	default:
-		return 0
+		code = 1 // warning
 	}
+	if code == 0 && failOnNoData && hasNoData {
+		code = 1
+	}
+	return code
 }

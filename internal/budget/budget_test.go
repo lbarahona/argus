@@ -439,19 +439,27 @@ func TestPredictExhaustionSubUnitBurnNeverExhausts(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestExitCode(t *testing.T) {
+	// Exit codes match the alert/slo/guard convention: warning-tier
+	// (burning status, ticket/watch alerts) = 1, critical-tier
+	// (critical/exhausted status, page alert) = 2.
 	tests := []struct {
 		name    string
 		reports []BudgetReport
 		want    int
 	}{
 		{"healthy", []BudgetReport{{Status: "healthy", Alert: "none"}}, 0},
-		{"burning", []BudgetReport{{Status: "burning", Alert: "none"}}, 0},
-		{"critical", []BudgetReport{{Status: "critical", Alert: "none"}}, 1},
+		{"burning", []BudgetReport{{Status: "burning", Alert: "none"}}, 1},
+		{"critical", []BudgetReport{{Status: "critical", Alert: "none"}}, 2},
 		{"exhausted", []BudgetReport{{Status: "exhausted", Alert: "none"}}, 2},
-		{"page alert", []BudgetReport{{Status: "burning", Alert: "page"}}, 2},
-		{"ticket alert", []BudgetReport{{Status: "burning", Alert: "ticket"}}, 1},
+		{"page alert", []BudgetReport{{Status: "healthy", Alert: "page"}}, 2},
+		{"ticket alert", []BudgetReport{{Status: "healthy", Alert: "ticket"}}, 1},
+		{"watch alert", []BudgetReport{{Status: "healthy", Alert: "watch"}}, 1},
 		{"worst wins", []BudgetReport{
 			{Status: "healthy", Alert: "none"},
+			{Status: "exhausted", Alert: "none"},
+		}, 2},
+		{"warning does not mask critical", []BudgetReport{
+			{Status: "burning", Alert: "none"},
 			{Status: "exhausted", Alert: "none"},
 		}, 2},
 	}

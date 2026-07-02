@@ -465,9 +465,40 @@ func TestReportExitCode(t *testing.T) {
 		for _, s := range tt.statuses {
 			rpt.Results = append(rpt.Results, Result{Status: s})
 		}
-		if got := rpt.ExitCode(); got != tt.expected {
+		if got := rpt.ExitCode(false); got != tt.expected {
 			t.Errorf("ExitCode(%v) = %d, want %d", tt.statuses, got, tt.expected)
 		}
+	}
+}
+
+// TestReportExitCodeFailOnNoData covers the --fail-on-no-data CI gate: a
+// report where nothing is worse than no_data should stay clean unless the
+// flag is set, and no_data must never downgrade a real critical finding.
+func TestReportExitCodeFailOnNoData(t *testing.T) {
+	tests := []struct {
+		name         string
+		statuses     []string
+		failOnNoData bool
+		expected     int
+	}{
+		{"all no_data, flag off", []string{"no_data", "no_data"}, false, 0},
+		{"all no_data, flag on", []string{"no_data", "no_data"}, true, 1},
+		{"ok + no_data, flag on", []string{"ok", "no_data"}, true, 1},
+		{"no_data + critical, flag off", []string{"no_data", "critical"}, false, 2},
+		{"no_data + critical, flag on", []string{"no_data", "critical"}, true, 2},
+		{"no_data + warning, flag on", []string{"no_data", "warning"}, true, 1},
+		{"no data at all, flag on", []string{"ok", "ok"}, true, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rpt := &Report{}
+			for _, s := range tt.statuses {
+				rpt.Results = append(rpt.Results, Result{Status: s})
+			}
+			if got := rpt.ExitCode(tt.failOnNoData); got != tt.expected {
+				t.Errorf("ExitCode(%v, failOnNoData=%v) = %d, want %d", tt.statuses, tt.failOnNoData, got, tt.expected)
+			}
+		})
 	}
 }
 

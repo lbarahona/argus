@@ -710,24 +710,30 @@ Data:
 }
 
 // ExitCode returns non-zero if any SLO is in a bad state.
+//
+// Exit codes match the alert/slo/guard convention: warning-tier (burning
+// status, ticket/watch alerts) = 1, critical-tier (critical/exhausted
+// status, page alert) = 2. A critical-tier finding always wins even if a
+// warning-tier finding is checked first.
 func (r *FullReport) ExitCode() int {
+	code := 0
 	for _, br := range r.Reports {
 		switch br.Status {
-		case "exhausted":
+		case "exhausted", "critical":
 			return 2
-		case "critical":
-			return 1
+		case "burning":
+			code = 1
 		}
 	}
 	for _, br := range r.Reports {
-		if br.Alert == "page" {
+		switch br.Alert {
+		case "page":
 			return 2
-		}
-		if br.Alert == "ticket" {
-			return 1
+		case "ticket", "watch":
+			code = 1
 		}
 	}
-	return 0
+	return code
 }
 
 // ──────────────────────────────────────────────
