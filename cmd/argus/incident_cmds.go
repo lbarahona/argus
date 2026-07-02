@@ -88,7 +88,7 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 	}
 	listCmd.Flags().BoolVarP(&all, "all", "a", false, "Show all incidents (including resolved)")
 	listCmd.Flags().IntVarP(&limit, "limit", "l", 20, "Max incidents to show (with --all)")
-	listCmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: text or json")
+	addFormatFlag(listCmd, &format, "text")
 	cmd.AddCommand(listCmd)
 
 	// update

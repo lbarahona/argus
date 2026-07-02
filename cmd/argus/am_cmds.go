@@ -93,7 +93,7 @@ func amAlertsCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
+	addFormatFlag(cmd, &format, "terminal")
 	cmd.Flags().BoolVarP(&showAll, "all", "a", false, "Show all alerts (including suppressed)")
 	cmd.Flags().StringArrayVar(&filter, "filter", nil, "Label filter (e.g. alertname=HighLatency)")
 
@@ -130,7 +130,7 @@ func amSilencesCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
+	addFormatFlag(cmd, &format, "terminal")
 	cmd.Flags().BoolVar(&showExpired, "expired", false, "Include expired silences")
 
 	return cmd
@@ -262,7 +262,7 @@ func amStatusCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
+	addFormatFlag(cmd, &format, "terminal")
 	return cmd
 }
 
@@ -312,7 +312,7 @@ func amSummaryCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
+	addFormatFlag(cmd, &format, "terminal")
 	return cmd
 }
 

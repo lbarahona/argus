@@ -60,7 +60,7 @@ down into issues with follow-up questions.`,
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to connect to")
+	addInstanceFlag(cmd, &instance)
 	cmd.Flags().IntVar(&maxHistory, "max-history", 20, "Maximum conversation messages to retain")
 
 	return cmd
@@ -136,7 +136,7 @@ func doctorCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed information for each check")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, markdown, json")
+	addFormatFlag(cmd, &format, "terminal")
 
 	return cmd
 }

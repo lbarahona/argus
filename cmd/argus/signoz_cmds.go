@@ -122,8 +122,8 @@ func logsCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&query, "query", "q", "", "Natural language query for AI analysis")
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query (default: default instance)")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to look back")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back (e.g. 90, 90m, 2h)")
 	cmd.Flags().IntVarP(&limit, "limit", "l", 100, "Maximum number of log entries")
 	cmd.Flags().StringVarP(&severity, "severity", "s", "", "Filter by severity (ERROR, WARN, INFO, DEBUG)")
 
@@ -157,7 +157,7 @@ func servicesCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	addInstanceFlag(cmd, &instance)
 
 	return cmd
 }
@@ -214,8 +214,8 @@ func tracesCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to look back")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back (e.g. 90, 90m, 2h)")
 	cmd.Flags().IntVarP(&limit, "limit", "l", 100, "Maximum number of traces")
 	cmd.Flags().StringVarP(&query, "query", "q", "", "Natural language query for AI analysis")
 
@@ -274,8 +274,8 @@ func metricsCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to look back")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back (e.g. 90, 90m, 2h)")
 	cmd.Flags().StringVarP(&query, "query", "q", "", "Natural language query for AI analysis")
 
 	return cmd
@@ -344,8 +344,8 @@ func dashboardCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance for services/logs")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to look back for errors")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back for errors (e.g. 90, 90m, 2h)")
 
 	return cmd
 }
@@ -410,7 +410,7 @@ func askCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance for context")
+	addInstanceFlag(cmd, &instance)
 
 	return cmd
 }

@@ -70,10 +70,10 @@ func reportCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to report on")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to cover")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to cover (e.g. 90, 90m, 2h)")
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-generated summary (uses Anthropic API)")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
+	addFormatFlag(cmd, &format, "terminal")
 
 	return cmd
 }
@@ -125,10 +125,10 @@ func topCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	addInstanceFlag(cmd, &instance)
 	cmd.Flags().IntVarP(&limit, "limit", "l", 20, "Number of services to show")
 	cmd.Flags().StringVarP(&sortBy, "sort", "s", "errors", "Sort by: errors, rate, calls, name")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes for recent error lookup")
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes for recent error lookup (e.g. 90, 90m, 2h)")
 
 	return cmd
 }
@@ -162,8 +162,8 @@ func diffCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration per window in minutes (compares last N min vs previous N min)")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 60, "Duration per window in minutes (compares last N min vs previous N min) (e.g. 90, 90m, 2h)")
 
 	return cmd
 }
@@ -215,7 +215,7 @@ Thresholds can be customized. Alerts include:
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to watch")
+	addInstanceFlag(cmd, &instance)
 	cmd.Flags().IntVar(&interval, "interval", 30, "Poll interval in seconds")
 	cmd.Flags().Float64Var(&errWarn, "error-rate-warn", defaults.ErrorRateWarning, "Error rate % warning threshold")
 	cmd.Flags().Float64Var(&errCrit, "error-rate-crit", defaults.ErrorRateCritical, "Error rate % critical threshold")
@@ -277,8 +277,8 @@ Think of it as having a senior SRE look at all your dashboards at once.`,
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to analyze (e.g. 90, 90m, 2h)")
 
 	return cmd
 }
@@ -366,8 +366,8 @@ func anomalyCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to use")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Time window in minutes to analyze")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 60, "Time window in minutes to analyze (e.g. 90, 90m, 2h)")
 	cmd.Flags().Float64VarP(&sensitivity, "sensitivity", "s", 2.0, "Z-score threshold for anomaly detection (lower = more sensitive)")
 	cmd.Flags().StringVar(&service, "service", "", "Scan a specific service only")
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI root cause analysis")
@@ -438,11 +438,11 @@ Use --ai to generate an AI-powered incident narrative.`,
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to use")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Time window in minutes")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 60, "Time window in minutes (e.g. 90, 90m, 2h)")
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to a specific service")
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Generate AI incident narrative")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format (terminal, markdown)")
+	addFormatFlag(cmd, &format, "terminal")
 
 	return cmd
 }
@@ -518,13 +518,13 @@ the root cause in a cascade.`,
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to analyze (e.g. 90, 90m, 2h)")
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Focus on a specific service (default: all)")
 	cmd.Flags().IntVar(&bucketSize, "bucket", 60, "Time bucket size in seconds for clustering")
 	cmd.Flags().IntVar(&minEvents, "min-events", 3, "Minimum events to form a cluster")
 	cmd.Flags().BoolVar(&useAI, "ai", false, "Include AI-powered correlation analysis")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, markdown")
+	addFormatFlag(cmd, &format, "terminal")
 	cmd.AddCommand(correlateStackCmd())
 
 	return cmd
@@ -581,10 +581,10 @@ blast radius.`,
 		},
 	}
 
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to look back for Loki samples")
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back for Loki samples (e.g. 90, 90m, 2h)")
 	cmd.Flags().IntVar(&logLimit, "log-limit", 50, "Maximum Loki log entries to scan per service")
 	cmd.Flags().IntVar(&samples, "samples", 3, "Maximum Loki log samples to show per correlated group")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
+	addFormatFlag(cmd, &format, "terminal")
 	return cmd
 }
 
@@ -635,11 +635,11 @@ func scorecardCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to analyze (e.g. 90, 90m, 2h)")
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to a single service")
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-generated summary (uses Anthropic API)")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
+	addFormatFlag(cmd, &format, "terminal")
 
 	return cmd
 }
@@ -706,11 +706,11 @@ Risk levels:
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 120, "Historical duration in minutes to analyze")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 120, "Historical duration in minutes to analyze (e.g. 90, 90m, 2h)")
 	cmd.Flags().IntVar(&horizon, "horizon", 60, "Forecast horizon in minutes")
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
+	addFormatFlag(cmd, &format, "terminal")
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-powered analysis (uses Anthropic API)")
 
 	return cmd
@@ -765,10 +765,10 @@ func depsCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to analyze (e.g. 90, 90m, 2h)")
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to show only deps for this service")
-	cmd.Flags().StringVarP(&format, "format", "f", "table", "Output format: table or markdown")
+	addFormatFlag(cmd, &format, "table")
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI architecture analysis")
 
 	return cmd
@@ -847,12 +847,12 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
-	cmd.Flags().IntVarP(&duration, "duration", "d", 360, "Time window in minutes to analyze (default: 6h)")
+	addInstanceFlag(cmd, &instance)
+	addDurationFlag(cmd, &duration, 360, "Time window in minutes to analyze (default: 6h) (e.g. 90, 90m, 2h)")
 	cmd.Flags().IntVarP(&buckets, "buckets", "b", 12, "Number of time buckets for analysis")
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
 	cmd.Flags().StringVar(&sensitivity, "sensitivity", "medium", "Detection sensitivity: low, medium, high")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
+	addFormatFlag(cmd, &format, "terminal")
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-powered deployment analysis (uses Anthropic API)")
 
 	return cmd

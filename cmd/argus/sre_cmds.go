@@ -108,8 +108,8 @@ Exit code reflects highest severity: 0=ok, 1=warning, 2=critical.`,
 			return nil
 		},
 	}
-	checkCmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to check against")
-	checkCmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: text or json")
+	addInstanceFlag(checkCmd, &instance)
+	addFormatFlag(checkCmd, &format, "text")
 	cmd.AddCommand(checkCmd)
 
 	return cmd
@@ -215,8 +215,8 @@ Exit code reflects worst SLO: 0=ok, 1=warning, 2=critical/exhausted.`,
 			return nil
 		},
 	}
-	checkCmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to check against")
-	checkCmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: text or json")
+	addInstanceFlag(checkCmd, &instance)
+	addFormatFlag(checkCmd, &format, "text")
 	cmd.AddCommand(checkCmd)
 
 	return cmd
@@ -308,9 +308,9 @@ Exit codes: 0 = healthy, 1 = critical, 2 = exhausted/page.`,
 			return nil
 		},
 	}
-	checkCmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance")
+	addInstanceFlag(checkCmd, &instance)
 	checkCmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
-	checkCmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, markdown, json")
+	addFormatFlag(checkCmd, &format, "terminal")
 	checkCmd.Flags().StringVarP(&window, "window", "w", "6h", "Analysis window: 1h, 6h, 24h, 7d, 30d")
 	checkCmd.Flags().BoolVar(&useAI, "ai", false, "Include AI-powered recommendations")
 	cmd.AddCommand(checkCmd)
@@ -413,9 +413,9 @@ Use --strict for critical services (lower thresholds, blocks on warnings).`,
 		},
 	}
 
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance")
+	addInstanceFlag(cmd, &instance)
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Check specific service only")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, markdown, json")
+	addFormatFlag(cmd, &format, "terminal")
 	cmd.Flags().BoolVar(&strict, "strict", false, "Strict mode: lower thresholds, block on warnings")
 	cmd.Flags().BoolVar(&useAI, "ai", false, "Include AI deployment advisory")
 	cmd.Flags().Float64Var(&maxErrorRate, "max-error-rate", 0, "Max acceptable error rate %% (0 = default)")

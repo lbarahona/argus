@@ -131,8 +131,8 @@ func postmortemGenerateCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&useAI, "ai", false, "Enable AI-powered root cause analysis and action items")
-	cmd.Flags().StringVar(&format, "format", "terminal", "Output format: terminal, markdown, json")
-	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to enrich the postmortem with (default: default instance)")
+	addFormatFlag(cmd, &format, "terminal")
+	addInstanceFlag(cmd, &instance)
 
 	return cmd
 }
@@ -192,7 +192,7 @@ func postmortemShowCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&format, "format", "terminal", "Output format: terminal, markdown, json")
+	addFormatFlag(cmd, &format, "terminal")
 
 	return cmd
 }

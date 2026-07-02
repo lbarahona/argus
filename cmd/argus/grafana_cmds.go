@@ -76,7 +76,7 @@ func grafanaDashboardsCmd() *cobra.Command {
 			}, nil, dashboards)
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	return cmd
 }
 
@@ -106,7 +106,7 @@ func grafanaDashboardGetCmd() *cobra.Command {
 			}, nil, dm)
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	return cmd
 }
 
@@ -144,7 +144,7 @@ func grafanaSearchCmd() *cobra.Command {
 			}, nil, results)
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	cmd.Flags().StringVar(&kind, "type", "", "Filter by type: dash-db, dash-folder")
 	cmd.Flags().IntVar(&limit, "limit", 100, "Max results")
 	return cmd
@@ -176,7 +176,7 @@ func grafanaDatasourcesCmd() *cobra.Command {
 			}, nil, ds)
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	return cmd
 }
 
@@ -205,7 +205,7 @@ func grafanaFoldersCmd() *cobra.Command {
 			}, nil, folders)
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	return cmd
 }
 
@@ -234,7 +234,7 @@ func grafanaAlertsCmd() *cobra.Command {
 			}, nil, rules)
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	return cmd
 }
 
@@ -263,7 +263,7 @@ func grafanaAlertInstancesCmd() *cobra.Command {
 			}, nil, instances)
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	return cmd
 }
 
@@ -299,7 +299,7 @@ func grafanaStatusCmd() *cobra.Command {
 			}, nil, data)
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	return cmd
 }
 
@@ -328,6 +328,6 @@ func grafanaSummaryCmd() *cobra.Command {
 			}, nil, summary)
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	return cmd
 }

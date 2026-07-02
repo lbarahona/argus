@@ -102,9 +102,9 @@ Examples:
 		},
 	}
 
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to look back")
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back (e.g. 90, 90m, 2h)")
 	cmd.Flags().IntVarP(&limit, "limit", "l", 100, "Maximum number of log entries")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
+	addFormatFlag(cmd, &format, "terminal")
 	cmd.Flags().BoolVar(&labels, "labels", false, "Show labels for each log entry")
 
 	return cmd
@@ -143,8 +143,8 @@ func lokiLabelsCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to look back")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back (e.g. 90, 90m, 2h)")
+	addFormatFlag(cmd, &format, "terminal")
 
 	return cmd
 }
@@ -185,8 +185,8 @@ func lokiLabelValuesCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to look back")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back (e.g. 90, 90m, 2h)")
+	addFormatFlag(cmd, &format, "terminal")
 
 	return cmd
 }
@@ -228,8 +228,8 @@ func lokiSeriesCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to look back")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back (e.g. 90, 90m, 2h)")
+	addFormatFlag(cmd, &format, "terminal")
 
 	return cmd
 }
@@ -281,9 +281,9 @@ func lokiStatsCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes")
+	addDurationFlag(cmd, &duration, 60, "Duration in minutes (e.g. 90, 90m, 2h)")
 	cmd.Flags().StringVarP(&query, "query", "q", "", "Optional LogQL selector to scope stats (default: derived from your labels)")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
+	addFormatFlag(cmd, &format, "terminal")
 
 	return cmd
 }
@@ -321,7 +321,7 @@ func lokiStatusCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
+	addFormatFlag(cmd, &format, "terminal")
 	return cmd
 }
 
@@ -352,6 +352,6 @@ func lokiSummaryCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
+	addFormatFlag(cmd, &format, "terminal")
 	return cmd
 }

@@ -80,7 +80,7 @@ func promRulesCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&ruleType, "type", "", "Filter by rule type: alert, record")
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	return cmd
 }
 
@@ -110,7 +110,7 @@ func promTargetsCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	return cmd
 }
 
@@ -140,7 +140,7 @@ func promAlertsCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	return cmd
 }
 
@@ -172,7 +172,7 @@ func promQueryCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	return cmd
 }
 
@@ -211,7 +211,7 @@ func promStatusCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json")
+	addFormatFlag(cmd, &format, "text")
 	return cmd
 }
 

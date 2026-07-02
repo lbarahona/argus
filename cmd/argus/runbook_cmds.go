@@ -76,7 +76,7 @@ across teams via version control.`,
 			}, nil, rbs)
 		},
 	}
-	listCmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: text or json")
+	addFormatFlag(listCmd, &format, "text")
 	listCmd.Flags().StringVarP(&category, "category", "c", "", "Filter by category")
 	cmd.AddCommand(listCmd)
 
