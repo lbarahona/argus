@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/doctor"
 	"github.com/lbarahona/argus/internal/mcpserver"
 	"github.com/lbarahona/argus/internal/tui"
@@ -32,17 +31,12 @@ down into issues with follow-up questions.`,
   argus tui -i production
   argus tui --max-history 40`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			// tui requires AI to function at all.
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(cfg)
-
-			if !hasAIConfig(cfg) {
-				return fmt.Errorf("AI provider not configured. Run: argus config init")
-			}
-
-			sctx, err := newSignozContext(instance)
+			provider, err := requireAI(sctx.cfg)
 			if err != nil {
 				return err
 			}

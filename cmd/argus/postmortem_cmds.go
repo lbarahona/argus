@@ -74,15 +74,18 @@ func postmortemGenerateCmd() *cobra.Command {
 				querier = sctx.client
 			}
 
-			// Get AI provider
+			// Get AI provider. --ai is an explicit request for AI — if it
+			// can't be satisfied, error out instead of silently generating
+			// the postmortem without AI analysis. Generating without AI
+			// is only ok when the user never asked for it.
 			var provider ai.Provider
 			if useAI {
-				if cfg != nil {
-					provider, _ = getAIProvider(cfg)
+				if cfgErr != nil {
+					return fmt.Errorf("loading config: %w", cfgErr)
 				}
-				if provider == nil {
-					fmt.Println(output.WarningStyle.Render("⚠️  No AI provider configured. Skipping AI analysis."))
-					useAI = false
+				provider, err = requireAI(cfg)
+				if err != nil {
+					return err
 				}
 			}
 

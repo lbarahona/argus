@@ -92,8 +92,15 @@ func logsCmd() *cobra.Command {
 				return fmt.Errorf("querying logs: %w", err)
 			}
 
-			// If we have a query, send to AI for analysis
-			if query != "" && hasAIConfig(sctx.cfg) {
+			// If we have a query, send to AI for analysis. A query is an
+			// explicit request for AI — if AI isn't available, error out
+			// instead of silently printing raw logs as if it answered.
+			if query != "" {
+				provider, err := requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+
 				output.PrintAnalyzing(query)
 
 				dataContext := result.Raw
@@ -104,10 +111,6 @@ func logsCmd() *cobra.Command {
 				prompt := fmt.Sprintf("User query: %s\n\nObservability data from Signoz instance %q:\n%s",
 					query, sctx.instKey, dataContext)
 
-				provider, err := getAIProvider(sctx.cfg)
-				if err != nil {
-					return fmt.Errorf("creating AI provider: %w", err)
-				}
 				analyzer := ai.NewFromProvider(provider)
 				return analyzer.Analyze(prompt, os.Stdout)
 			}
@@ -189,17 +192,19 @@ func tracesCmd() *cobra.Command {
 				return fmt.Errorf("querying traces: %w", err)
 			}
 
-			// If we have a query, send to AI
-			if query != "" && hasAIConfig(sctx.cfg) {
+			// If we have a query, send to AI. A query is an explicit request
+			// for AI — error out rather than silently printing raw traces.
+			if query != "" {
+				provider, err := requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+
 				output.PrintAnalyzing(query)
 
 				prompt := fmt.Sprintf("User query: %s\n\nTrace data from Signoz instance %q:\n%s",
 					query, sctx.instKey, result.Raw)
 
-				provider, err := getAIProvider(sctx.cfg)
-				if err != nil {
-					return fmt.Errorf("creating AI provider: %w", err)
-				}
 				analyzer := ai.NewFromProvider(provider)
 				return analyzer.Analyze(prompt, os.Stdout)
 			}
@@ -247,16 +252,19 @@ func metricsCmd() *cobra.Command {
 				return fmt.Errorf("querying metrics: %w", err)
 			}
 
-			if query != "" && hasAIConfig(sctx.cfg) {
+			// A query is an explicit request for AI — error out rather than
+			// silently printing raw metrics.
+			if query != "" {
+				provider, err := requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+
 				output.PrintAnalyzing(query)
 
 				prompt := fmt.Sprintf("User query: %s\n\nMetric data from Signoz instance %q:\n%s",
 					query, sctx.instKey, result.Raw)
 
-				provider, err := getAIProvider(sctx.cfg)
-				if err != nil {
-					return fmt.Errorf("creating AI provider: %w", err)
-				}
 				analyzer := ai.NewFromProvider(provider)
 				return analyzer.Analyze(prompt, os.Stdout)
 			}
@@ -351,24 +359,21 @@ func askCmd() *cobra.Command {
 		Long:  "Use AI (Anthropic, OpenAI, or Bedrock) to analyze your observability data and answer questions about your infrastructure.",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			// Resolve the instance first (a bad -i errors instead of
+			// silently producing output with missing context), then
+			// require AI — ask can't function without it.
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
-
-			if !hasAIConfig(cfg) {
-				return fmt.Errorf("AI provider not configured. Run: argus config init")
+			provider, err := requireAI(sctx.cfg)
+			if err != nil {
+				return err
 			}
 
 			question := strings.Join(args, " ")
 			output.PrintAnalyzing(question)
 
-			// Gather context from Signoz. A bad -i now errors instead of
-			// silently producing output with missing context.
-			sctx, err := newSignozContext(instance)
-			if err != nil {
-				return err
-			}
 			contextInfo := ""
 			ctx := context.Background()
 
@@ -400,10 +405,6 @@ func askCmd() *cobra.Command {
 
 			prompt := question + contextInfo
 
-			provider, err := getAIProvider(cfg)
-			if err != nil {
-				return fmt.Errorf("creating AI provider: %w", err)
-			}
 			analyzer := ai.NewFromProvider(provider)
 			return analyzer.Analyze(prompt, os.Stdout)
 		},

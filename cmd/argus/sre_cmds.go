@@ -271,7 +271,10 @@ Exit codes: 0 = healthy, 1 = critical, 2 = exhausted/page.`,
 
 			var budgetProvider ai.Provider
 			if useAI {
-				budgetProvider, _ = getAIProvider(sctx.cfg)
+				budgetProvider, err = requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
 			}
 			opts := budget.Options{
 				Window:     window,
@@ -371,7 +374,10 @@ Use --strict for critical services (lower thresholds, blocks on warnings).`,
 
 			var guardProvider ai.Provider
 			if useAI {
-				guardProvider, _ = getAIProvider(sctx.cfg)
+				guardProvider, err = requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
 			}
 			opts := guard.Options{
 				Service:       service,

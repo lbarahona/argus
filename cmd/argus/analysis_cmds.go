@@ -10,7 +10,6 @@ import (
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/anomaly"
-	"github.com/lbarahona/argus/internal/config"
 	"github.com/lbarahona/argus/internal/correlate"
 	"github.com/lbarahona/argus/internal/deploy"
 	"github.com/lbarahona/argus/internal/deps"
@@ -41,7 +40,13 @@ func reportCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(sctx.cfg)
+			var provider ai.Provider
+			if withAI {
+				provider, err = requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+			}
 
 			ctx := context.Background()
 			fmt.Printf("%s Generating health report...\n", output.MutedStyle.Render("⏳"))
@@ -238,15 +243,12 @@ Think of it as having a senior SRE look at all your dashboards at once.`,
   argus explain auth-service -i production`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			// explain requires AI to function at all.
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(cfg)
-			if !hasAIConfig(cfg) {
-				return fmt.Errorf("AI provider not configured. Run: argus config init")
-			}
-			sctx, err := newSignozContext(instance)
+			provider, err := requireAI(sctx.cfg)
 			if err != nil {
 				return err
 			}
@@ -298,7 +300,13 @@ func anomalyCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(sctx.cfg)
+			var provider ai.Provider
+			if withAI {
+				provider, err = requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+			}
 
 			ctx := context.Background()
 
@@ -399,7 +407,13 @@ Use --ai to generate an AI-powered incident narrative.`,
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(sctx.cfg)
+			var provider ai.Provider
+			if withAI {
+				provider, err = requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+			}
 			ctx := context.Background()
 
 			opts := timeline.Options{
@@ -407,10 +421,6 @@ Use --ai to generate an AI-powered incident narrative.`,
 				Service:    service,
 				WithAI:     withAI,
 				AIProvider: provider,
-			}
-
-			if withAI && !hasAIConfig(sctx.cfg) {
-				return fmt.Errorf("AI provider not configured. Run: argus config init")
 			}
 
 			tl, err := timeline.Generate(ctx, sctx.client, sctx.instKey, opts)
@@ -466,7 +476,13 @@ the root cause in a cascade.`,
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(sctx.cfg)
+			var provider ai.Provider
+			if useAI {
+				provider, err = requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+			}
 
 			ctx := context.Background()
 
@@ -479,9 +495,6 @@ the root cause in a cascade.`,
 			}
 
 			if useAI {
-				if !hasAIConfig(sctx.cfg) {
-					return fmt.Errorf("AI provider not configured. Run: argus config init")
-				}
 				fmt.Printf("%s Collecting signals from %s...\n",
 					output.MutedStyle.Render("🔍"), output.AccentStyle.Render(sctx.instKey))
 				return correlate.RunWithAI(ctx, sctx.client, sctx.instKey, opts, os.Stdout)
@@ -591,7 +604,13 @@ func scorecardCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(sctx.cfg)
+			var provider ai.Provider
+			if withAI {
+				provider, err = requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+			}
 
 			ctx := context.Background()
 			fmt.Printf("%s Generating reliability scorecard...\n", output.MutedStyle.Render("⏳"))
@@ -653,7 +672,13 @@ Risk levels:
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(sctx.cfg)
+			var provider ai.Provider
+			if withAI {
+				provider, err = requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+			}
 
 			ctx := context.Background()
 
@@ -707,7 +732,13 @@ func depsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(sctx.cfg)
+			var provider ai.Provider
+			if withAI {
+				provider, err = requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+			}
 
 			ctx := context.Background()
 			fmt.Printf("%s Mapping service dependencies...\n", output.MutedStyle.Render("⏳"))
@@ -781,7 +812,13 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
 			if err != nil {
 				return err
 			}
-			provider, _ := getAIProvider(sctx.cfg)
+			var provider ai.Provider
+			if withAI {
+				provider, err = requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+			}
 
 			ctx := context.Background()
 

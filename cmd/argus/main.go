@@ -98,7 +98,9 @@ func main() {
 }
 
 // getAIProvider creates an AI provider from the loaded config.
-// Returns nil, nil if no AI is configured (not an error, just no AI available).
+// Returns a non-nil error whenever the configured (or default) provider is
+// missing required credentials — there is no "unconfigured but not an
+// error" case.
 func getAIProvider(cfg *types.Config) (ai.Provider, error) {
 	aiCfg := cfg.GetAIConfig()
 	return ai.NewProvider(ai.AIConfig{
@@ -114,18 +116,16 @@ func getAIProvider(cfg *types.Config) (ai.Provider, error) {
 	})
 }
 
-// hasAIConfig returns true if the config has any AI provider configured.
-func hasAIConfig(cfg *types.Config) bool {
-	aiCfg := cfg.GetAIConfig()
-	switch aiCfg.Provider {
-	case "anthropic", "":
-		return aiCfg.AnthropicKey != "" || os.Getenv("ANTHROPIC_API_KEY") != ""
-	case "openai":
-		return aiCfg.OpenAIKey != "" || os.Getenv("OPENAI_API_KEY") != ""
-	case "bedrock":
-		return aiCfg.Bedrock.Endpoint != "" && (aiCfg.Bedrock.Token != "" || os.Getenv("AWS_BEARER_TOKEN_BEDROCK") != "")
+// requireAI returns a configured provider or a uniform, actionable error.
+// Every command that was asked for AI (an --ai flag, or a --query/question
+// argument) must call this — a user request for AI must never silently
+// no-op or degrade to non-AI output.
+func requireAI(cfg *types.Config) (ai.Provider, error) {
+	provider, err := getAIProvider(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("AI is not configured: %w — set ANTHROPIC_API_KEY or configure an ai provider in ~/.argus/config.yaml", err)
 	}
-	return false
+	return provider, nil
 }
 
 func versionCmd() *cobra.Command {
