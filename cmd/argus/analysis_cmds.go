@@ -36,6 +36,9 @@ func reportCmd() *cobra.Command {
 		Short: "Generate a health report for shift handoffs",
 		Long:  "Compile a comprehensive health report including service status, error patterns, and optional AI summary. Perfect for shift handoffs and incident reviews.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateFormat(format); err != nil {
+				return err
+			}
 			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
@@ -403,6 +406,9 @@ Use --ai to generate an AI-powered incident narrative.`,
   argus timeline --format markdown > incident-report.md
   argus timeline -i production --duration 30 --ai`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateFormat(format); err != nil {
+				return err
+			}
 			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
@@ -668,6 +674,9 @@ Risk levels:
   argus forecast -s api-service --ai
   argus forecast -f markdown > forecast.md`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateFormat(format); err != nil {
+				return err
+			}
 			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
@@ -728,6 +737,9 @@ func depsCmd() *cobra.Command {
 		Short: "Map service dependencies from trace data",
 		Long:  "Discover upstream and downstream service dependencies by analyzing trace spans. Shows call volumes, error rates, and latency between services. Outputs an ASCII dependency graph and optional Mermaid diagram.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateFormat(format); err != nil {
+				return err
+			}
 			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
@@ -808,6 +820,9 @@ Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
   argus deploy -s payment-api --ai
   argus deploy -f markdown > deploy-report.md`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateFormat(format); err != nil {
+				return err
+			}
 			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err

@@ -106,6 +106,9 @@ func doctorCmd() *cobra.Command {
 		Short: "Diagnose configuration and connectivity issues",
 		Long:  "Run diagnostic checks on config, Signoz instances, AI keys, and network connectivity.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateFormat(format); err != nil {
+				return err
+			}
 			ctx := cmd.Context()
 			report := doctor.Run(ctx, version, verbose)
 

@@ -43,6 +43,9 @@ func postmortemGenerateCmd() *cobra.Command {
 		Long:  "Collects incident timeline, Signoz metrics, error logs, and optionally runs AI analysis to produce a structured postmortem document.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateFormat(format); err != nil {
+				return err
+			}
 			incidentID := args[0]
 
 			// Check if postmortem already exists for this incident
@@ -58,14 +61,20 @@ func postmortemGenerateCmd() *cobra.Command {
 
 			// Try to get a Signoz querier. Enrichment is optional — a
 			// postmortem without Signoz data is still valid — so a config
-			// load failure only warns and continues. But once config loads,
-			// an instance resolution failure (e.g. a typo'd -i) is returned
-			// instead of silently skipping enrichment.
+			// load failure only warns and continues. Likewise, a zero-config
+			// setup (no instances configured, and the user didn't pass an
+			// explicit -i) just skips enrichment. But once an instance is
+			// explicitly requested via -i, a resolution failure (e.g. a
+			// typo'd instance name) is returned instead of silently skipping
+			// enrichment.
 			var querier signoz.SignozQuerier
 			cfg, cfgErr := config.Load()
-			if cfgErr != nil {
+			switch {
+			case cfgErr != nil:
 				fmt.Println(output.WarningStyle.Render(fmt.Sprintf("⚠️  Could not load config (%v); continuing without Signoz enrichment.", cfgErr)))
-			} else {
+			case instance == "" && len(cfg.Instances) == 0:
+				fmt.Println(output.WarningStyle.Render("⚠️  No Signoz instances configured; continuing without Signoz enrichment. Run 'argus config init' to add one."))
+			default:
 				sctx, err := newSignozContext(instance)
 				if err != nil {
 					return err
@@ -168,6 +177,9 @@ func postmortemShowCmd() *cobra.Command {
 		Short: "Display a postmortem",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateFormat(format); err != nil {
+				return err
+			}
 			store, err := pmlib.Load()
 			if err != nil {
 				return err

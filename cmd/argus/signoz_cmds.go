@@ -78,6 +78,17 @@ func logsCmd() *cobra.Command {
 				return err
 			}
 
+			// A query is an explicit request for AI — validate it's
+			// available before doing the (potentially slow) Signoz fetch,
+			// so a missing key errors instantly instead of after the query.
+			var provider ai.Provider
+			if query != "" {
+				provider, err = requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+			}
+
 			service := ""
 			if len(args) > 0 {
 				service = args[0]
@@ -92,15 +103,8 @@ func logsCmd() *cobra.Command {
 				return fmt.Errorf("querying logs: %w", err)
 			}
 
-			// If we have a query, send to AI for analysis. A query is an
-			// explicit request for AI — if AI isn't available, error out
-			// instead of silently printing raw logs as if it answered.
+			// If we have a query, send to AI for analysis.
 			if query != "" {
-				provider, err := requireAI(sctx.cfg)
-				if err != nil {
-					return err
-				}
-
 				output.PrintAnalyzing(query)
 
 				dataContext := result.Raw
@@ -178,6 +182,17 @@ func tracesCmd() *cobra.Command {
 				return err
 			}
 
+			// A query is an explicit request for AI — validate it's
+			// available before doing the (potentially slow) Signoz fetch,
+			// so a missing key errors instantly instead of after the query.
+			var provider ai.Provider
+			if query != "" {
+				provider, err = requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+			}
+
 			service := ""
 			if len(args) > 0 {
 				service = args[0]
@@ -192,14 +207,8 @@ func tracesCmd() *cobra.Command {
 				return fmt.Errorf("querying traces: %w", err)
 			}
 
-			// If we have a query, send to AI. A query is an explicit request
-			// for AI — error out rather than silently printing raw traces.
+			// If we have a query, send to AI.
 			if query != "" {
-				provider, err := requireAI(sctx.cfg)
-				if err != nil {
-					return err
-				}
-
 				output.PrintAnalyzing(query)
 
 				prompt := fmt.Sprintf("User query: %s\n\nTrace data from Signoz instance %q:\n%s",
@@ -238,6 +247,17 @@ func metricsCmd() *cobra.Command {
 				return err
 			}
 
+			// A query is an explicit request for AI — validate it's
+			// available before doing the (potentially slow) Signoz fetch,
+			// so a missing key errors instantly instead of after the query.
+			var provider ai.Provider
+			if query != "" {
+				provider, err = requireAI(sctx.cfg)
+				if err != nil {
+					return err
+				}
+			}
+
 			metricName := ""
 			if len(args) > 0 {
 				metricName = args[0]
@@ -252,14 +272,8 @@ func metricsCmd() *cobra.Command {
 				return fmt.Errorf("querying metrics: %w", err)
 			}
 
-			// A query is an explicit request for AI — error out rather than
-			// silently printing raw metrics.
+			// A query is an explicit request for AI.
 			if query != "" {
-				provider, err := requireAI(sctx.cfg)
-				if err != nil {
-					return err
-				}
-
 				output.PrintAnalyzing(query)
 
 				prompt := fmt.Sprintf("User query: %s\n\nMetric data from Signoz instance %q:\n%s",
@@ -290,7 +304,11 @@ func dashboardCmd() *cobra.Command {
 		Short: "Quick overview dashboard",
 		Long:  "Display a combined view of instance health, top services, and recent errors.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			// Resolve the target instance first so a bad -i (or a missing
+			// default with no instances configured) errors out immediately,
+			// before spending time sweeping every configured instance for
+			// health.
+			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
 			}
@@ -299,13 +317,13 @@ func dashboardCmd() *cobra.Command {
 
 			// Collect health statuses from all instances
 			var statuses []types.HealthStatus
-			keys := make([]string, 0, len(cfg.Instances))
-			for k := range cfg.Instances {
+			keys := make([]string, 0, len(sctx.cfg.Instances))
+			for k := range sctx.cfg.Instances {
 				keys = append(keys, k)
 			}
 			sort.Strings(keys)
 			for _, key := range keys {
-				inst := cfg.Instances[key]
+				inst := sctx.cfg.Instances[key]
 				client := signoz.New(inst)
 				healthy, latency, healthErr := client.Health(ctx)
 				s := types.HealthStatus{
@@ -322,12 +340,6 @@ func dashboardCmd() *cobra.Command {
 			}
 
 			// Get services and recent errors from the target instance.
-			// Instance resolution failures are returned (e.g. a typo'd -i);
-			// individual query failures still degrade gracefully.
-			sctx, err := newSignozContext(instance)
-			if err != nil {
-				return err
-			}
 			var services []types.Service
 			var recentLogs []types.LogEntry
 

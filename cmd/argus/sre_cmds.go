@@ -253,6 +253,9 @@ Exit codes: 0 = healthy, 1 = critical, 2 = exhausted/page.`,
   argus budget check --ai
   argus budget check --window 24h`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateFormat(format); err != nil {
+				return err
+			}
 			sloCfg, err := slo.LoadSLOs()
 			if err != nil {
 				return fmt.Errorf("loading SLOs: %w (run 'argus slo init' first)", err)
@@ -356,6 +359,9 @@ Use --strict for critical services (lower thresholds, blocks on warnings).`,
   - name: Pre-deploy check
     run: argus guard --strict --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateFormat(format); err != nil {
+				return err
+			}
 			sctx, err := newSignozContext(instance)
 			if err != nil {
 				return err
