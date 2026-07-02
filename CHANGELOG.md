@@ -2,7 +2,7 @@
 
 All notable changes to Argus will be documented in this file.
 
-## [v0.8.0] - Unreleased
+## [v0.8.0] - 2026-07-02
 
 ### Breaking Changes
 
