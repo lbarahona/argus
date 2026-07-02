@@ -528,7 +528,7 @@ func TestAnalyzeIntegration(t *testing.T) {
 		t.Errorf("Auth total requests = %d, want 50000", authReport.TotalRequests)
 	}
 	if authReport.Status != "healthy" {
-		t.Errorf("Auth status = %q, want healthy (40%% consumed)", authReport.Status)
+		t.Errorf("Auth status = %q, want healthy (0.4x burn over 6h of a 30d window)", authReport.Status)
 	}
 }
 
