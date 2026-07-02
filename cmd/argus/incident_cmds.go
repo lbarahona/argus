@@ -27,8 +27,8 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 		Short: "Create a new incident",
 		Args:  cobra.MinimumNArgs(1),
 		Example: `  argus incident create "API returning 500s" --severity critical --services api-service
-  argus incident create "Latency spike" -s major --commander lester
-  argus incident create "DB connection pool exhausted" -s critical --services db,api`,
+  argus incident create "Latency spike" --severity major --commander lester
+  argus incident create "DB connection pool exhausted" --severity critical --services db,api`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			store, err := incident.Load()
 			if err != nil {
@@ -49,10 +49,10 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 			return nil
 		},
 	}
-	createCmd.Flags().StringVarP(&severity, "severity", "s", "major", "Severity: critical, major, minor")
+	createCmd.Flags().StringVar(&severity, "severity", "major", "Severity: critical, major, minor")
 	createCmd.Flags().StringSliceVar(&services, "services", nil, "Affected services (comma-separated)")
 	createCmd.Flags().StringVarP(&commander, "commander", "c", "", "Incident commander")
-	createCmd.Flags().StringVarP(&description, "description", "d", "", "Description")
+	createCmd.Flags().StringVar(&description, "description", "", "Description")
 	cmd.AddCommand(createCmd)
 
 	// list
@@ -127,7 +127,7 @@ Perfect for on-call SREs who need to track incidents during shifts.`,
 	}
 	updateCmd.Flags().StringVar(&updateStatus, "status", "", "New status: investigating, identified, monitoring, resolved")
 	updateCmd.Flags().StringVarP(&message, "message", "m", "", "Timeline message")
-	updateCmd.Flags().StringVarP(&author, "author", "a", "", "Author of the update")
+	updateCmd.Flags().StringVar(&author, "author", "", "Author of the update")
 	cmd.AddCommand(updateCmd)
 
 	// resolve (shortcut for update --status resolved)

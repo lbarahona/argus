@@ -125,7 +125,7 @@ func logsCmd() *cobra.Command {
 	addInstanceFlag(cmd, &instance)
 	addDurationFlag(cmd, &duration, 60, "Duration in minutes to look back (e.g. 90, 90m, 2h)")
 	cmd.Flags().IntVarP(&limit, "limit", "l", 100, "Maximum number of log entries")
-	cmd.Flags().StringVarP(&severity, "severity", "s", "", "Filter by severity (ERROR, WARN, INFO, DEBUG)")
+	cmd.Flags().StringVar(&severity, "severity", "", "Filter by severity (ERROR, WARN, INFO, DEBUG)")
 
 	return cmd
 }

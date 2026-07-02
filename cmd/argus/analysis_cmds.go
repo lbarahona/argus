@@ -368,10 +368,10 @@ func anomalyCmd() *cobra.Command {
 
 	addInstanceFlag(cmd, &instance)
 	addDurationFlag(cmd, &duration, 60, "Time window in minutes to analyze (e.g. 90, 90m, 2h)")
-	cmd.Flags().Float64VarP(&sensitivity, "sensitivity", "s", 2.0, "Z-score threshold for anomaly detection (lower = more sensitive)")
-	cmd.Flags().StringVar(&service, "service", "", "Scan a specific service only")
+	cmd.Flags().Float64Var(&sensitivity, "sensitivity", 2.0, "Z-score threshold for anomaly detection (lower = more sensitive)")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Scan a specific service only")
 	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI root cause analysis")
-	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Only show anomalies (hide healthy services)")
+	cmd.Flags().BoolVar(&quiet, "quiet", false, "Only show anomalies (hide healthy services)")
 
 	return cmd
 }

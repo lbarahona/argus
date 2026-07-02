@@ -155,7 +155,7 @@ func postmortemListCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVarP(&limit, "limit", "n", 0, "Max postmortems to show (0=all)")
+	cmd.Flags().IntVarP(&limit, "limit", "l", 0, "Max postmortems to show (0=all)")
 
 	return cmd
 }
