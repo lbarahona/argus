@@ -159,7 +159,7 @@ func LoadAlerts() (*AlertConfig, error) {
 	data, err := os.ReadFile(alertsPath())
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("no alerts configured — run 'argus alert init' to create sample rules")
+			return nil, fmt.Errorf("no alerts configured — run 'argus rules init' to create sample rules")
 		}
 		return nil, fmt.Errorf("reading alerts: %w", err)
 	}

@@ -15,8 +15,8 @@ import (
 
 func alertCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "alert",
-		Short: "Manage and evaluate alert rules",
+		Use:   "rules",
+		Short: "Local alert rules evaluated against Signoz",
 		Long: `Define alert rules in ~/.argus/alerts.yaml and evaluate them against your
 Signoz instances. Perfect for cron jobs and CI pipelines.
 
@@ -31,7 +31,7 @@ Exit codes: 0 = all OK, 1 = warnings, 2 = critical alerts found.`,
 				return err
 			}
 			fmt.Println("✅ Sample alert rules created at ~/.argus/alerts.yaml")
-			fmt.Println("   Edit the file to customize rules, then run: argus alert check")
+			fmt.Println("   Edit the file to customize rules, then run: argus rules check")
 			return nil
 		},
 	})
@@ -74,10 +74,10 @@ Exit codes: 0 = all OK, 1 = warnings, 2 = critical alerts found.`,
 
 Use --format json for machine-readable output (great for cron jobs).
 Exit code reflects highest severity: 0=ok, 1=warning, 2=critical.`,
-		Example: `  argus alert check
-  argus alert check --format json
-  argus alert check -i production
-  argus alert check --format json | jq '.summary'`,
+		Example: `  argus rules check
+  argus rules check --format json
+  argus rules check -i production
+  argus rules check --format json | jq '.summary'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			alertCfg, err := alert.LoadAlerts()
 			if err != nil {

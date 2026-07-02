@@ -52,8 +52,7 @@ func main() {
 	rootCmd.AddCommand(
 		versionCmd(),
 		configCmd(),
-		useCmd(),
-		instancesCmd(),
+		useCmd(), // `use` with no args lists instances; the old standalone `instances` command was dropped
 		statusCmd(),
 		logsCmd(),
 		askCmd(),
@@ -62,7 +61,7 @@ func main() {
 		metricsCmd(),
 		reportCmd(),
 		watchCmd(),
-		alertCmd(),
+		alertCmd(), // registers as "rules" (renamed from "alert")
 		explainCmd(),
 		sloCmd(),
 		analyzeCmd(),

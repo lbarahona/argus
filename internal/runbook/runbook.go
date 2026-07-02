@@ -312,7 +312,7 @@ func InitSamples(s *Store) error {
 				{Name: "Check dependencies", Command: "argus status", Notes: "Verify all upstream/downstream services are healthy"},
 				{Name: "Rollback if deploy-related", Command: "kubectl rollout undo deployment/<DEPLOY> -n <NS>", Manual: true, Rollback: "kubectl rollout undo deployment/<DEPLOY> -n <NS>", Notes: "Only if error correlates with recent deploy"},
 				{Name: "Scale up if load-related", Command: "kubectl scale deployment/<DEPLOY> -n <NS> --replicas=<N>", Manual: true, Notes: "If caused by traffic spike"},
-				{Name: "Verify error rate dropping", Command: "argus analyze diff --duration 5", Check: "argus alert check --format json", Timeout: "10m"},
+				{Name: "Verify error rate dropping", Command: "argus analyze diff --duration 5", Check: "argus rules check --format json", Timeout: "10m"},
 			},
 		},
 		{

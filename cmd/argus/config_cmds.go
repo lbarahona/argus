@@ -114,18 +114,3 @@ When called with an instance name, sets it as the default.`,
 		},
 	}
 }
-
-func instancesCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "instances",
-		Short: "List configured Signoz instances",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
-			if err != nil {
-				return err
-			}
-			output.PrintInstances(cfg.Instances, cfg.DefaultInstance)
-			return nil
-		},
-	}
-}

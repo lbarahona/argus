@@ -33,10 +33,9 @@ func getLokiClient() (*lokilib.Client, error) {
 
 func lokiCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "loki",
-		Short:   "Loki integration — query logs, labels, series, and stats",
-		Long:    "Query Grafana Loki for log streams, label discovery, series exploration, and ingestion statistics.",
-		Aliases: []string{"log"},
+		Use:   "loki",
+		Short: "Loki integration — query logs, labels, series, and stats",
+		Long:  "Query Grafana Loki for log streams, label discovery, series exploration, and ingestion statistics.",
 	}
 
 	cmd.AddCommand(
