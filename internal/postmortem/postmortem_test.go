@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -196,8 +197,8 @@ func TestGenerate_WithMetrics(t *testing.T) {
 
 	q := &mockQuerier{
 		services: []types.Service{
-			{Name: "api-gateway", NumErrors: 150, NumCalls: 5000, ErrorRate: 0.03},
-			{Name: "user-service", NumErrors: 80, NumCalls: 3000, ErrorRate: 0.027},
+			{Name: "api-gateway", NumErrors: 150, NumCalls: 5000, ErrorRate: 3.0},
+			{Name: "user-service", NumErrors: 80, NumCalls: 3000, ErrorRate: 2.67},
 		},
 		logs: &types.QueryResult{
 			Logs: []types.LogEntry{
@@ -218,7 +219,7 @@ func TestGenerate_WithMetrics(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 230, pm.Metrics.TotalErrors)
 	assert.Equal(t, 8000, pm.Metrics.TotalCalls)
-	assert.InDelta(t, 0.03, pm.Metrics.PeakErrorRate, 0.001)
+	assert.InDelta(t, 3.0, pm.Metrics.PeakErrorRate, 0.001)
 	assert.Len(t, pm.Metrics.ServiceMetrics, 2)
 	assert.NotEmpty(t, pm.Metrics.TopErrors)
 }
@@ -396,7 +397,7 @@ func TestParseActionItems_NoPriority(t *testing.T) {
 func TestGenerateBasicActionItems_ManualDetection(t *testing.T) {
 	pm := &Postmortem{
 		Detection: Detection{Method: "manual"},
-		Metrics:   MetricsSummary{PeakErrorRate: 0.05},
+		Metrics:   MetricsSummary{PeakErrorRate: 5.0},
 	}
 
 	items := generateBasicActionItems(pm)
@@ -408,7 +409,7 @@ func TestGenerateBasicActionItems_ManualDetection(t *testing.T) {
 func TestGenerateBasicActionItems_HighErrorRate(t *testing.T) {
 	pm := &Postmortem{
 		Detection: Detection{Method: "alert"},
-		Metrics:   MetricsSummary{PeakErrorRate: 0.25},
+		Metrics:   MetricsSummary{PeakErrorRate: 25.0},
 	}
 
 	items := generateBasicActionItems(pm)
@@ -421,6 +422,36 @@ func TestGenerateBasicActionItems_HighErrorRate(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "should suggest error rate alerts")
+}
+
+func TestBuildAIPromptPeakErrorRateNotRescaled(t *testing.T) {
+	pm := &Postmortem{
+		Title:    "checkout outage",
+		Severity: "major",
+		Services: []string{"api"},
+		Metrics: MetricsSummary{
+			TotalErrors:   100,
+			PeakErrorRate: 3.0, // percent, as ListServices reports it
+		},
+	}
+
+	prompt := buildAIPrompt(pm)
+
+	if !strings.Contains(prompt, "Peak error rate: 3.00%") {
+		t.Errorf("prompt should report 3.00%% for PeakErrorRate=3.0, got:\n%s", prompt)
+	}
+}
+
+func TestGenerateBasicActionItemsThresholdIsTenPercent(t *testing.T) {
+	pm := &Postmortem{
+		Metrics: MetricsSummary{PeakErrorRate: 3.0}, // 3% — below the 10% bar
+	}
+	items := generateBasicActionItems(pm)
+	for _, it := range items {
+		if strings.Contains(it.Title, "error rate threshold alerts") {
+			t.Errorf("3%% peak error rate must not trigger the high-error-rate action item: %+v", it)
+		}
+	}
 }
 
 // ──────────────────────────────────────────────
@@ -552,10 +583,10 @@ func TestRenderMarkdown(t *testing.T) {
 		Lessons:      []string{"Monitor connection pools"},
 		Contributing: []string{"No alerting configured"},
 		Metrics: MetricsSummary{
-			PeakErrorRate: 0.05,
+			PeakErrorRate: 5.0,
 			TotalErrors:   500,
 			ServiceMetrics: []ServiceMetric{
-				{Service: "api-gateway", ErrorRate: 0.05, ErrorCount: 500, Calls: 10000},
+				{Service: "api-gateway", ErrorRate: 5.0, ErrorCount: 500, Calls: 10000},
 			},
 		},
 	}

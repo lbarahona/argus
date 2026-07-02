@@ -505,7 +505,7 @@ func buildAIPrompt(pm *Postmortem) string {
 	if pm.Metrics.TotalErrors > 0 {
 		sb.WriteString(fmt.Sprintf("\nMetrics:\n"))
 		sb.WriteString(fmt.Sprintf("  Total errors: %d\n", pm.Metrics.TotalErrors))
-		sb.WriteString(fmt.Sprintf("  Peak error rate: %.2f%%\n", pm.Metrics.PeakErrorRate*100))
+		sb.WriteString(fmt.Sprintf("  Peak error rate: %.2f%%\n", pm.Metrics.PeakErrorRate))
 
 		if len(pm.Metrics.TopErrors) > 0 {
 			sb.WriteString("\nTop errors:\n")
@@ -680,13 +680,13 @@ func generateBasicActionItems(pm *Postmortem) []ActionItem {
 		})
 	}
 
-	if pm.Metrics.PeakErrorRate > 0.1 {
+	if pm.Metrics.PeakErrorRate > 10 { // >10% peak error rate
 		idx++
 		items = append(items, ActionItem{
 			ID:       fmt.Sprintf("ai-%d", idx),
 			Priority: "P1",
 			Type:     "detect",
-			Title:    fmt.Sprintf("Add error rate threshold alerts (peak was %.1f%%)", pm.Metrics.PeakErrorRate*100),
+			Title:    fmt.Sprintf("Add error rate threshold alerts (peak was %.1f%%)", pm.Metrics.PeakErrorRate),
 			Status:   "todo",
 		})
 	}
@@ -745,7 +745,7 @@ func RenderTerminal(pm *Postmortem) {
 	}
 	fmt.Printf("  Duration: %.0f minutes  │  Errors: %d  │  Calls: %d  │  Peak Error Rate: %.2f%%\n",
 		pm.Impact.DurationMinutes, pm.Impact.ErrorCount, pm.Metrics.TotalCalls,
-		pm.Metrics.PeakErrorRate*100,
+		pm.Metrics.PeakErrorRate,
 	)
 	fmt.Println()
 
@@ -789,7 +789,7 @@ func RenderTerminal(pm *Postmortem) {
 		for _, sm := range pm.Metrics.ServiceMetrics {
 			fmt.Printf("  %-30s %9.2f%% %10d %10d\n",
 				truncateString(sm.Service, 30),
-				sm.ErrorRate*100, sm.ErrorCount, sm.Calls,
+				sm.ErrorRate, sm.ErrorCount, sm.Calls,
 			)
 		}
 		fmt.Println()
@@ -877,7 +877,7 @@ func RenderMarkdown(pm *Postmortem) string {
 	}
 	sb.WriteString(fmt.Sprintf("- **Duration:** %.0f minutes\n", pm.Impact.DurationMinutes))
 	sb.WriteString(fmt.Sprintf("- **Total Errors:** %d\n", pm.Impact.ErrorCount))
-	sb.WriteString(fmt.Sprintf("- **Peak Error Rate:** %.2f%%\n\n", pm.Metrics.PeakErrorRate*100))
+	sb.WriteString(fmt.Sprintf("- **Peak Error Rate:** %.2f%%\n\n", pm.Metrics.PeakErrorRate))
 
 	sb.WriteString("## Timeline\n\n")
 	sb.WriteString("| Time | Type | Description |\n|------|------|-------------|\n")
@@ -911,7 +911,7 @@ func RenderMarkdown(pm *Postmortem) string {
 		sb.WriteString("|---------|-----------|--------|-------|\n")
 		for _, sm := range pm.Metrics.ServiceMetrics {
 			sb.WriteString(fmt.Sprintf("| %s | %.2f%% | %d | %d |\n",
-				sm.Service, sm.ErrorRate*100, sm.ErrorCount, sm.Calls))
+				sm.Service, sm.ErrorRate, sm.ErrorCount, sm.Calls))
 		}
 		sb.WriteString("\n")
 	}
