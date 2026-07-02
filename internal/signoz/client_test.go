@@ -3,6 +3,7 @@ package signoz
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -569,5 +570,39 @@ func TestSignozQuerierInterface(t *testing.T) {
 	var querier SignozQuerier = New(types.Instance{URL: server.URL})
 	if querier == nil {
 		t.Error("Client should implement SignozQuerier")
+	}
+}
+
+func TestQueryLogsEmptyResultNoPhantomEntries(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"success","data":{"result":[{"queryName":"A","list":null}]}}`)
+	}))
+	defer server.Close()
+
+	client := New(types.Instance{URL: server.URL})
+	result, err := client.QueryLogs(context.Background(), "api", 60, 10, "ERROR")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Logs) != 0 {
+		t.Fatalf("expected 0 logs for empty result, got %d: %+v", len(result.Logs), result.Logs)
+	}
+}
+
+func TestQueryTracesEmptyResultNoPhantomEntries(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"success","data":{"result":[{"queryName":"A","list":null}]}}`)
+	}))
+	defer server.Close()
+
+	client := New(types.Instance{URL: server.URL})
+	result, err := client.QueryTraces(context.Background(), "api", 60, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Traces) != 0 {
+		t.Fatalf("expected 0 traces for empty result, got %d: %+v", len(result.Traces), result.Traces)
 	}
 }

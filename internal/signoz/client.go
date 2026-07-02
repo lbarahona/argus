@@ -507,16 +507,14 @@ func parseLogsResponse(data []byte) ([]types.LogEntry, error) {
 func extractLogs(data []byte) ([]types.LogEntry, error) {
 	// Try as array of result items with "list" field
 	var items []queryRangeResultItem
-	if err := json.Unmarshal(data, &items); err == nil && len(items) > 0 {
+	if err := json.Unmarshal(data, &items); err == nil && isResultItemShape(items) {
 		var logs []types.LogEntry
 		for _, item := range items {
 			for _, record := range item.List {
 				logs = append(logs, mapToLogEntry(record))
 			}
 		}
-		if len(logs) > 0 {
-			return logs, nil
-		}
+		return logs, nil
 	}
 
 	// Try as flat array of records
@@ -530,6 +528,21 @@ func extractLogs(data []byte) ([]types.LogEntry, error) {
 	}
 
 	return nil, nil
+}
+
+// isResultItemShape reports whether the parsed array is a query-range result
+// envelope ([{queryName, series, list}]) rather than a flat array of records.
+// Flat records also unmarshal into queryRangeResultItem (unknown fields are
+// ignored, all envelope fields stay zero), so the envelope fields being set
+// is what distinguishes the two shapes. An envelope with an empty/null list
+// must yield zero entries, not fall through to the flat-record parser.
+func isResultItemShape(items []queryRangeResultItem) bool {
+	for _, it := range items {
+		if it.QueryName != "" || it.Series != nil || it.List != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func mapToLogEntry(m map[string]interface{}) types.LogEntry {
@@ -597,16 +610,14 @@ func parseTracesResponse(data []byte) ([]types.TraceEntry, error) {
 
 	// Try as array of result items with "list"
 	var items []queryRangeResultItem
-	if err := json.Unmarshal(resultBytes, &items); err == nil && len(items) > 0 {
+	if err := json.Unmarshal(resultBytes, &items); err == nil && isResultItemShape(items) {
 		var traces []types.TraceEntry
 		for _, item := range items {
 			for _, record := range item.List {
 				traces = append(traces, mapToTraceEntry(record))
 			}
 		}
-		if len(traces) > 0 {
-			return traces, nil
-		}
+		return traces, nil
 	}
 
 	var records []map[string]interface{}
