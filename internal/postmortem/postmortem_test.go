@@ -46,6 +46,76 @@ func (m *mockQuerier) QueryMetrics(ctx context.Context, metricName string, durat
 	return m.metrics, nil
 }
 
+// windowedMockQuerier implements both SignozQuerier and signoz.WindowedQuerier.
+type windowedMockQuerier struct {
+	mockQuerier
+	gotLogStart, gotLogEnd time.Time
+	gotSvcStart, gotSvcEnd time.Time
+	rangeLogs              []types.LogEntry
+	rangeServices          []types.Service
+}
+
+func (m *windowedMockQuerier) QueryLogsRange(ctx context.Context, service string, start, end time.Time, limit int, severityFilter string) (*types.QueryResult, error) {
+	m.gotLogStart, m.gotLogEnd = start, end
+	return &types.QueryResult{Logs: m.rangeLogs}, nil
+}
+
+func (m *windowedMockQuerier) QueryTracesRange(ctx context.Context, service string, start, end time.Time, limit int) (*types.QueryResult, error) {
+	return &types.QueryResult{}, nil
+}
+
+func (m *windowedMockQuerier) ListServicesRange(ctx context.Context, start, end time.Time) ([]types.Service, error) {
+	m.gotSvcStart, m.gotSvcEnd = start, end
+	return m.rangeServices, nil
+}
+
+func TestEnrichWithMetricsUsesIncidentWindow(t *testing.T) {
+	incidentStart := time.Now().Add(-24 * time.Hour)
+	incidentEnd := incidentStart.Add(1 * time.Hour)
+	pm := &Postmortem{
+		Services:     []string{"api"},
+		IncidentTime: IncidentWindow{Start: incidentStart, End: incidentEnd, Duration: "1h"},
+	}
+	mock := &windowedMockQuerier{
+		rangeServices: []types.Service{{Name: "api", NumCalls: 1000, NumErrors: 30, ErrorRate: 3.0}},
+		rangeLogs:     []types.LogEntry{{Body: "boom", ServiceName: "api"}},
+	}
+
+	enrichWithMetrics(context.Background(), pm, mock)
+
+	wantStart := incidentStart.Add(-10 * time.Minute)
+	wantEnd := incidentEnd.Add(10 * time.Minute)
+	if !mock.gotSvcStart.Equal(wantStart) || !mock.gotSvcEnd.Equal(wantEnd) {
+		t.Errorf("service window = [%v, %v], want incident window ±10m [%v, %v]",
+			mock.gotSvcStart, mock.gotSvcEnd, wantStart, wantEnd)
+	}
+	if !mock.gotLogStart.Equal(wantStart) || !mock.gotLogEnd.Equal(wantEnd) {
+		t.Errorf("log window = [%v, %v], want [%v, %v]", mock.gotLogStart, mock.gotLogEnd, wantStart, wantEnd)
+	}
+	if pm.DataCaveat != "" {
+		t.Errorf("windowed enrichment must not set a caveat, got %q", pm.DataCaveat)
+	}
+	if pm.Metrics.PeakErrorRate != 3.0 {
+		t.Errorf("metrics not populated from range data: %+v", pm.Metrics)
+	}
+}
+
+func TestEnrichWithMetricsFallbackSetsCaveat(t *testing.T) {
+	incidentStart := time.Now().Add(-24 * time.Hour)
+	pm := &Postmortem{
+		Services:     []string{"api"},
+		IncidentTime: IncidentWindow{Start: incidentStart, End: incidentStart.Add(time.Hour), Duration: "1h"},
+	}
+	// Plain mockQuerier does NOT implement WindowedQuerier.
+	mock := &mockQuerier{}
+
+	enrichWithMetrics(context.Background(), pm, mock)
+
+	if pm.DataCaveat == "" {
+		t.Error("non-windowed fallback must set DataCaveat so the report is honest about its data")
+	}
+}
+
 // ──────────────────────────────────────────────
 // Helper: create test incident store
 // ──────────────────────────────────────────────
@@ -637,6 +707,40 @@ func TestRenderMarkdown(t *testing.T) {
 	assert.Contains(t, md, "No alerting configured")
 	assert.Contains(t, md, "Fix leak")
 	assert.Contains(t, md, "api-gateway")
+}
+
+func TestRenderMarkdown_DataCaveat(t *testing.T) {
+	now := time.Now()
+	pm := &Postmortem{
+		ID:         "pm-caveat",
+		Title:      "Postmortem: Caveat test",
+		DataCaveat: "Signoz metrics reflect the query time, not the incident window (querier does not support absolute time ranges).",
+		IncidentTime: IncidentWindow{
+			Start:    now,
+			End:      now.Add(time.Hour),
+			Duration: "1h",
+		},
+	}
+
+	md := RenderMarkdown(pm)
+	assert.Contains(t, md, "**Data caveat:**")
+	assert.Contains(t, md, pm.DataCaveat)
+}
+
+func TestRenderMarkdown_NoDataCaveat(t *testing.T) {
+	now := time.Now()
+	pm := &Postmortem{
+		ID:    "pm-no-caveat",
+		Title: "Postmortem: No caveat",
+		IncidentTime: IncidentWindow{
+			Start:    now,
+			End:      now.Add(time.Hour),
+			Duration: "1h",
+		},
+	}
+
+	md := RenderMarkdown(pm)
+	assert.NotContains(t, md, "Data caveat")
 }
 
 func TestFormatJSON(t *testing.T) {

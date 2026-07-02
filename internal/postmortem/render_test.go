@@ -126,6 +126,29 @@ func TestRenderTerminal_FullPostmortem(t *testing.T) {
 	assert.Contains(t, output, "Lessons Learned")
 }
 
+func TestRenderTerminal_DataCaveat(t *testing.T) {
+	pm := samplePostmortem()
+	pm.DataCaveat = "Signoz metrics reflect the query time, not the incident window (querier does not support absolute time ranges)."
+
+	output := captureStdout(func() {
+		RenderTerminal(pm)
+	})
+
+	assert.Contains(t, output, pm.DataCaveat)
+}
+
+func TestRenderTerminal_NoDataCaveat(t *testing.T) {
+	pm := samplePostmortem()
+	pm.DataCaveat = ""
+
+	output := captureStdout(func() {
+		RenderTerminal(pm)
+	})
+
+	assert.NotContains(t, output, "Data caveat")
+	assert.NotContains(t, output, "⚠️")
+}
+
 func TestRenderTerminal_MinimalPostmortem(t *testing.T) {
 	pm := &Postmortem{
 		ID:         "pm-minimal",
@@ -277,6 +300,22 @@ func TestBuildAIPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "Timeline:")
 	assert.Contains(t, prompt, "Total errors: 500")
 	assert.Contains(t, prompt, "connection pool exhausted")
+}
+
+func TestBuildAIPrompt_DataCaveat(t *testing.T) {
+	pm := samplePostmortem()
+	pm.DataCaveat = "Signoz metrics reflect the query time, not the incident window (querier does not support absolute time ranges)."
+
+	prompt := buildAIPrompt(pm)
+	assert.Contains(t, prompt, "NOTE: "+pm.DataCaveat)
+}
+
+func TestBuildAIPrompt_NoDataCaveat(t *testing.T) {
+	pm := samplePostmortem()
+	pm.DataCaveat = ""
+
+	prompt := buildAIPrompt(pm)
+	assert.NotContains(t, prompt, "NOTE:")
 }
 
 func TestBuildAIPrompt_NoMetrics(t *testing.T) {

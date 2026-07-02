@@ -15,6 +15,7 @@ import (
 	"github.com/lbarahona/argus/internal/incident"
 	"github.com/lbarahona/argus/internal/output"
 	"github.com/lbarahona/argus/internal/signoz"
+	"github.com/lbarahona/argus/pkg/types"
 	"gopkg.in/yaml.v3"
 )
 
@@ -46,6 +47,7 @@ type Postmortem struct {
 	ActionItems  []ActionItem      `yaml:"action_items" json:"action_items"`
 	Metrics      MetricsSummary    `yaml:"metrics_summary" json:"metrics_summary"`
 	Lessons      []string          `yaml:"lessons_learned,omitempty" json:"lessons_learned,omitempty"`
+	DataCaveat   string            `yaml:"data_caveat,omitempty" json:"data_caveat,omitempty"`
 }
 
 // IncidentWindow represents the time window of the incident.
@@ -380,16 +382,36 @@ func buildResolution(inc *incident.Incident) string {
 // Metrics enrichment
 // ──────────────────────────────────────────────
 
+// enrichPadding is added on either side of the incident window when querying
+// Signoz, to capture lead-up and tail-off signal around the incident.
+const enrichPadding = 10 * time.Minute
+
 func enrichWithMetrics(ctx context.Context, pm *Postmortem, q signoz.SignozQuerier) {
-	// Calculate duration in minutes for querying
 	dur := pm.IncidentTime.End.Sub(pm.IncidentTime.Start)
+
+	// Calculate duration in minutes for the non-windowed fallback query, which
+	// can only express a lookback from time.Now(), not an absolute window.
 	durationMinutes := int(dur.Minutes()) + 20 // pad by 10 min each side
 	if durationMinutes < 30 {
 		durationMinutes = 30
 	}
 
+	start := pm.IncidentTime.Start.Add(-enrichPadding)
+	end := pm.IncidentTime.End.Add(enrichPadding)
+
+	wq, windowed := q.(signoz.WindowedQuerier)
+	if !windowed {
+		pm.DataCaveat = "Signoz metrics reflect the query time, not the incident window (querier does not support absolute time ranges)."
+	}
+
 	// Get service list
-	services, err := q.ListServices(ctx)
+	var services []types.Service
+	var err error
+	if windowed {
+		services, err = wq.ListServicesRange(ctx, start, end)
+	} else {
+		services, err = q.ListServices(ctx)
+	}
 	if err != nil {
 		return
 	}
@@ -426,8 +448,14 @@ func enrichWithMetrics(ctx context.Context, pm *Postmortem, q signoz.SignozQueri
 	// Get error logs for top errors from affected services
 	if len(pm.Services) > 0 {
 		for _, svcName := range pm.Services {
-			result, err := q.QueryLogs(ctx, svcName, durationMinutes, 50, "error")
-			if err != nil || result == nil || len(result.Logs) == 0 {
+			var result *types.QueryResult
+			var qerr error
+			if windowed {
+				result, qerr = wq.QueryLogsRange(ctx, svcName, start, end, 50, "error")
+			} else {
+				result, qerr = q.QueryLogs(ctx, svcName, durationMinutes, 50, "error")
+			}
+			if qerr != nil || result == nil || len(result.Logs) == 0 {
 				continue
 			}
 
@@ -501,6 +529,10 @@ func buildAIPrompt(pm *Postmortem) string {
 	sb.WriteString("Timeline:\n")
 	for _, ev := range pm.Timeline {
 		sb.WriteString(fmt.Sprintf("  %s [%s] %s\n", ev.Timestamp.Format("15:04:05"), ev.Type, ev.Description))
+	}
+
+	if pm.DataCaveat != "" {
+		sb.WriteString(fmt.Sprintf("\nNOTE: %s\n", pm.DataCaveat))
 	}
 
 	if pm.Metrics.TotalErrors > 0 {
@@ -782,6 +814,11 @@ func RenderTerminal(pm *Postmortem) {
 	fmt.Println(output.TitleStyle.Render("✅ Resolution"))
 	fmt.Printf("  %s\n\n", pm.Resolution)
 
+	if pm.DataCaveat != "" {
+		fmt.Println(output.WarningStyle.Render(fmt.Sprintf("⚠️  %s", pm.DataCaveat)))
+		fmt.Println()
+	}
+
 	// Metrics
 	if len(pm.Metrics.ServiceMetrics) > 0 {
 		fmt.Println(output.TitleStyle.Render("📊 Service Metrics"))
@@ -905,6 +942,10 @@ func RenderMarkdown(pm *Postmortem) string {
 
 	sb.WriteString("## Resolution\n\n")
 	sb.WriteString(pm.Resolution + "\n\n")
+
+	if pm.DataCaveat != "" {
+		sb.WriteString(fmt.Sprintf("> **Data caveat:** %s\n\n", pm.DataCaveat))
+	}
 
 	if len(pm.Metrics.ServiceMetrics) > 0 {
 		sb.WriteString("## Service Metrics\n\n")
