@@ -14,7 +14,7 @@ import (
 const (
 	anthropicAPI          = "https://api.anthropic.com/v1/messages"
 	anthropicVersion      = "2023-06-01"
-	defaultAnthropicModel = "claude-sonnet-4-20250514"
+	defaultAnthropicModel = "claude-sonnet-5"
 )
 
 // AnthropicProvider implements Provider for Anthropic Claude.

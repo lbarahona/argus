@@ -82,10 +82,11 @@ type BedrockConfig struct {
 }
 
 // DefaultModels maps provider names to their default (best) models.
+// These defaults can be overridden via the ai.model config key.
 var DefaultModels = map[string]string{
-	"anthropic": "claude-sonnet-4-20250514",
-	"openai":    "gpt-4o",
-	"bedrock":   "anthropic.claude-3-5-sonnet-20241022-v2:0",
+	"anthropic": "claude-sonnet-5",
+	"openai":    "gpt-4o",     // can be overridden by ai.model config key
+	"bedrock":   "anthropic.claude-3-5-sonnet-20241022-v2:0", // can be overridden by ai.model config key
 }
 
 // ResolveModel returns the model to use: explicit if set, or provider default if "auto" or empty.
