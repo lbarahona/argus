@@ -134,6 +134,40 @@ func TestMaskKey(t *testing.T) {
 	}
 }
 
+// TestMaskKeyShortKeys guards against a panic in the key[:4]/key[len-4:]
+// slicing when the key has fewer than 4 characters (or is empty). These
+// must never panic, and must never reveal more of the key than "****" does.
+func TestMaskKeyShortKeys(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+	}{
+		{"empty", ""},
+		{"one char", "a"},
+		{"two chars", "ab"},
+		{"three chars", "abc"},
+		{"four chars", "abcd"},
+		{"boundary at eight", "abcdefgh"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got string
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						t.Fatalf("maskKey(%q) panicked: %v", tt.key, r)
+					}
+				}()
+				got = maskKey(tt.key)
+			}()
+			if got != "****" {
+				t.Errorf("maskKey(%q) = %q, want %q", tt.key, got, "****")
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // formatDuration
 // ---------------------------------------------------------------------------

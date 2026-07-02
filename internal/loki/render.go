@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/lbarahona/argus/internal/textutil"
 )
 
 const (
@@ -88,10 +90,7 @@ func FormatLogEntries(entries []LogEntry, showLabels bool) string {
 		}
 
 		// Truncate long lines
-		line := e.Line
-		if len(line) > 200 {
-			line = line[:197] + "..."
-		}
+		line := textutil.Truncate(e.Line, 197)
 
 		// Color based on content
 		if containsError(line) {

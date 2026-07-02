@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/lbarahona/argus/internal/textutil"
 )
 
 const (
@@ -61,10 +63,7 @@ func FormatRules(data *RulesData, ruleType string) string {
 			sb.WriteString("\n")
 
 			// Show query (truncated)
-			query := r.Query
-			if len(query) > 120 {
-				query = query[:117] + "..."
-			}
+			query := textutil.Truncate(r.Query, 117)
 			sb.WriteString(fmt.Sprintf("    %squery:%s %s\n", colorGray, colorReset, query))
 
 			// Show duration for alerting rules
@@ -247,9 +246,7 @@ func FormatAlerts(data *AlertsData) string {
 
 		// Summary annotation
 		if summary := a.Annotations["summary"]; summary != "" {
-			if len(summary) > 120 {
-				summary = summary[:117] + "..."
-			}
+			summary = textutil.Truncate(summary, 117)
 			sb.WriteString(fmt.Sprintf("    %ssummary:%s %s\n", colorGray, colorReset, summary))
 		}
 	}

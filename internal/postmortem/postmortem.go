@@ -9,12 +9,14 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/fsutil"
 	"github.com/lbarahona/argus/internal/incident"
 	"github.com/lbarahona/argus/internal/output"
 	"github.com/lbarahona/argus/internal/signoz"
+	"github.com/lbarahona/argus/internal/textutil"
 	"github.com/lbarahona/argus/pkg/types"
 	"gopkg.in/yaml.v3"
 )
@@ -1100,10 +1102,12 @@ func formatDuration(d time.Duration) string {
 }
 
 func truncateString(s string, max int) string {
-	if len(s) <= max {
+	if utf8.RuneCountInString(s) <= max {
 		return s
 	}
-	return s[:max-3] + "..."
+	// Reserve room for the "..." suffix so the total rendered length still
+	// matches max; textutil.Truncate handles the rune-safe slicing.
+	return textutil.Truncate(s, max-3)
 }
 
 func defaultStr(s, def string) string {

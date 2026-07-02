@@ -13,6 +13,7 @@ import (
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/signoz"
+	"github.com/lbarahona/argus/internal/textutil"
 	"github.com/lbarahona/argus/pkg/types"
 )
 
@@ -106,10 +107,7 @@ func Run(ctx context.Context, client signoz.SignozQuerier, instanceName string, 
 		// Error logs
 		if logResult, err := client.QueryLogs(ctx, svc.Name, opts.Duration, 100, "error"); err == nil {
 			for _, log := range logResult.Logs {
-				body := log.Body
-				if len(body) > 120 {
-					body = body[:120] + "..."
-				}
+				body := textutil.Truncate(log.Body, 120)
 				result.Signals = append(result.Signals, Signal{
 					Timestamp: log.Timestamp,
 					Source:    "logs",

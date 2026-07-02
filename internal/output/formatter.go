@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lbarahona/argus/internal/textutil"
 	"github.com/lbarahona/argus/pkg/types"
 )
 
@@ -161,10 +162,7 @@ func PrintLogs(logs []types.LogEntry) {
 			svc = AccentStyle.Render("["+log.ServiceName+"]") + " "
 		}
 
-		body := log.Body
-		if len(body) > 200 {
-			body = body[:200] + "..."
-		}
+		body := textutil.Truncate(log.Body, 200)
 
 		fmt.Printf("  %s %s %s%s\n", ts, sev, svc, body)
 	}
@@ -291,10 +289,7 @@ func PrintDashboard(statuses []types.HealthStatus, services []types.Service, rec
 			if log.ServiceName != "" {
 				svc = AccentStyle.Render("["+log.ServiceName+"]") + " "
 			}
-			body := log.Body
-			if len(body) > 120 {
-				body = body[:120] + "..."
-			}
+			body := textutil.Truncate(log.Body, 120)
 			fmt.Printf("  %s %s %s%s\n", ts, formatSeverity(log.SeverityText), svc, body)
 		}
 		fmt.Println()
@@ -344,7 +339,8 @@ func maskKey(key string) string {
 	if len(key) <= 8 {
 		return "****"
 	}
-	return key[:4] + "..." + key[len(key)-4:]
+	prefix, suffix := key[:4], key[len(key)-4:]
+	return prefix + "..." + suffix
 }
 
 func formatDuration(d time.Duration) string {

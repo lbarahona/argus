@@ -8,6 +8,7 @@ import (
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/signoz"
+	"github.com/lbarahona/argus/internal/textutil"
 	"github.com/lbarahona/argus/pkg/types"
 )
 
@@ -103,10 +104,7 @@ func BuildPrompt(data *CorrelatedData) string {
 	if len(data.ErrorLogs) > 0 {
 		b.WriteString(fmt.Sprintf("\n## Error Logs (%d found)\n", len(data.ErrorLogs)))
 		for _, log := range data.ErrorLogs {
-			body := log.Body
-			if len(body) > 300 {
-				body = body[:300] + "..."
-			}
+			body := textutil.Truncate(log.Body, 300)
 			b.WriteString(fmt.Sprintf("[%s] %s\n", log.Timestamp.Format("15:04:05"), body))
 		}
 	} else {
@@ -117,10 +115,7 @@ func BuildPrompt(data *CorrelatedData) string {
 	if len(data.RecentLogs) > 0 {
 		b.WriteString(fmt.Sprintf("\n## Recent Logs (all levels, %d entries)\n", len(data.RecentLogs)))
 		for _, log := range data.RecentLogs {
-			body := log.Body
-			if len(body) > 200 {
-				body = body[:200] + "..."
-			}
+			body := textutil.Truncate(log.Body, 200)
 			b.WriteString(fmt.Sprintf("[%s] [%s] %s\n", log.Timestamp.Format("15:04:05"), log.SeverityText, body))
 		}
 	}

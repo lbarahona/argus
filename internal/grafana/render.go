@@ -6,6 +6,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"github.com/lbarahona/argus/internal/textutil"
 )
 
 // FormatDashboards renders a list of dashboards grouped by folder.
@@ -410,8 +413,10 @@ func formatDuration(d time.Duration) string {
 }
 
 func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen-3] + "..."
+	// Reserve room for the "..." suffix so the total rendered length still
+	// matches maxLen; textutil.Truncate handles the rune-safe slicing.
+	return textutil.Truncate(s, maxLen-3)
 }

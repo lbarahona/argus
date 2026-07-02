@@ -11,6 +11,7 @@ import (
 
 	"github.com/lbarahona/argus/internal/fsutil"
 	"github.com/lbarahona/argus/internal/output"
+	"github.com/lbarahona/argus/internal/textutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -307,10 +308,7 @@ func RenderList(incidents []Incident, title string) {
 			ageStr = inc.Duration + " (resolved)"
 		}
 
-		title := inc.Title
-		if len(title) > 28 {
-			title = title[:28] + "…"
-		}
+		title := textutil.Truncate(inc.Title, 28)
 
 		sevStyle := output.MutedStyle
 		switch inc.Severity {

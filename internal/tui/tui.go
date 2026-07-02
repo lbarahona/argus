@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/signoz"
+	"github.com/lbarahona/argus/internal/textutil"
 )
 
 const tuiSystemPrompt = `You are an expert Site Reliability Engineer (SRE) in an interactive troubleshooting session.
@@ -219,10 +220,7 @@ func (s *Session) gatherContext(ctx context.Context) string {
 	if err == nil && len(result.Logs) > 0 {
 		b.WriteString("\n## Recent Error Logs\n")
 		for _, log := range result.Logs {
-			body := log.Body
-			if len(body) > 200 {
-				body = body[:200]
-			}
+			body := textutil.Truncate(log.Body, 200)
 			svc := log.ServiceName
 			if svc == "" {
 				svc = "unknown"

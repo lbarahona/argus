@@ -10,6 +10,7 @@ import (
 
 	"github.com/lbarahona/argus/internal/ai"
 	"github.com/lbarahona/argus/internal/signoz"
+	"github.com/lbarahona/argus/internal/textutil"
 	"github.com/lbarahona/argus/pkg/types"
 )
 
@@ -296,10 +297,7 @@ func detectLogAnomalies(service string, logs []types.LogEntry, opts Options) []A
 			if count >= 50 {
 				severity = SeverityCritical
 			}
-			truncated := pattern
-			if len(truncated) > 80 {
-				truncated = truncated[:80] + "..."
-			}
+			truncated := textutil.Truncate(pattern, 80)
 			anomalies = append(anomalies, Anomaly{
 				Type:        TypeVariance,
 				Severity:    severity,
@@ -361,10 +359,7 @@ func detectLatencyAnomalies(service string, traces []types.TraceEntry, opts Opti
 			p99p50Ratio = p99 / p50
 		}
 
-		opDisplay := op
-		if len(opDisplay) > 50 {
-			opDisplay = opDisplay[:50] + "..."
-		}
+		opDisplay := textutil.Truncate(op, 50)
 
 		// Flag high p99/p50 ratio (indicates latency spikes)
 		if p99p50Ratio > 20 && p99 > 100 { // p99 > 100ms and 20x slower than median

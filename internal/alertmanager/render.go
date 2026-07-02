@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/lbarahona/argus/internal/textutil"
 )
 
 const (
@@ -100,9 +102,7 @@ func formatSingleAlert(a Alert) string {
 	if summary, ok := a.Annotations["summary"]; ok {
 		b.WriteString(fmt.Sprintf("    %s%s%s\n", colorWhite, summary, colorReset))
 	} else if desc, ok := a.Annotations["description"]; ok {
-		if len(desc) > 120 {
-			desc = desc[:117] + "..."
-		}
+		desc = textutil.Truncate(desc, 117)
 		b.WriteString(fmt.Sprintf("    %s%s%s\n", colorWhite, desc, colorReset))
 	}
 
