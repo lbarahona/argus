@@ -1,0 +1,906 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"strings"
+	"time"
+
+	"github.com/lbarahona/argus/internal/ai"
+	"github.com/lbarahona/argus/internal/anomaly"
+	"github.com/lbarahona/argus/internal/config"
+	"github.com/lbarahona/argus/internal/correlate"
+	"github.com/lbarahona/argus/internal/deploy"
+	"github.com/lbarahona/argus/internal/deps"
+	"github.com/lbarahona/argus/internal/diff"
+	"github.com/lbarahona/argus/internal/explain"
+	"github.com/lbarahona/argus/internal/forecast"
+	"github.com/lbarahona/argus/internal/output"
+	"github.com/lbarahona/argus/internal/report"
+	"github.com/lbarahona/argus/internal/scorecard"
+	"github.com/lbarahona/argus/internal/signoz"
+	"github.com/lbarahona/argus/internal/timeline"
+	topkg "github.com/lbarahona/argus/internal/top"
+	"github.com/lbarahona/argus/internal/watch"
+	"github.com/spf13/cobra"
+)
+
+func reportCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var withAI bool
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "report",
+		Short: "Generate a health report for shift handoffs",
+		Long:  "Compile a comprehensive health report including service status, error patterns, and optional AI summary. Perfect for shift handoffs and incident reviews.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			provider, _ := getAIProvider(cfg)
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
+			ctx := context.Background()
+			fmt.Printf("%s Generating health report...\n", output.MutedStyle.Render("⏳"))
+
+			r, err := report.Generate(ctx, client, instKey, report.Options{
+				Duration:   duration,
+				WithAI:     withAI,
+				Format:     format,
+				AIProvider: provider,
+			})
+			if err != nil {
+				return err
+			}
+
+			if format == "markdown" {
+				r.RenderMarkdown(os.Stdout)
+			} else {
+				r.RenderTerminal(os.Stdout)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to report on")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to cover")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-generated summary (uses Anthropic API)")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
+
+	return cmd
+}
+
+func topCmd() *cobra.Command {
+	var instance string
+	var limit int
+	var sortBy string
+	var duration int
+
+	cmd := &cobra.Command{
+		Use:   "top",
+		Short: "Show top services by errors, like htop for your services",
+		Long:  "Display a ranked view of services sorted by errors, error rate, or call volume. Quick triage tool for on-call SREs.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			var sf topkg.SortField
+			switch strings.ToLower(sortBy) {
+			case "errors":
+				sf = topkg.SortByErrors
+			case "rate":
+				sf = topkg.SortByErrorRate
+			case "calls":
+				sf = topkg.SortByCalls
+			case "name":
+				sf = topkg.SortByName
+			default:
+				sf = topkg.SortByErrors
+			}
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
+			ctx := context.Background()
+			fmt.Printf("%s Fetching service data...\n", output.MutedStyle.Render("⏳"))
+
+			result, err := topkg.Run(ctx, client, instKey, topkg.Options{
+				Limit:    limit,
+				SortBy:   sf,
+				Duration: duration,
+			})
+			if err != nil {
+				return err
+			}
+
+			result.RenderTerminal(os.Stdout)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&limit, "limit", "l", 20, "Number of services to show")
+	cmd.Flags().StringVarP(&sortBy, "sort", "s", "errors", "Sort by: errors, rate, calls, name")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes for recent error lookup")
+
+	return cmd
+}
+
+func diffCmd() *cobra.Command {
+	var instance string
+	var duration int
+
+	cmd := &cobra.Command{
+		Use:   "diff",
+		Short: "Compare error rates between two time windows",
+		Long:  "Compare the current time window against the previous window to detect anomalies. Shows which services are degrading, improving, or stable.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
+			ctx := context.Background()
+			fmt.Printf("%s Comparing time windows...\n", output.MutedStyle.Render("⏳"))
+
+			result, err := diff.Compare(ctx, client, instKey, diff.Options{
+				Duration: duration,
+			})
+			if err != nil {
+				return err
+			}
+
+			result.RenderTerminal(os.Stdout)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration per window in minutes (compares last N min vs previous N min)")
+
+	return cmd
+}
+
+func watchCmd() *cobra.Command {
+	var instance string
+	var interval int
+	var errWarn, errCrit, p99Warn, p99Crit, spike float64
+
+	cmd := &cobra.Command{
+		Use:   "watch",
+		Short: "Continuously monitor services and alert on anomalies",
+		Long: `Watch mode polls your Signoz instance at regular intervals and alerts
+on error rate spikes, high latency, and new errors. Like htop for your services,
+but with anomaly detection.
+
+Thresholds can be customized. Alerts include:
+- Error rate exceeding warning/critical thresholds
+- P99 latency exceeding warning/critical thresholds  
+- Error count spikes compared to rolling baseline
+- New errors on previously clean services`,
+		Example: `  argus watch
+  argus watch --interval 60
+  argus watch --error-rate-warn 3 --error-rate-crit 10
+  argus watch -i production --p99-warn 1000`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			instName := instKey
+			if inst.Name != "" {
+				instName = inst.Name
+			}
+			client := signoz.New(*inst)
+			thresholds := watch.DefaultThresholds()
+			if cmd.Flags().Changed("error-rate-warn") {
+				thresholds.ErrorRateWarning = errWarn
+			}
+			if cmd.Flags().Changed("error-rate-crit") {
+				thresholds.ErrorRateCritical = errCrit
+			}
+			if cmd.Flags().Changed("p99-warn") {
+				thresholds.P99Warning = p99Warn
+			}
+			if cmd.Flags().Changed("p99-crit") {
+				thresholds.P99Critical = p99Crit
+			}
+			if cmd.Flags().Changed("spike") {
+				thresholds.ErrorSpike = spike
+			}
+
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+			defer cancel()
+
+			w := watch.New(client, instName, time.Duration(interval)*time.Second, thresholds, os.Stdout)
+			return w.Run(ctx)
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to watch")
+	cmd.Flags().IntVar(&interval, "interval", 30, "Poll interval in seconds")
+	cmd.Flags().Float64Var(&errWarn, "error-rate-warn", 5, "Error rate % warning threshold")
+	cmd.Flags().Float64Var(&errCrit, "error-rate-crit", 15, "Error rate % critical threshold")
+	cmd.Flags().Float64Var(&p99Warn, "p99-warn", 2000, "P99 latency ms warning threshold")
+	cmd.Flags().Float64Var(&p99Crit, "p99-crit", 5000, "P99 latency ms critical threshold")
+	cmd.Flags().Float64Var(&spike, "spike", 3, "Error spike multiplier over baseline")
+
+	return cmd
+}
+
+func explainCmd() *cobra.Command {
+	var instance string
+	var duration int
+
+	cmd := &cobra.Command{
+		Use:   "explain [service]",
+		Short: "AI-powered root cause analysis for a service",
+		Long: `Correlate logs, traces, and metrics for a service and use AI to
+perform root cause analysis. Collects all available observability data,
+identifies patterns, and provides actionable recommendations.
+
+Think of it as having a senior SRE look at all your dashboards at once.`,
+		Example: `  argus explain api-service
+  argus explain payment-service --duration 30
+  argus explain auth-service -i production`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			provider, _ := getAIProvider(cfg)
+			if !hasAIConfig(cfg) {
+				return fmt.Errorf("AI provider not configured. Run: argus config init")
+			}
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+			client := signoz.New(*inst)
+			ctx := context.Background()
+
+			fmt.Printf("%s Collecting observability data for %s from %s...\n",
+				output.MutedStyle.Render("🔍"), output.AccentStyle.Render(args[0]), output.AccentStyle.Render(instKey))
+
+			data, err := explain.Collect(ctx, client, instKey, explain.Options{
+				Service:    args[0],
+				Duration:   duration,
+				AIProvider: provider,
+			})
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("%s Collected: %d error logs, %d recent logs, %d traces\n",
+				output.MutedStyle.Render("📊"),
+				len(data.ErrorLogs), len(data.RecentLogs), len(data.Traces))
+			fmt.Printf("%s Analyzing with AI...\n\n", output.MutedStyle.Render("🤖"))
+
+			prompt := explain.BuildPrompt(data)
+			analyzer := ai.NewFromProvider(provider)
+			return analyzer.Analyze(prompt, os.Stdout)
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+
+	return cmd
+}
+
+func anomalyCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var sensitivity float64
+	var service string
+	var withAI bool
+	var quiet bool
+
+	cmd := &cobra.Command{
+		Use:   "anomaly",
+		Short: "Detect anomalies across services",
+		Long:  "Automatically detect anomalies in error rates, log patterns, and latency using statistical analysis (z-score, percentiles) with optional AI root cause analysis.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			provider, _ := getAIProvider(cfg)
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
+			ctx := context.Background()
+
+			opts := anomaly.Options{
+				Duration:    duration,
+				Sensitivity: sensitivity,
+				Service:     service,
+				WithAI:      withAI,
+				AIProvider:  provider,
+				Quiet:       quiet,
+			}
+
+			fmt.Printf("🔍 Scanning for anomalies (last %d min, sensitivity=%.1f)...\n\n", duration, sensitivity)
+
+			result, err := anomaly.Detect(ctx, client, instKey, opts)
+			if err != nil {
+				return err
+			}
+
+			// Convert to output types
+			outResult := output.AnomalyResult{
+				ScanTime:     result.ScanTime,
+				Duration:     result.Duration,
+				Instance:     result.Instance,
+				AISummary:    result.AISummary,
+				TotalScanned: result.TotalScanned,
+			}
+
+			for _, a := range result.Anomalies {
+				outResult.Anomalies = append(outResult.Anomalies, output.AnomalyItem{
+					Type:        a.Type,
+					Severity:    a.Severity,
+					Service:     a.Service,
+					Metric:      a.Metric,
+					Description: a.Description,
+					Value:       a.Value,
+					Expected:    a.Expected,
+					Deviation:   a.Deviation,
+					DetectedAt:  a.DetectedAt,
+					Window:      a.Window,
+				})
+			}
+
+			for _, s := range result.Services {
+				outResult.Services = append(outResult.Services, output.AnomalyServiceScan{
+					Name:            s.Name,
+					Calls:           s.Calls,
+					Errors:          s.Errors,
+					ErrorRate:       s.ErrorRate,
+					AnomalyCount:    s.AnomalyCount,
+					HighestSeverity: s.HighestSeverity,
+				})
+			}
+
+			output.PrintAnomalyResult(outResult, quiet)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to use")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Time window in minutes to analyze")
+	cmd.Flags().Float64VarP(&sensitivity, "sensitivity", "s", 2.0, "Z-score threshold for anomaly detection (lower = more sensitive)")
+	cmd.Flags().StringVar(&service, "service", "", "Scan a specific service only")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI root cause analysis")
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Only show anomalies (hide healthy services)")
+
+	return cmd
+}
+
+func timelineCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var service string
+	var withAI bool
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "timeline",
+		Short: "Reconstruct an incident timeline from observability data",
+		Long: `Automatically correlate errors, latency spikes, and service health
+into a chronological incident timeline. Perfect for incident review,
+postmortems, and shift handoffs.
+
+Analyzes logs, traces, and service health to detect:
+  - Error spikes (sudden increases in error rate)
+  - New error patterns (unique errors appearing)
+  - Latency spikes (P99 outliers)
+  - Service degradation (high error rates)
+
+Use --ai to generate an AI-powered incident narrative.`,
+		Example: `  argus timeline
+  argus timeline --duration 120
+  argus timeline --service api-service --ai
+  argus timeline --format markdown > incident-report.md
+  argus timeline -i production --duration 30 --ai`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			provider, _ := getAIProvider(cfg)
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+			client := signoz.New(*inst)
+			ctx := context.Background()
+
+			opts := timeline.Options{
+				Duration:   duration,
+				Service:    service,
+				WithAI:     withAI,
+				Format:     format,
+				AIProvider: provider,
+			}
+
+			if withAI && !hasAIConfig(cfg) {
+				return fmt.Errorf("AI provider not configured. Run: argus config init")
+			}
+
+			tl, err := timeline.Generate(ctx, client, instKey, opts)
+			if err != nil {
+				return err
+			}
+
+			switch format {
+			case "markdown":
+				tl.RenderMarkdown(os.Stdout)
+			default:
+				tl.RenderTerminal(os.Stdout)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to use")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Time window in minutes")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to a specific service")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Generate AI incident narrative")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format (terminal, markdown)")
+
+	return cmd
+}
+
+func correlateCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var service string
+	var bucketSize int
+	var minEvents int
+	var useAI bool
+	var markdown bool
+
+	cmd := &cobra.Command{
+		Use:   "correlate",
+		Short: "Cross-signal correlation across services",
+		Long: `Analyze logs, traces, and metrics across all services to find temporal
+correlations, error propagation patterns, and causal chains.
+
+Unlike 'explain' (which focuses on one service), 'correlate' looks at the
+entire system to find how issues spread between services and identifies
+the root cause in a cascade.`,
+		Example: `  argus correlate
+  argus correlate --service api-gateway
+  argus correlate --duration 30 --ai
+  argus correlate --bucket 30 --min-events 5
+  argus correlate --markdown
+  argus correlate stack --duration 30`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			provider, _ := getAIProvider(cfg)
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+			client := signoz.New(*inst)
+			ctx := context.Background()
+
+			opts := correlate.Options{
+				Duration:   duration,
+				Service:    service,
+				BucketSize: bucketSize,
+				MinEvents:  minEvents,
+				AIProvider: provider,
+			}
+
+			if useAI {
+				if !hasAIConfig(cfg) {
+					return fmt.Errorf("AI provider not configured. Run: argus config init")
+				}
+				fmt.Printf("%s Collecting signals from %s...\n",
+					output.MutedStyle.Render("🔍"), output.AccentStyle.Render(instKey))
+				return correlate.RunWithAI(ctx, client, instKey, opts, os.Stdout)
+			}
+
+			fmt.Printf("%s Collecting signals from %s...\n",
+				output.MutedStyle.Render("🔍"), output.AccentStyle.Render(instKey))
+
+			result, err := correlate.Run(ctx, client, instKey, opts)
+			if err != nil {
+				return err
+			}
+
+			if markdown {
+				fmt.Print(correlate.RenderMarkdown(result))
+			} else {
+				correlate.Render(result)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Focus on a specific service (default: all)")
+	cmd.Flags().IntVar(&bucketSize, "bucket", 60, "Time bucket size in seconds for clustering")
+	cmd.Flags().IntVar(&minEvents, "min-events", 3, "Minimum events to form a cluster")
+	cmd.Flags().BoolVar(&useAI, "ai", false, "Include AI-powered correlation analysis")
+	cmd.Flags().BoolVar(&markdown, "markdown", false, "Output as markdown")
+	cmd.AddCommand(correlateStackCmd())
+
+	return cmd
+}
+
+func correlateStackCmd() *cobra.Command {
+	var duration int
+	var format string
+	var logLimit int
+	var samples int
+
+	cmd := &cobra.Command{
+		Use:   "stack",
+		Short: "Correlate active alerts across Alertmanager, Prometheus, Grafana, and Loki",
+		Long: `Correlate active alerts across Alertmanager, Prometheus, Grafana, and Loki.
+
+Useful during incident response when you want one view of which services are
+screaming across the stack, plus a few related Loki log samples to confirm the
+blast radius.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			amClient, err := getAMClient()
+			if err != nil {
+				return err
+			}
+			promClient, err := getPromClient()
+			if err != nil {
+				return err
+			}
+			grafanaClient, err := getGrafanaClient()
+			if err != nil {
+				return err
+			}
+			lokiClient, err := getLokiClient()
+			if err != nil {
+				return err
+			}
+
+			ctx, cancel := context.WithTimeout(cmd.Context(), 45*time.Second)
+			defer cancel()
+
+			result, err := correlate.RunStack(ctx, amClient, promClient, grafanaClient, lokiClient, correlate.StackOptions{
+				Duration:    duration,
+				LogLimit:    logLimit,
+				SampleLimit: samples,
+			})
+			if err != nil {
+				return err
+			}
+
+			switch format {
+			case "json":
+				out, err := jsonMarshal(result)
+				if err != nil {
+					return err
+				}
+				fmt.Println(string(out))
+			default:
+				fmt.Print(correlate.RenderStack(result))
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to look back for Loki samples")
+	cmd.Flags().IntVar(&logLimit, "log-limit", 50, "Maximum Loki log entries to scan per service")
+	cmd.Flags().IntVar(&samples, "samples", 3, "Maximum Loki log samples to show per correlated group")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output: terminal, json")
+	return cmd
+}
+
+func scorecardCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var service string
+	var withAI bool
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "scorecard",
+		Short: "Generate a service reliability scorecard",
+		Long:  "Grade each service on reliability (error rate, latency, trends) and produce an overall score. Use for weekly reviews, shift handoffs, or SLA reporting.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			provider, _ := getAIProvider(cfg)
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
+			ctx := context.Background()
+			fmt.Printf("%s Generating reliability scorecard...\n", output.MutedStyle.Render("⏳"))
+
+			sc, err := scorecard.Generate(ctx, client, instKey, scorecard.Options{
+				Duration:   duration,
+				Service:    service,
+				WithAI:     withAI,
+				Format:     format,
+				AIProvider: provider,
+			})
+			if err != nil {
+				return err
+			}
+
+			if format == "markdown" {
+				scorecard.RenderMarkdown(os.Stdout, sc)
+			} else {
+				scorecard.RenderTerminal(os.Stdout, sc)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to a single service")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-generated summary (uses Anthropic API)")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
+
+	return cmd
+}
+
+func forecastCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var horizon int
+	var service string
+	var format string
+	var withAI bool
+
+	cmd := &cobra.Command{
+		Use:   "forecast",
+		Short: "Predict service health trends using linear regression",
+		Long: `Analyze historical error rates and traffic patterns to forecast service health.
+Uses linear regression on time-bucketed metrics to predict future error rates,
+detect degrading services, and warn about potential incidents before they happen.
+
+Risk levels:
+  stable    (score <30)  — No significant issues expected
+  degrading (score 30-59) — Trending in wrong direction, monitor closely
+  critical  (score 60+)  — Likely to cause issues, take action now`,
+		Example: `  argus forecast
+  argus forecast --duration 240 --horizon 120
+  argus forecast -s api-service --ai
+  argus forecast -f markdown > forecast.md`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			provider, _ := getAIProvider(cfg)
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
+			ctx := context.Background()
+
+			fmt.Printf("%s Analyzing trends from %s (last %dm, forecasting %dm)...\n",
+				output.MutedStyle.Render("🔮"), output.AccentStyle.Render(instKey), duration, horizon)
+
+			r, err := forecast.Generate(ctx, client, instKey, forecast.Options{
+				Duration:   duration,
+				Horizon:    horizon,
+				Service:    service,
+				Format:     format,
+				WithAI:     withAI,
+				AIProvider: provider,
+			})
+			if err != nil {
+				return err
+			}
+
+			if format == "markdown" {
+				r.RenderMarkdown(os.Stdout)
+			} else {
+				r.RenderTerminal(os.Stdout)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 120, "Historical duration in minutes to analyze")
+	cmd.Flags().IntVar(&horizon, "horizon", 60, "Forecast horizon in minutes")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-powered analysis (uses Anthropic API)")
+
+	return cmd
+}
+
+func depsCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var service string
+	var format string
+	var withAI bool
+
+	cmd := &cobra.Command{
+		Use:   "deps",
+		Short: "Map service dependencies from trace data",
+		Long:  "Discover upstream and downstream service dependencies by analyzing trace spans. Shows call volumes, error rates, and latency between services. Outputs an ASCII dependency graph and optional Mermaid diagram.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			provider, _ := getAIProvider(cfg)
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
+			ctx := context.Background()
+			fmt.Printf("%s Mapping service dependencies...\n", output.MutedStyle.Render("⏳"))
+
+			dm, err := deps.Generate(ctx, deps.Options{
+				Querier:    client,
+				Instance:   instKey,
+				Duration:   duration,
+				Service:    service,
+				Format:     format,
+				AI:         withAI,
+				AIProvider: provider,
+				Writer:     os.Stdout,
+			})
+			if err != nil {
+				return err
+			}
+
+			if format == "markdown" {
+				deps.RenderMarkdown(os.Stdout, dm)
+			} else {
+				deps.RenderTable(os.Stdout, dm)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 60, "Duration in minutes to analyze")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to show only deps for this service")
+	cmd.Flags().StringVarP(&format, "format", "f", "table", "Output format: table or markdown")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI architecture analysis")
+
+	return cmd
+}
+
+func deployCmd() *cobra.Command {
+	var instance string
+	var duration int
+	var buckets int
+	var service string
+	var sensitivity string
+	var format string
+	var withAI bool
+
+	cmd := &cobra.Command{
+		Use:   "deploy",
+		Short: "Detect deployments from behavioral changes and analyze impact",
+		Long: `Analyze service behavior to detect deployment-like changes and assess their impact.
+
+Uses change point detection (binary segmentation) on time-bucketed metrics to find
+moments where service behavior shifted significantly — typically caused by deployments,
+config changes, or infrastructure events.
+
+Detection methods:
+  • Error rate change points (CUSUM-inspired binary segmentation)
+  • P99 latency shifts
+  • New error pattern emergence
+
+Sensitivity levels:
+  high   — Flag small changes (15%+ error rate shift)
+  medium — Balanced detection (30%+ error rate shift)
+  low    — Only major changes (50%+ error rate shift)
+
+Impact scoring: -100 (severe regression) to +100 (significant improvement)`,
+		Example: `  argus deploy
+  argus deploy --duration 720 --sensitivity high
+  argus deploy -s payment-api --ai
+  argus deploy -f markdown > deploy-report.md`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			provider, _ := getAIProvider(cfg)
+
+			inst, instKey, err := config.GetInstance(cfg, instance)
+			if err != nil {
+				return err
+			}
+
+			client := signoz.New(*inst)
+			ctx := context.Background()
+
+			fmt.Printf("%s Scanning %s for deployment changes (last %dm, %s sensitivity)...\n",
+				output.MutedStyle.Render("🚀"), output.AccentStyle.Render(instKey), duration, sensitivity)
+
+			r, err := deploy.Detect(ctx, client, instKey, deploy.Options{
+				Duration:    duration,
+				Buckets:     buckets,
+				Service:     service,
+				Sensitivity: sensitivity,
+				Format:      format,
+				WithAI:      withAI,
+				AIProvider:  provider,
+			})
+			if err != nil {
+				return err
+			}
+
+			if format == "markdown" {
+				r.RenderMarkdown(os.Stdout)
+			} else {
+				r.RenderTerminal(os.Stdout)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&instance, "instance", "i", "", "Signoz instance to query")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 360, "Time window in minutes to analyze (default: 6h)")
+	cmd.Flags().IntVarP(&buckets, "buckets", "b", 12, "Number of time buckets for analysis")
+	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter to specific service")
+	cmd.Flags().StringVar(&sensitivity, "sensitivity", "medium", "Detection sensitivity: low, medium, high")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "Output format: terminal or markdown")
+	cmd.Flags().BoolVar(&withAI, "ai", false, "Include AI-powered deployment analysis (uses Anthropic API)")
+
+	return cmd
+}
