@@ -12,7 +12,7 @@ All notable changes to Argus will be documented in this file.
 | --- | --- |
 | `argus top` | `argus services --sort {errors,rate,calls}` (`--sort name`, the default, is the original listing; add `--limit`/`-l`) |
 | `argus scorecard` | `argus report --grade` |
-| `argus dashboard` | removed (use `argus status`) |
+| `argus dashboard` | removed (`argus status` covers multi-instance health; dashboard's services/errors view has no single replacement — use `services` + `logs`) |
 | `argus anomaly` | `argus analyze anomalies` |
 | `argus timeline` | `argus analyze timeline` |
 | `argus correlate` | `argus analyze correlate` (`stack` subcommand moves with it) |
@@ -32,12 +32,14 @@ All notable changes to Argus will be documented in this file.
 - `postmortem list`: `-n` (limit) replaced by `-l`/`--limit`
 - `grafana`, `prom`, `postmortem`: `--format` gains the `-f` shorthand (previously long-only on these three)
 - Duration flags across the CLI now accept human durations (`90m`, `2h`, `1h30m`) in addition to bare minutes
+- Sub-minute duration values (e.g. `-d 30s`) are now rejected with an error — previously they silently truncated to 0 minutes; bare `0` remains allowed
 
 #### Exit codes
 
-- `slo budget` (formerly `budget check`): critical-tier now exits **2** (was 1) and warning-tier (`burning` status, ticket/watch alerts) now exits **1** (was 0) — matches the `alert`/`slo`/`guard` convention. **CI gates keying off budget's old exit codes must update in both directions.**
+- `slo budget` (formerly `budget check`): `critical` status now exits **2** (was 1), and `burning` status / `watch` alerts now exit **1** (was 0); `exhausted`/`page` still exit 2 and `ticket` still exits 1 — matches the `alert`/`slo`/`guard` convention. **CI gates keying off budget's old exit codes must update in both directions.**
 - `slo check` gains `--fail-on-no-data`: exits 1 when any SLO result is `no_data`, without downgrading a higher exit code from a real warning/critical finding
 - An unrecognized `--format`/`-f` value on any command now exits **1** with a validation error instead of proceeding and failing later (or silently falling back)
+- `logs`/`traces`/`metrics` with `-q`/`--query` now hard-error (exit **1**) when no AI provider is configured — previously the query was silently ignored and raw output printed with exit 0. Scripts passing `-q` without AI config will break.
 
 ### Added
 
@@ -61,6 +63,8 @@ Highlights from the Tier 1-3 correctness passes (full detail in commit history):
 - `alert`'s `log_errors` rule fetched only 1 log, making its threshold effectively unreachable
 - Log severity filtering now matches `severity_text` case-insensitively (was missing lowercase/mixed-case values)
 - Budget and SLO burn-rate math: consumption now scales by the observed window (previously over/under-counted on short windows), exhaustion is only predicted above 1.0x burn, and long-window SLOs escalate status on sustained burn instead of staying "ok"
+- Latency SLOs reported a fake-healthy `ok` (100% budget remaining) when the trace query failed or returned no data; they now report `no_data` — a previously green `slo check` can show `no_data` for the same input (pair with `--fail-on-no-data` to gate on it in CI)
+- `--format` help text, shell completion, and validation now reflect what each command actually supports — e.g. `report -f json` previously passed validation, did the full fetch, then failed; it now errors immediately naming the valid formats
 - MCP `am_alerts` with `all=true` no longer drops firing alerts
 - Config, incident, postmortem, and runbook stores write atomically (temp file + fsync + rename) instead of risking truncation on a crash mid-write
 - Signoz v3 metrics parsing handles real object-shaped string-valued series (was failing on live data)
@@ -69,6 +73,8 @@ Highlights from the Tier 1-3 correctness passes (full detail in commit history):
 - `scorecard` error trends are now derived from time-bucketed logs instead of comparing identical data to itself
 - `postmortem` enriches metrics from the actual incident window (not an arbitrary recent window) and correctly parses markdown-formatted AI section headers, with a raw-analysis fallback and an honest caveat when enrichment falls back
 - Hardening batch: panics, MCP URL/UID escaping, path traversal, and ID-ambiguity issues closed; TUI history clamped; output ordering (status/dashboard/doctor/anomaly) made deterministic; all string truncation is rune-safe (`textutil.Truncate`), no more split multibyte UTF-8
+
+---
 
 ## [v0.7.0] - 2026-04-05
 
