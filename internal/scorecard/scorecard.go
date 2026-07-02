@@ -15,6 +15,10 @@ import (
 	"github.com/lbarahona/argus/pkg/types"
 )
 
+// scorecardLogFetchLimit is the per-service error-log fetch size used both
+// for pattern detection and trend bucketing.
+const scorecardLogFetchLimit = 100
+
 // Grade represents a reliability grade.
 type Grade string
 
@@ -109,7 +113,7 @@ func Generate(ctx context.Context, client signoz.SignozQuerier, instKey string, 
 	// Get error logs for pattern detection
 	errorLogs := make(map[string][]types.LogEntry)
 	for _, svc := range services {
-		result, err := client.QueryLogs(ctx, svc.Name, opts.Duration, 100, "ERROR")
+		result, err := client.QueryLogs(ctx, svc.Name, opts.Duration, scorecardLogFetchLimit, "ERROR")
 		if err == nil && result != nil {
 			errorLogs[svc.Name] = result.Logs
 		}
@@ -124,16 +128,9 @@ func Generate(ctx context.Context, client signoz.SignozQuerier, instKey string, 
 		}
 	}
 
-	// Get previous period data for trends
-	prevServices, _ := client.ListServices(ctx)
-	prevMap := make(map[string]types.Service)
-	for _, s := range prevServices {
-		prevMap[s.Name] = s
-	}
-
 	// Score each service
 	for _, svc := range services {
-		score := scoreService(svc, errorLogs[svc.Name], traceData[svc.Name], prevMap)
+		score := scoreService(svc, errorLogs[svc.Name], traceData[svc.Name], opts.Duration)
 		sc.Services = append(sc.Services, score)
 	}
 
@@ -156,7 +153,7 @@ func Generate(ctx context.Context, client signoz.SignozQuerier, instKey string, 
 	return sc, nil
 }
 
-func scoreService(svc types.Service, logs []types.LogEntry, traces []types.TraceEntry, prev map[string]types.Service) ServiceScore {
+func scoreService(svc types.Service, logs []types.LogEntry, traces []types.TraceEntry, windowMinutes int) ServiceScore {
 	ss := ServiceScore{
 		Name:        svc.Name,
 		TotalCalls:  svc.NumCalls,
@@ -180,18 +177,7 @@ func scoreService(svc types.Service, logs []types.LogEntry, traces []types.Trace
 	}
 
 	// Error trend
-	if prevSvc, ok := prev[svc.Name]; ok && prevSvc.NumCalls > 0 {
-		prevRate := float64(prevSvc.NumErrors) / float64(prevSvc.NumCalls) * 100
-		if ss.ErrorRate < prevRate*0.8 {
-			ss.ErrorTrend = TrendBetter
-		} else if ss.ErrorRate > prevRate*1.2 {
-			ss.ErrorTrend = TrendWorse
-		} else {
-			ss.ErrorTrend = TrendStable
-		}
-	} else {
-		ss.ErrorTrend = TrendNoData
-	}
+	ss.ErrorTrend = errorTrendFromLogs(logs, windowMinutes, scorecardLogFetchLimit)
 
 	// Top errors
 	ss.TopErrors = groupErrors(logs, 3)
@@ -201,6 +187,33 @@ func scoreService(svc types.Service, logs []types.LogEntry, traces []types.Trace
 	ss.Grade = scoreToGrade(ss.Score)
 
 	return ss
+}
+
+// errorTrendFromLogs compares error counts in the older vs newer half of the
+// window. The fetch returns the newest N logs; if it hit its limit the older
+// half is unreliable (truncation bias), so the trend is unknown rather than
+// fabricated.
+func errorTrendFromLogs(logs []types.LogEntry, windowMinutes, fetchLimit int) Trend {
+	if len(logs) == 0 || len(logs) >= fetchLimit {
+		return TrendNoData
+	}
+	cutoff := time.Now().Add(-time.Duration(windowMinutes/2) * time.Minute)
+	var older, newer float64
+	for _, l := range logs {
+		if l.Timestamp.Before(cutoff) {
+			older++
+		} else {
+			newer++
+		}
+	}
+	switch {
+	case newer > older*1.2:
+		return TrendWorse
+	case newer < older*0.8:
+		return TrendBetter
+	default:
+		return TrendStable
+	}
 }
 
 func computeScore(ss ServiceScore) float64 {
@@ -430,6 +443,8 @@ func trendSymbol(t Trend) string {
 		return "📉 degrading"
 	case TrendStable:
 		return "➡️  stable"
+	case TrendNoData:
+		return "—"
 	default:
 		return "—"
 	}

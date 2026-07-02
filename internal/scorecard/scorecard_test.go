@@ -275,6 +275,36 @@ func TestRenderMarkdown(t *testing.T) {
 	}
 }
 
+func TestErrorTrendFromLogs(t *testing.T) {
+	now := time.Now()
+	mkLogs := func(olderCount, newerCount int) []types.LogEntry {
+		var logs []types.LogEntry
+		for i := 0; i < olderCount; i++ {
+			logs = append(logs, types.LogEntry{Timestamp: now.Add(-50 * time.Minute)})
+		}
+		for i := 0; i < newerCount; i++ {
+			logs = append(logs, types.LogEntry{Timestamp: now.Add(-5 * time.Minute)})
+		}
+		return logs
+	}
+
+	if got := errorTrendFromLogs(mkLogs(10, 30), 60, 100); got != TrendWorse {
+		t.Errorf("10 old vs 30 new errors = %v, want TrendWorse", got)
+	}
+	if got := errorTrendFromLogs(mkLogs(30, 10), 60, 100); got != TrendBetter {
+		t.Errorf("30 old vs 10 new errors = %v, want TrendBetter", got)
+	}
+	if got := errorTrendFromLogs(mkLogs(20, 21), 60, 100); got != TrendStable {
+		t.Errorf("20 vs 21 errors (within deadband) = %v, want TrendStable", got)
+	}
+	if got := errorTrendFromLogs(nil, 60, 100); got != TrendNoData {
+		t.Errorf("no logs = %v, want TrendNoData", got)
+	}
+	if got := errorTrendFromLogs(mkLogs(0, 100), 60, 100); got != TrendNoData {
+		t.Errorf("fetch at limit (truncated window) = %v, want TrendNoData", got)
+	}
+}
+
 func TestGradeEmoji(t *testing.T) {
 	if e := gradeEmoji(GradeA); e != "🟢" {
 		t.Errorf("A emoji = %s", e)
