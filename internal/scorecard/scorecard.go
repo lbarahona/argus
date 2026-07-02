@@ -40,7 +40,7 @@ type ServiceScore struct {
 	TotalErrors  int
 	P50Latency   float64 // ms
 	P99Latency   float64 // ms
-	ErrorTrend   Trend   // compared to previous period
+	ErrorTrend   Trend   // older vs newer half of the error logs in this window
 	LatencyTrend Trend
 	TopErrors    []ErrorGroup
 }
